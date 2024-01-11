@@ -5,7 +5,7 @@ require('dotenv').config()
 
 import {
   EventFetcher,
-  addCustomChain,
+  addCustomNetwork,
   L1TransactionReceipt,
   L1ToL2MessageStatus,
 } from '@arbitrum/sdk'
@@ -33,7 +33,7 @@ const main = async () => {
 
   // Adding your Obit chain as a custom chain to the Arbitrum SDK
   try {
-    addCustomChain({ customChain: xai })
+    addCustomNetwork({ customL2Network: xai })
   } catch (error: any) {
     console.error(`Failed to register Xai: ${error.message}`)
   }
