@@ -9,7 +9,7 @@ Before using this tool, make sure you have the following installed:
 - [Node.js](https://nodejs.org/en)
 - [Yarn](https://classic.yarnpkg.com/lang/en/docs/install/#mac-stable)
 
-Additionally, ensure that you have added your Orbit chain configuration to the `networks.ts` file to enable adding it as a custom chain to the Arbitrum SDK.
+Additionally, ensure that you have added your L3 network configuration to the `config.json` file in the `lib` directory, using the `xai` mainnet network as an example.
 
 ## Configuration
 

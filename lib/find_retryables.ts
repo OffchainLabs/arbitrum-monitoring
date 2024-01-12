@@ -2,22 +2,23 @@ import { providers } from 'ethers'
 import { Provider } from '@ethersproject/abstract-provider'
 import { BlockTag } from '@ethersproject/abstract-provider'
 require('dotenv').config()
+import * as fs from 'fs'
+import * as path from 'path' // Import the 'path' module
 
 import {
   EventFetcher,
   addCustomNetwork,
   L1TransactionReceipt,
   L1ToL2MessageStatus,
+  L2Network,
 } from '@arbitrum/sdk'
-
-import { xai } from './networks'
 
 import { Inbox__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Inbox__factory'
 
 const l2Provider = new providers.JsonRpcProvider(process.env.PARENT_RPC_URL)
 const l3Provider = new providers.JsonRpcProvider(process.env.ORBIT_RPC_URL)
 
-const main = async () => {
+const main = async (l3Chain: L2Network) => {
   // Checking if required environment variables are present
   if (
     !process.env.PARENT_RPC_URL ||
@@ -33,7 +34,7 @@ const main = async () => {
 
   // Adding your Obit chain as a custom chain to the Arbitrum SDK
   try {
-    addCustomNetwork({ customL2Network: xai })
+    addCustomNetwork({ customL2Network: l3Chain })
   } catch (error: any) {
     console.error(`Failed to register Xai: ${error.message}`)
   }
@@ -64,7 +65,7 @@ const main = async () => {
     await checkRetryables(
       l2Provider,
       l3Provider,
-      xai.ethBridge.inbox,
+      l3Chain.ethBridge.inbox,
       fromBlock,
       toBlock
     )
@@ -120,8 +121,16 @@ const main = async () => {
   await checkRetryablesOneOff()
 }
 
-// Calling main
-main()
+// Specify the absolute path to the config.json file
+const configFileContent = fs.readFileSync(
+  path.join(__dirname, 'config.json'),
+  'utf-8'
+)
+const config = JSON.parse(configFileContent)
+const networkConfig: L2Network = config.l3Chain
+
+// Calling main with networkConfig as a parameter
+main(networkConfig)
   .then(() => process.exit(0))
   .catch(error => {
     console.error(error)
