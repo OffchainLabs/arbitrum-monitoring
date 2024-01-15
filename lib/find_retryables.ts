@@ -90,7 +90,9 @@ const main = async (l3Chain: L2Network) => {
       if (inboxDeliveredLog.data.length === 706) continue // depositETH bypass
       const { transactionHash: l2TxHash } = inboxDeliveredLog
 
-      const l2TxReceipt = await l2Provider.getTransactionReceipt(l2TxHash)
+      const l2TxReceipt = await l2Provider.getTransactionReceipt(
+        '0x1cd430cbcb2d7fcf7308ac395af0f71e585401bbcd7fe5f26b7439d7426f72ae'
+      )
 
       const arbL2TxReceipt = new L1TransactionReceipt(l2TxReceipt)
 
@@ -103,7 +105,8 @@ const main = async (l3Chain: L2Network) => {
         console.log(
           `${messages.length} retryable${
             messages.length === 1 ? '' : 's'
-          } found, checking their status:`
+          } found, checking their status. Arbtxhash: ${process.env
+            .ARBISCAN!}${l2TxHash}`
         )
         console.log('************************************************')
       }
@@ -118,19 +121,19 @@ const main = async (l3Chain: L2Network) => {
           console.log(`Ticket still not created:\narbTxHash: ${l2TxHash}`)
         } else if (status === L1ToL2MessageStatus.CREATION_FAILED) {
           console.log(
-            `☠️ Severe error: Retryable ticket creation failed:\narbTxHash: ${l2TxHash}\norbitTxHash: ${retryableTicketId}`
+            `☠️ Severe error: Retryable ticket creation failed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
           )
         } else if (status === L1ToL2MessageStatus.FUNDS_DEPOSITED_ON_L2) {
           console.log(
-            `⚠️ Ticket Not redeemed:\narbTxHash: ${l2TxHash}\norbitTxHash: ${retryableTicketId}`
+            `⚠️ Ticket Not redeemed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
           )
         } else if (status === L1ToL2MessageStatus.EXPIRED) {
           console.log(
-            `Ticket expired (!):\narbTxHash: ${l2TxHash}\norbitTxHash: ${retryableTicketId}`
+            `Ticket expired (!):\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
           )
         } else if (status === L1ToL2MessageStatus.REDEEMED) {
           console.log(
-            `Ticket is succesfully redeemed:\narbTxHash: ${l2TxHash}\norbitTxHash: ${retryableTicketId}`
+            `Ticket is succesfully redeemed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
           )
         }
       }
