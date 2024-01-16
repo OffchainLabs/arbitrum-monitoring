@@ -35,7 +35,7 @@ yarn install
 To find retryable tickets and display their status, execute the following command:
 
 ```bash
-yarn findRetryables
+yarn findRetryables --fromBlock=<FROM_BLOCK> --toBlock=<TO_BLOCK>
 ```
 
-This command will identify all retryable tickets initiated or created from the parent chain to your Orbit chain within the specified block range (from `fromBlock` to `toBlock`), as configured in the .env file.
+Replace `<FROM_BLOCK>` and `<TO_BLOCK>` with the desired block numbers. This command will identify all retryable tickets initiated or created from the parent chain to your Orbit chain within the specified block range.

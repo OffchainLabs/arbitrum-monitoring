@@ -4,6 +4,7 @@ import { BlockTag } from '@ethersproject/abstract-provider'
 require('dotenv').config()
 import * as fs from 'fs'
 import * as path from 'path' // Import the 'path' module
+import yargs from 'yargs'
 
 import {
   EventFetcher,
@@ -17,7 +18,7 @@ import { Inbox__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Inbox__fact
 
 export interface L3Network extends L2Network {
   parentRpcUrl: string
-  ORBIT_RPC_URL: string
+  orbitRpcUrl: string
 }
 
 // Specify the absolute path to the config.json file
@@ -31,27 +32,22 @@ const networkConfig: L3Network = config.l3Chain
 const l2Provider = new providers.JsonRpcProvider(
   String(networkConfig.parentRpcUrl)
 )
-const l3Provider = new providers.JsonRpcProvider(process.env.ORBIT_RPC_URL)
+const l3Provider = new providers.JsonRpcProvider(
+  String(networkConfig.orbitRpcUrl)
+)
 
-const main = async (l3Chain: L3Network) => {
-  // Checking if required environment variables are present
-  if (
-    !process.env.PARENT_RPC_URL ||
-    !process.env.ORBIT_RPC_URL ||
-    !process.env.FROM_BLOCK ||
-    !process.env.TO_BLOCK
-  ) {
-    console.log(
-      'Some variables are missing in the .env file. Check .env.example to find the required variables.'
-    )
-    return
-  }
+// Defining options for finding retryable transactions
+type findRetryablesOptions = {
+  fromBlock: number
+  toBlock: number
+}
 
+const main = async (l3Chain: L3Network, options: findRetryablesOptions) => {
   // Adding your Obit chain as a custom chain to the Arbitrum SDK
   try {
     addCustomNetwork({ customL2Network: l3Chain })
   } catch (error: any) {
-    console.error(`Failed to register Xai: ${error.message}`)
+    console.error(`Failed to register the L3 network: ${error.message}`)
   }
 
   // Function to retrieve events related to Inbox
@@ -74,8 +70,8 @@ const main = async (l3Chain: L3Network) => {
 
   // Function to check and process the retryables
   const checkRetryablesOneOff = async () => {
-    const toBlock = parseInt(process.env.TO_BLOCK!)
-    const fromBlock = parseInt(process.env.FROM_BLOCK!)
+    const toBlock = options.toBlock
+    const fromBlock = options.fromBlock
 
     await checkRetryables(
       l2Provider,
@@ -105,9 +101,7 @@ const main = async (l3Chain: L3Network) => {
       if (inboxDeliveredLog.data.length === 706) continue // depositETH bypass
       const { transactionHash: l2TxHash } = inboxDeliveredLog
 
-      const l2TxReceipt = await l2Provider.getTransactionReceipt(
-        '0x1cd430cbcb2d7fcf7308ac395af0f71e585401bbcd7fe5f26b7439d7426f72ae'
-      )
+      const l2TxReceipt = await l2Provider.getTransactionReceipt(l2TxHash)
 
       const arbL2TxReceipt = new L1TransactionReceipt(l2TxReceipt)
 
@@ -158,8 +152,16 @@ const main = async (l3Chain: L3Network) => {
   await checkRetryablesOneOff()
 }
 
-// Calling main with networkConfig as a parameter
-main(networkConfig)
+// Parsing command line arguments
+const options = yargs(process.argv.slice(2))
+  .options({
+    fromBlock: { type: 'number', default: 0 },
+    toBlock: { type: 'number', default: 0 },
+  })
+  .parseSync()
+
+// Calling the main function with the provided options
+main(networkConfig, options)
   .then(() => process.exit(0))
   .catch(error => {
     console.error(error)
