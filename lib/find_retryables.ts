@@ -70,8 +70,19 @@ const main = async (l3Chain: L3Network, options: findRetryablesOptions) => {
 
   // Function to check and process the retryables
   const checkRetryablesOneOff = async () => {
-    const toBlock = options.toBlock
     const fromBlock = options.fromBlock
+    let toBlock = options.toBlock
+
+    if (toBlock === 0) {
+      try {
+        const currentBlock = await l2Provider.getBlockNumber()
+        toBlock = currentBlock
+      } catch (error) {
+        console.error(`Error getting the latest block: ${error.message}`)
+        // Set a default value if the latest block retrieval fails
+        toBlock = 0
+      }
+    }
 
     await checkRetryables(
       l2Provider,
@@ -96,11 +107,18 @@ const main = async (l3Chain: L3Network, options: findRetryablesOptions) => {
       { fromBlock, toBlock },
       l2Provider
     )
+    // Create a set to store unique transaction hashes
+    const uniqueTxHashes = new Set<string>()
 
+    // Iterate through inboxDeliveredLogs and add unique transaction hashes to the set
     for (let inboxDeliveredLog of inboxDeliveredLogs) {
       if (inboxDeliveredLog.data.length === 706) continue // depositETH bypass
       const { transactionHash: l2TxHash } = inboxDeliveredLog
+      uniqueTxHashes.add(l2TxHash)
+    }
 
+    // Iterate through unique transaction hashes
+    for (const l2TxHash of uniqueTxHashes) {
       const l2TxReceipt = await l2Provider.getTransactionReceipt(l2TxHash)
 
       const arbL2TxReceipt = new L1TransactionReceipt(l2TxReceipt)
@@ -108,7 +126,6 @@ const main = async (l3Chain: L3Network, options: findRetryablesOptions) => {
       const messages = await arbL2TxReceipt.getL1ToL2Messages(l3Provider)
 
       if (messages.length == 0) {
-        console.log(`No retryable is found!`)
         break
       } else {
         console.log(
@@ -118,37 +135,37 @@ const main = async (l3Chain: L3Network, options: findRetryablesOptions) => {
             .ARBISCAN!}${l2TxHash}`
         )
         console.log('************************************************')
-      }
 
-      for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
-        const message = messages[msgIndex]
-        const retryableTicketId = message.retryableCreationId
+        for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
+          const message = messages[msgIndex]
+          const retryableTicketId = message.retryableCreationId
 
-        let status = await message.status()
-        // Logging different statuses of L2-to-L3 messages
-        if (status === L1ToL2MessageStatus.NOT_YET_CREATED) {
-          console.log(`Ticket still not created:\narbTxHash: ${l2TxHash}`)
-        } else if (status === L1ToL2MessageStatus.CREATION_FAILED) {
-          console.log(
-            `☠️ Severe error: Retryable ticket creation failed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
-          )
-        } else if (status === L1ToL2MessageStatus.FUNDS_DEPOSITED_ON_L2) {
-          console.log(
-            `⚠️ Ticket Not redeemed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
-          )
-        } else if (status === L1ToL2MessageStatus.EXPIRED) {
-          console.log(
-            `Ticket expired (!):\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
-          )
-        } else if (status === L1ToL2MessageStatus.REDEEMED) {
-          console.log(
-            `Ticket is succesfully redeemed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
-          )
+          let status = await message.status()
+          // Logging different statuses of L2-to-L3 messages
+          if (status === L1ToL2MessageStatus.NOT_YET_CREATED) {
+            console.log(`Ticket still not created:\narbTxHash: ${l2TxHash}`)
+          } else if (status === L1ToL2MessageStatus.CREATION_FAILED) {
+            console.log(
+              `☠️ Severe error: Retryable ticket creation failed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
+            )
+          } else if (status === L1ToL2MessageStatus.FUNDS_DEPOSITED_ON_L2) {
+            console.log(
+              `⚠️ Ticket Not redeemed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
+            )
+          } else if (status === L1ToL2MessageStatus.EXPIRED) {
+            console.log(
+              `Ticket expired (!):\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
+            )
+          } else if (status === L1ToL2MessageStatus.REDEEMED) {
+            console.log(
+              `Ticket is successfully redeemed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
+            )
+            console.log('')
+          }
         }
       }
     }
   }
-
   await checkRetryablesOneOff()
 }
 
