@@ -10,6 +10,8 @@
       "sequencerInbox": "0x995a9d3ca121D48d21087eDE20bc8acb2398c8B1"
     },
 
+    "orbitRpcUrl": "https://xai-chain.net/rpc",
+    "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
     "explorerUrl": "https://explorer.xai-chain.net",
     "isArbitrum": true,
     "isCustom": true,

@@ -15,10 +15,25 @@ import {
 
 import { Inbox__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Inbox__factory'
 
-const l2Provider = new providers.JsonRpcProvider(process.env.PARENT_RPC_URL)
+export interface L3Network extends L2Network {
+  parentRpcUrl: string
+  ORBIT_RPC_URL: string
+}
+
+// Specify the absolute path to the config.json file
+const configFileContent = fs.readFileSync(
+  path.join(__dirname, 'config.json'),
+  'utf-8'
+)
+const config = JSON.parse(configFileContent)
+const networkConfig: L3Network = config.l3Chain
+
+const l2Provider = new providers.JsonRpcProvider(
+  String(networkConfig.parentRpcUrl)
+)
 const l3Provider = new providers.JsonRpcProvider(process.env.ORBIT_RPC_URL)
 
-const main = async (l3Chain: L2Network) => {
+const main = async (l3Chain: L3Network) => {
   // Checking if required environment variables are present
   if (
     !process.env.PARENT_RPC_URL ||
@@ -142,14 +157,6 @@ const main = async (l3Chain: L2Network) => {
 
   await checkRetryablesOneOff()
 }
-
-// Specify the absolute path to the config.json file
-const configFileContent = fs.readFileSync(
-  path.join(__dirname, 'config.json'),
-  'utf-8'
-)
-const config = JSON.parse(configFileContent)
-const networkConfig: L2Network = config.l3Chain
 
 // Calling main with networkConfig as a parameter
 main(networkConfig)
