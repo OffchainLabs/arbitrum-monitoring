@@ -9,7 +9,7 @@ Before using this tool, make sure you have the following installed:
 - [Node.js](https://nodejs.org/en)
 - [Yarn](https://classic.yarnpkg.com/lang/en/docs/install/#mac-stable)
 
-Additionally, ensure that you have added your Orbit chain configuration to the `networks.ts` file to enable adding it as a custom chain to the Arbitrum SDK.
+Additionally, ensure that you have added your L3 network configuration to the `config.json` file in the `lib` directory, using the `xai` mainnet network as an example.
 
 ## Configuration
 
@@ -35,7 +35,7 @@ yarn install
 To find retryable tickets and display their status, execute the following command:
 
 ```bash
-yarn findRetryables
+yarn findRetryables --fromBlock=<FROM_BLOCK> --toBlock=<TO_BLOCK>
 ```
 
-This command will identify all retryable tickets initiated or created from the parent chain to your Orbit chain within the specified block range (from `fromBlock` to `toBlock`), as configured in the .env file.
+Replace `<FROM_BLOCK>` and `<TO_BLOCK>` with the desired block numbers. This command will identify all retryable tickets initiated or created from the parent chain to your Orbit chain within the specified block range.

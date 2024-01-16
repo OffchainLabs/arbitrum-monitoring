@@ -2,40 +2,52 @@ import { providers } from 'ethers'
 import { Provider } from '@ethersproject/abstract-provider'
 import { BlockTag } from '@ethersproject/abstract-provider'
 require('dotenv').config()
+import * as fs from 'fs'
+import * as path from 'path' // Import the 'path' module
+import yargs from 'yargs'
 
 import {
   EventFetcher,
-  addCustomChain,
+  addCustomNetwork,
   L1TransactionReceipt,
   L1ToL2MessageStatus,
+  L2Network,
 } from '@arbitrum/sdk'
-
-import { xai } from './networks'
 
 import { Inbox__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Inbox__factory'
 
-const l2Provider = new providers.JsonRpcProvider(process.env.PARENT_RPC_URL)
-const l3Provider = new providers.JsonRpcProvider(process.env.ORBIT_RPC_URL)
+export interface L3Network extends L2Network {
+  parentRpcUrl: string
+  orbitRpcUrl: string
+}
 
-const main = async () => {
-  // Checking if required environment variables are present
-  if (
-    !process.env.PARENT_RPC_URL ||
-    !process.env.ORBIT_RPC_URL ||
-    !process.env.FROM_BLOCK ||
-    !process.env.TO_BLOCK
-  ) {
-    console.log(
-      'Some variables are missing in the .env file. Check .env.example to find the required variables.'
-    )
-    return
-  }
+// Specify the absolute path to the config.json file
+const configFileContent = fs.readFileSync(
+  path.join(__dirname, 'config.json'),
+  'utf-8'
+)
+const config = JSON.parse(configFileContent)
+const networkConfig: L3Network = config.l3Chain
 
+const l2Provider = new providers.JsonRpcProvider(
+  String(networkConfig.parentRpcUrl)
+)
+const l3Provider = new providers.JsonRpcProvider(
+  String(networkConfig.orbitRpcUrl)
+)
+
+// Defining options for finding retryable transactions
+type findRetryablesOptions = {
+  fromBlock: number
+  toBlock: number
+}
+
+const main = async (l3Chain: L3Network, options: findRetryablesOptions) => {
   // Adding your Obit chain as a custom chain to the Arbitrum SDK
   try {
-    addCustomChain({ customChain: xai })
+    addCustomNetwork({ customL2Network: l3Chain })
   } catch (error: any) {
-    console.error(`Failed to register Xai: ${error.message}`)
+    console.error(`Failed to register the L3 network: ${error.message}`)
   }
 
   // Function to retrieve events related to Inbox
@@ -58,13 +70,24 @@ const main = async () => {
 
   // Function to check and process the retryables
   const checkRetryablesOneOff = async () => {
-    const toBlock = parseInt(process.env.TO_BLOCK!)
-    const fromBlock = parseInt(process.env.FROM_BLOCK!)
+    const fromBlock = options.fromBlock
+    let toBlock = options.toBlock
+
+    if (toBlock === 0) {
+      try {
+        const currentBlock = await l2Provider.getBlockNumber()
+        toBlock = currentBlock
+      } catch (error) {
+        console.error(`Error getting the latest block: ${error.message}`)
+        // Set a default value if the latest block retrieval fails
+        toBlock = 0
+      }
+    }
 
     await checkRetryables(
       l2Provider,
       l3Provider,
-      xai.ethBridge.inbox,
+      l3Chain.ethBridge.inbox,
       fromBlock,
       toBlock
     )
@@ -84,44 +107,78 @@ const main = async () => {
       { fromBlock, toBlock },
       l2Provider
     )
+    // Create a set to store unique transaction hashes
+    const uniqueTxHashes = new Set<string>()
 
+    // Iterate through inboxDeliveredLogs and add unique transaction hashes to the set
     for (let inboxDeliveredLog of inboxDeliveredLogs) {
       if (inboxDeliveredLog.data.length === 706) continue // depositETH bypass
       const { transactionHash: l2TxHash } = inboxDeliveredLog
+      uniqueTxHashes.add(l2TxHash)
+    }
 
+    // Iterate through unique transaction hashes
+    for (const l2TxHash of uniqueTxHashes) {
       const l2TxReceipt = await l2Provider.getTransactionReceipt(l2TxHash)
 
       const arbL2TxReceipt = new L1TransactionReceipt(l2TxReceipt)
 
       const messages = await arbL2TxReceipt.getL1ToL2Messages(l3Provider)
 
-      for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
-        const message = messages[msgIndex]
+      if (messages.length == 0) {
+        break
+      } else {
+        console.log(
+          `${messages.length} retryable${
+            messages.length === 1 ? '' : 's'
+          } found, checking their status. Arbtxhash: ${process.env
+            .ARBISCAN!}${l2TxHash}`
+        )
+        console.log('************************************************')
 
-        let status = await message.status()
-        // Logging different statuses of L2-to-L3 messages
-        if (status === L1ToL2MessageStatus.NOT_YET_CREATED) {
-          console.log(`Ticket still not created: arbTxHash: ${l2TxHash}`)
-        } else if (status === L1ToL2MessageStatus.CREATION_FAILED) {
-          console.log(
-            `☠️ Severe error: Retryable ticket creation failed: arbTxHash: ${l2TxHash}`
-          )
-        } else if (status === L1ToL2MessageStatus.FUNDS_DEPOSITED_ON_L2) {
-          console.log(`⚠️ Ticket Not redeemed: arbTxHash: ${l2TxHash}`)
-        } else if (status === L1ToL2MessageStatus.EXPIRED) {
-          console.log(`Ticket expired (!): arbTxHash: ${l2TxHash}`)
-        } else if (status === L1ToL2MessageStatus.REDEEMED) {
-          console.log(`Ticket is succesfully redeemed: arbTxHash: ${l2TxHash}`)
+        for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
+          const message = messages[msgIndex]
+          const retryableTicketId = message.retryableCreationId
+
+          let status = await message.status()
+          // Logging different statuses of L2-to-L3 messages
+          if (status === L1ToL2MessageStatus.NOT_YET_CREATED) {
+            console.log(`Ticket still not created:\narbTxHash: ${l2TxHash}`)
+          } else if (status === L1ToL2MessageStatus.CREATION_FAILED) {
+            console.log(
+              `☠️ Severe error: Retryable ticket creation failed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
+            )
+          } else if (status === L1ToL2MessageStatus.FUNDS_DEPOSITED_ON_L2) {
+            console.log(
+              `⚠️ Ticket Not redeemed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
+            )
+          } else if (status === L1ToL2MessageStatus.EXPIRED) {
+            console.log(
+              `Ticket expired (!):\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
+            )
+          } else if (status === L1ToL2MessageStatus.REDEEMED) {
+            console.log(
+              `Ticket is successfully redeemed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
+            )
+            console.log('')
+          }
         }
       }
     }
   }
-
   await checkRetryablesOneOff()
 }
 
-// Calling main
-main()
+// Parsing command line arguments
+const options = yargs(process.argv.slice(2))
+  .options({
+    fromBlock: { type: 'number', default: 0 },
+    toBlock: { type: 'number', default: 0 },
+  })
+  .parseSync()
+
+// Calling the main function with the provided options
+main(networkConfig, options)
   .then(() => process.exit(0))
   .catch(error => {
     console.error(error)

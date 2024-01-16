@@ -1,35 +1,34 @@
 {
-    "name": "Orbit-retryble-tracker",
-    "version": "1.0.0",
-    "main": "index.ts",
-    "license": "MIT",
-    "dependencies": {
-      "@ethersproject/abstract-provider": "^5.5.1",
-      "ethers": "^5.5.4",
-      "graphql": "^16.6.0",
-      "graphql-request": "^6.1.0",
-      "yargs": "^17.5.1",
-      "@arbitrum/sdk": "3.1.13-orbit-custom-fee-token.1",
-      "@arbitrum/nitro-contracts": "v1.1.0-beta.1",
-      "@arbitrum/token-bridge-contracts": "v1.1.0-beta.2"
-    },
-    "devDependencies": {
-      "@types/node": "^16.4.10",
-      "@types/yargs": "^17.0.19",
-      "eslint": "^8.15.0",
-      "eslint-config-prettier": "^8.3.0",
-      "eslint-plugin-mocha": "^9.0.0",
-      "eslint-plugin-prettier": "^4.0.0",
-      "prettier": "^2.3.2",
-      "prettier-plugin-solidity": "^1.0.0-beta.17",
-      "typescript": "^4.5",
-      "dotenv": "^10.0.0",
-      "ts-node": "^10.8.1"
-    },
-    "scripts": {
-      "lint": "eslint .",
-      "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-      "findRetryables": "ts-node ./lib/find_retryables.ts"
-    }
+  "name": "Orbit-retryble-tracker",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "license": "MIT",
+  "dependencies": {
+    "@ethersproject/abstract-provider": "^5.5.1",
+    "ethers": "^5.5.4",
+    "graphql": "^16.6.0",
+    "graphql-request": "^6.1.0",
+    "yargs": "^17.5.1",
+    "@arbitrum/sdk": "3.2.0-beta.0",
+    "@arbitrum/nitro-contracts": "v1.1.0-beta.1",
+    "@arbitrum/token-bridge-contracts": "v1.1.0-beta.2"
+  },
+  "devDependencies": {
+    "@types/node": "^16.4.10",
+    "@types/yargs": "^17.0.19",
+    "eslint": "^8.15.0",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-plugin-mocha": "^9.0.0",
+    "eslint-plugin-prettier": "^4.0.0",
+    "prettier": "^2.3.2",
+    "prettier-plugin-solidity": "^1.0.0-beta.17",
+    "typescript": "^4.5",
+    "dotenv": "^10.0.0",
+    "ts-node": "^10.8.1"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
+    "findRetryables": "ts-node ./lib/find_retryables.ts"
   }
-  
+}
