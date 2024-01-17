@@ -1,5 +1,5 @@
 {
-  "l3Chain": {
+  "childChain": {
     "chainID": 660279,
     "confirmPeriodBlocks": 45818,
     "ethBridge": {

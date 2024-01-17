@@ -6,17 +6,18 @@ import * as fs from 'fs'
 import * as path from 'path' // Import the 'path' module
 import yargs from 'yargs'
 
+
 import {
   EventFetcher,
   addCustomNetwork,
-  L1TransactionReceipt,
-  L1ToL2MessageStatus,
-  L2Network,
+  L1TransactionReceipt as ParentChainTxReceipt,
+  L1ToL2MessageStatus as ParentToChildMessageStatus,
+  L2Network as ParentNetwork,
 } from '@arbitrum/sdk'
 
 import { Inbox__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Inbox__factory'
 
-export interface L3Network extends L2Network {
+export interface ChildNetwork extends ParentNetwork {
   parentRpcUrl: string
   orbitRpcUrl: string
 }
@@ -27,12 +28,12 @@ const configFileContent = fs.readFileSync(
   'utf-8'
 )
 const config = JSON.parse(configFileContent)
-const networkConfig: L3Network = config.l3Chain
+const networkConfig: ChildNetwork = config.childChain
 
-const l2Provider = new providers.JsonRpcProvider(
+const parentChainProvider = new providers.JsonRpcProvider(
   String(networkConfig.parentRpcUrl)
 )
-const l3Provider = new providers.JsonRpcProvider(
+const childChainProvider = new providers.JsonRpcProvider(
   String(networkConfig.orbitRpcUrl)
 )
 
@@ -42,28 +43,28 @@ type findRetryablesOptions = {
   toBlock: number
 }
 
-const main = async (l3Chain: L3Network, options: findRetryablesOptions) => {
+const main = async (childChain: ChildNetwork, options: findRetryablesOptions) => {
   // Adding your Obit chain as a custom chain to the Arbitrum SDK
   try {
-    addCustomNetwork({ customL2Network: l3Chain })
+    addCustomNetwork({ customL2Network: childChain })
   } catch (error: any) {
-    console.error(`Failed to register the L3 network: ${error.message}`)
+    console.error(`Failed to register the child network: ${error.message}`)
   }
 
   // Function to retrieve events related to Inbox
   const getInboxMessageDeliveredEventData = async (
-    l2InboxAddress: string,
+    parentInboxAddress: string,
     filter: {
       fromBlock: BlockTag
       toBlock: BlockTag
     },
-    l1Provider: Provider
+    parentChainProvider: Provider
   ) => {
-    const eventFetcher = new EventFetcher(l1Provider)
+    const eventFetcher = new EventFetcher(parentChainProvider)
     const logs = await eventFetcher.getEvents(
       Inbox__factory,
       (g: any) => g.filters.InboxMessageDelivered(),
-      { ...filter, address: l2InboxAddress }
+      { ...filter, address: parentInboxAddress }
     )
     return logs
   }
@@ -75,7 +76,7 @@ const main = async (l3Chain: L3Network, options: findRetryablesOptions) => {
 
     if (toBlock === 0) {
       try {
-        const currentBlock = await l2Provider.getBlockNumber()
+        const currentBlock = await parentChainProvider.getBlockNumber()
         toBlock = currentBlock
       } catch (error) {
         console.error(`Error getting the latest block: ${error.message}`)
@@ -85,17 +86,17 @@ const main = async (l3Chain: L3Network, options: findRetryablesOptions) => {
     }
 
     await checkRetryables(
-      l2Provider,
-      l3Provider,
-      l3Chain.ethBridge.inbox,
+      parentChainProvider,
+      childChainProvider,
+      childChain.ethBridge.inbox,
       fromBlock,
       toBlock
     )
   }
 
   const checkRetryables = async (
-    l2Provider: Provider,
-    l3Provider: Provider,
+    parentChainProvider: Provider,
+    childChainProvider: Provider,
     bridgeAddress: string,
     fromBlock: number,
     toBlock: number
@@ -105,7 +106,7 @@ const main = async (l3Chain: L3Network, options: findRetryablesOptions) => {
     inboxDeliveredLogs = await getInboxMessageDeliveredEventData(
       bridgeAddress,
       { fromBlock, toBlock },
-      l2Provider
+      parentChainProvider
     )
     // Create a set to store unique transaction hashes
     const uniqueTxHashes = new Set<string>()
@@ -113,17 +114,17 @@ const main = async (l3Chain: L3Network, options: findRetryablesOptions) => {
     // Iterate through inboxDeliveredLogs and add unique transaction hashes to the set
     for (let inboxDeliveredLog of inboxDeliveredLogs) {
       if (inboxDeliveredLog.data.length === 706) continue // depositETH bypass
-      const { transactionHash: l2TxHash } = inboxDeliveredLog
-      uniqueTxHashes.add(l2TxHash)
+      const { transactionHash: parentTxHash } = inboxDeliveredLog
+      uniqueTxHashes.add(parentTxHash)
     }
 
     // Iterate through unique transaction hashes
-    for (const l2TxHash of uniqueTxHashes) {
-      const l2TxReceipt = await l2Provider.getTransactionReceipt(l2TxHash)
+    for (const parentTxHash of uniqueTxHashes) {
+      const parentTxReceipt = await parentChainProvider.getTransactionReceipt(parentTxHash)
 
-      const arbL2TxReceipt = new L1TransactionReceipt(l2TxReceipt)
+      const arbParentTxReceipt = new ParentChainTxReceipt(parentTxReceipt)
 
-      const messages = await arbL2TxReceipt.getL1ToL2Messages(l3Provider)
+      const messages = await arbParentTxReceipt.getL1ToL2Messages(childChainProvider)
 
       if (messages.length == 0) {
         break
@@ -132,7 +133,7 @@ const main = async (l3Chain: L3Network, options: findRetryablesOptions) => {
           `${messages.length} retryable${
             messages.length === 1 ? '' : 's'
           } found, checking their status. Arbtxhash: ${process.env
-            .ARBISCAN!}${l2TxHash}`
+            .ARBISCAN!}${parentTxHash}`
         )
         console.log('************************************************')
 
@@ -142,23 +143,23 @@ const main = async (l3Chain: L3Network, options: findRetryablesOptions) => {
 
           let status = await message.status()
           // Logging different statuses of L2-to-L3 messages
-          if (status === L1ToL2MessageStatus.NOT_YET_CREATED) {
-            console.log(`Ticket still not created:\narbTxHash: ${l2TxHash}`)
-          } else if (status === L1ToL2MessageStatus.CREATION_FAILED) {
+          if (status === ParentToChildMessageStatus.NOT_YET_CREATED) {
+            console.log(`Ticket still not created:\narbTxHash: ${parentTxHash}`)
+          } else if (status === ParentToChildMessageStatus.CREATION_FAILED) {
             console.log(
-              `☠️ Severe error: Retryable ticket creation failed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
+              `☠️ Severe error: Retryable ticket creation failed:\norbitTxHash: ${childChain.explorerUrl}/tx/${retryableTicketId}`
             )
-          } else if (status === L1ToL2MessageStatus.FUNDS_DEPOSITED_ON_L2) {
+          } else if (status === ParentToChildMessageStatus.FUNDS_DEPOSITED_ON_L2) {
             console.log(
-              `⚠️ Ticket Not redeemed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
+              `⚠️ Ticket Not redeemed:\norbitTxHash: ${childChain.explorerUrl}/tx/${retryableTicketId}`
             )
-          } else if (status === L1ToL2MessageStatus.EXPIRED) {
+          } else if (status === ParentToChildMessageStatus.EXPIRED) {
             console.log(
-              `Ticket expired (!):\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
+              `Ticket expired (!):\norbitTxHash: ${childChain.explorerUrl}/tx/${retryableTicketId}`
             )
-          } else if (status === L1ToL2MessageStatus.REDEEMED) {
+          } else if (status === ParentToChildMessageStatus.REDEEMED) {
             console.log(
-              `Ticket is successfully redeemed:\norbitTxHash: ${l3Chain.explorerUrl}/tx/${retryableTicketId}`
+              `Ticket is successfully redeemed:\norbitTxHash: ${childChain.explorerUrl}/tx/${retryableTicketId}`
             )
             console.log('')
           }
