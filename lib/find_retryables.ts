@@ -44,7 +44,6 @@ type findRetryablesOptions = {
   continuous: boolean;
 };
 
-// Updated main function to handle continuous option
 const main = async (childChain: ChildNetwork, options: findRetryablesOptions) => {
   // Adding your Obit chain as a custom chain to the Arbitrum SDK
   try {
