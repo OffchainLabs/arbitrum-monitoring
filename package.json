@@ -29,6 +29,6 @@
   "scripts": {
     "lint": "eslint .",
     "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "findRetryables": "ts-node ./lib/find_retryables.ts"
+    "findRetryables": "tsc && node ./dist/find_retryables.js"
   }
 }
