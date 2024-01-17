@@ -3,7 +3,7 @@ import { Provider } from '@ethersproject/abstract-provider';
 import { BlockTag } from '@ethersproject/abstract-provider';
 require('dotenv').config();
 import * as fs from 'fs';
-import * as path from 'path'; // Import the 'path' module
+import * as path from 'path';
 import yargs from 'yargs';
 
 
@@ -22,9 +22,19 @@ export interface ChildNetwork extends ParentNetwork {
   orbitRpcUrl: string;
 }
 
+// Parsing command line arguments
+const options = yargs(process.argv.slice(2))
+  .options({
+    fromBlock: { type: 'number', default: 0 },
+    toBlock: { type: 'number', default: 0 },
+    continuous: { type: 'boolean', default: false },
+    configPath: { type: 'string', default: 'config.json' }, //option for config path
+  })
+  .parseSync();
+
 // Specify the absolute path to the config.json file
 const configFileContent = fs.readFileSync(
-  path.join(__dirname, 'config.json'),
+  path.join(__dirname, options.configPath),
   'utf-8'
 );
 const config = JSON.parse(configFileContent);
@@ -187,15 +197,6 @@ const main = async (childChain: ChildNetwork, options: findRetryablesOptions) =>
     await checkRetryablesOneOff();
   }
 };
-
-// Parsing command line arguments
-const options = yargs(process.argv.slice(2))
-  .options({
-    fromBlock: { type: 'number', default: 0 },
-    toBlock: { type: 'number', default: 0 },
-    continuous: { type: 'boolean', default: false },
-  })
-  .parseSync();
 
 // Calling the main function with the provided options
 main(networkConfig, options)
