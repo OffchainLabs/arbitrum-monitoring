@@ -83,10 +83,7 @@ const main = async (
   }
 
   // Function to check and process the retryables
-  const checkRetryablesOneOff = async () => {
-    const fromBlock = options.fromBlock
-    let toBlock = options.toBlock
-
+  const checkRetryablesOneOff = async (fromBlock: number, toBlock: number) => {
     if (toBlock === 0) {
       try {
         const currentBlock = await parentChainProvider.getBlockNumber()
@@ -101,7 +98,7 @@ const main = async (
       }
     }
 
-    await checkRetryables(
+    return await checkRetryables(
       parentChainProvider,
       childChainProvider,
       childChain.ethBridge.inbox,
@@ -186,16 +183,23 @@ const main = async (
         }
       }
     }
+    return toBlock
   }
 
   const checkRetryablesContinuous = async () => {
     let isContinuous = options.continuous
+    let fromBlock = options.fromBlock
+    let toBlock = options.toBlock
     while (isContinuous) {
-      await checkRetryablesOneOff()
+      const lastBlockChecked = await checkRetryablesOneOff(fromBlock, toBlock)
       // Update isContinuous based on dynamic condition (if needed)
       isContinuous = options.continuous
-      // Add a delay between continuous checks (e.g., wait for 1 minute)
-      await new Promise(resolve => setTimeout(resolve, 60 * 1000))
+      // start at last block checked
+      fromBlock = lastBlockChecked
+      // set to block to 0 (will use latest block)
+      toBlock = 0
+      // Add a delay between continuous checks (e.g., wait for 30 minutes)
+      await new Promise(resolve => setTimeout(resolve, 30 * 60 * 1000))
     }
   }
 
@@ -203,7 +207,7 @@ const main = async (
   if (options.continuous) {
     await checkRetryablesContinuous()
   } else {
-    await checkRetryablesOneOff()
+    await checkRetryablesOneOff(options.fromBlock, options.toBlock)
   }
 }
 
