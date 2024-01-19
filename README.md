@@ -1,4 +1,4 @@
-# Orbit-retrybles-tracker
+# Orbit-retryables-tracker
 
 This tool is designed to assist in identifying and displaying the status of retryable tickets sent from a parent chain (any of the Arbitrum chains) to the Orbit chain. Read more about retryable tickets [here](https://docs.arbitrum.io/arbos/l1-to-l2-messaging).
 
