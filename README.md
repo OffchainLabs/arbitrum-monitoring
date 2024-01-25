@@ -29,14 +29,18 @@ To find retryable tickets and display their status for a specific block range, e
 yarn findRetryables --fromBlock=<FROM_BLOCK> --toBlock=<TO_BLOCK> [--configPath=<CONFIG_PATH>]
 ```
 
-Replace <FROM_BLOCK>, <TO_BLOCK>, and <CONFIG_PATH> with the desired block numbers and the path to your configuration file. If `--configPath` is not provided, it defaults to `config.json`. This command will identify all retryable tickets initiated or created from the parent chain to your Orbit chain within the specified block range.
+- Replace <FROM_BLOCK>, <TO_BLOCK>, and <CONFIG_PATH> with the desired block numbers and the path to your configuration file.
+- If `--configPath` is not provided, it defaults to `config.json`.
+- This command will identify all retryable tickets initiated or created from the parent chain to your Orbit chain within the specified block range.
 
 ### Continuous Update
 
-To continuously monitor and update the status of retryable tickets, execute the following command:
+To continuously monitor and update the status of retryable tickets for multiple Orbit chains concurrently, execute the following command:
 
 ```bash
 yarn findRetryables --continuous [--configPath=<CONFIG_PATH>]
 ```
 
-Replace `<CONFIG_PATH>` with the path to your configuration file. If `--configPath` is not provided, it defaults to `config.json`. This command will initiate continuous monitoring, dynamically determining the block range based on the latest block on the parent chain. The tool will automatically fetch and display the status of retryable tickets at regular intervals.
+- - Replace <CONFIG_PATH> with the path to your configuration file.
+- If `--configPath` is not provided, it defaults to `config.json`.
+- This command will initiate continuous monitoring, dynamically determining the block range based on the latest block on the parent chain. The tool will automatically fetch and display the status of retryable tickets for all configured Orbit chains within the `config.json` file at regular intervals.
