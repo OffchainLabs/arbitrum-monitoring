@@ -14,6 +14,7 @@ import yargs from 'yargs'
 export interface ChildNetwork extends ParentNetwork {
   parentRpcUrl: string
   orbitRpcUrl: string
+  parentExplorerUrl: string
 }
 
 type findRetryablesOptions = {
@@ -22,6 +23,7 @@ type findRetryablesOptions = {
   continuous: boolean
   configPath: string
 }
+
 const options: findRetryablesOptions = yargs(process.argv.slice(2))
   .options({
     fromBlock: { type: 'number', default: 0 },
@@ -35,9 +37,7 @@ const processChildChain = async (
   childChain: ChildNetwork,
   options: findRetryablesOptions
 ) => {
-  console.log('Running for child chain:', childChain.name)
-  console.log('Config Path:', options.configPath)
-
+  console.log('Running for Orbit chain:', childChain.name)
   try {
     addCustomNetwork({ customL2Network: childChain })
   } catch (error: any) {
@@ -126,9 +126,13 @@ const processChildChain = async (
         console.log(
           `${messages.length} retryable${
             messages.length === 1 ? '' : 's'
-          } found, checking their status. Arbtxhash: ${process.env
-            .ARBISCAN!}${parentTxHash}`
+          } found for ${
+            childChain.name
+          } chain.\nChecking their status. Arbtxhash: ${
+            childChain.parentExplorerUrl
+          }/tx/${parentTxHash}`
         )
+
         console.log('************************************************')
 
         for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
@@ -197,12 +201,12 @@ if (!Array.isArray(config.childChains)) {
   process.exit(1)
 }
 
-;(async () => {
-  for (const childChain of config.childChains) {
-    try {
-      await processChildChain(childChain, options)
-    } catch (error) {
-      console.error(`Error processing child chain: ${error.message}`)
-    }
-  }
-})()
+const processChildChainsConcurrently = async () => {
+  const promises = config.childChains.map((childChain: ChildNetwork) =>
+    processChildChain(childChain, options)
+  )
+
+  await Promise.all(promises)
+}
+
+processChildChainsConcurrently()
