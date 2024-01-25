@@ -141,9 +141,7 @@ const main = async (
         childChainProvider
       )
 
-      if (messages.length == 0) {
-        break
-      } else {
+      if (messages.length > 0) {
         console.log(
           `${messages.length} retryable${
             messages.length === 1 ? '' : 's'
