@@ -31,6 +31,7 @@ const options: findRetryablesOptions = yargs(process.argv.slice(2))
     continuous: { type: 'boolean', default: false },
     configPath: { type: 'string', default: 'config.json' },
   })
+  .strict() // enforce strict option parsing
   .parseSync() as findRetryablesOptions
 
 const processChildChain = async (
