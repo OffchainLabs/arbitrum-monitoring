@@ -11,17 +11,6 @@ Before using this tool, make sure you have the following installed:
 
 Additionally, ensure that you have added your L3 network configuration to the `config.json` file in the `lib` directory; the `xai` mainnet network is included as an example.
 
-## Configuration
-
-Set the necessary env variables by copying the values from `.env-sample` into a new `.env` file. You can do this with the following command:
-
-```bash
-cp .env-sample .env
-
-```
-
-Fill in the required values in the .env file with your specific configuration.
-
 ## Installation
 
 From the root directory of the project, run the following command to install dependencies:
