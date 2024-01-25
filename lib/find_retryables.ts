@@ -201,7 +201,7 @@ if (!Array.isArray(config.childChains)) {
   process.exit(1)
 }
 
-const nameprocessOrbitChainsConcurrently = async () => {
+const processOrbitChainsConcurrently = async () => {
   const promises = config.childChains.map((childChain: ChildNetwork) =>
     processChildChain(childChain, options)
   )
@@ -209,4 +209,4 @@ const nameprocessOrbitChainsConcurrently = async () => {
   await Promise.all(promises)
 }
 
-nameprocessOrbitChainsConcurrently()
+processOrbitChainsConcurrently()
