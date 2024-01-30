@@ -55,7 +55,7 @@
 
       "orbitRpcUrl": "https://xai-chain.net/rpc",
       "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
-      "explorerUrl": "https://explorer.xai-chain.net",
+      "explorerUrl": "https://explorer.xai-chain.net/",
       "parentExplorerUrl": "https://arbiscan.io/",
       "isArbitrum": true,
       "isCustom": true,
