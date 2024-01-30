@@ -71,26 +71,30 @@ const processChildChain = async (
     return logs;
   };
 
+
+  
   const checkRetryablesOneOff = async (fromBlock: number, toBlock: number) => {
     if (toBlock === 0) {
       try {
         const currentBlock = await parentChainProvider.getBlockNumber();
         toBlock = currentBlock;
+        console.log(`Checking blocks from ${fromBlock} to ${toBlock}`);
       } catch (error) {
-        console.error(
-          `Error getting the latest block: ${(error as Error).message}`
-        );
+        console.error(`Error getting the latest block: ${(error as Error).message}`);
         toBlock = 0;
       }
     }
-
-    return await checkRetryables(
+  
+    const lastBlockChecked = await checkRetryables(
       parentChainProvider,
       childChainProvider,
       childChain.ethBridge.inbox,
       fromBlock,
       toBlock
     );
+    console.log('-----------------------------'); 
+
+    return lastBlockChecked;
   };
 
   const checkRetryables = async (
@@ -175,11 +179,18 @@ const processChildChain = async (
     let toBlock = options.toBlock;
   
     while (isContinuous) {
-      const lastBlockChecked = await checkRetryablesOneOff(fromBlock, toBlock);
-      fromBlock = lastBlockChecked + 1;
-      toBlock = lastBlockChecked; // Set to the latest block checked
-      isContinuous = options.continuous;
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // 30 minutes delay
+      for (const childChain of config.childChains) {
+        console.log(`Processing blocks for ${childChain.name} chain:`);
+        const lastBlockChecked = await checkRetryablesOneOff(fromBlock, toBlock);
+        fromBlock = lastBlockChecked + 1;
+        console.log('-----------------------------');
+      }
+  
+      // Move to the next set of blocks
+      toBlock += 10;
+  
+      // add a delay before processing the next set of blocks
+      await new Promise((resolve) => setTimeout(resolve, 1000)); 
     }
   };
 
