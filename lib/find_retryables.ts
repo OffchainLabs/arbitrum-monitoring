@@ -11,6 +11,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import yargs from 'yargs'
 import winston from 'winston'
+import { promises as fsPromises } from 'fs';
 
 export interface ChildNetwork extends ParentNetwork {
   parentRpcUrl: string
@@ -25,18 +26,26 @@ type findRetryablesOptions = {
   configPath: string
 }
 
+const logFilePath = 'logfile.log';
+// Truncate the log file to clear its contents
+try {
+  fsPromises.truncate(logFilePath, 0);
+} catch (error) {
+  console.error(`Error truncating log file: ${(error as Error).message}`);
+}
+
 // Configure Winston logger
 const logger = winston.createLogger({
   format: winston.format.simple(),
   transports: [
     new winston.transports.Console(),
-    new winston.transports.File({ filename: 'logfile.log' }),
+    new winston.transports.File({ filename: logFilePath }),
   ],
-})
+});
 
 const logResult = (chainName: string, message: string) => {
-  logger.info(`[${chainName}] ${message}`);
-};
+  logger.info(`[${chainName}] ${message}`)
+}
 
 const options: findRetryablesOptions = yargs(process.argv.slice(2))
   .options({
@@ -52,9 +61,9 @@ const processChildChain = async (
   childChain: ChildNetwork,
   options: findRetryablesOptions
 ) => {
-  console.log('----------------------------------------------------------');
-  console.log(`Running for Orbit chain: ${childChain.name}`);
-  console.log('----------------------------------------------------------');
+  console.log('----------------------------------------------------------')
+  console.log(`Running for Orbit chain: ${childChain.name}`)
+  console.log('----------------------------------------------------------')
   try {
     addCustomNetwork({ customL2Network: childChain })
   } catch (error: any) {
@@ -70,7 +79,7 @@ const processChildChain = async (
     String(childChain.orbitRpcUrl)
   )
 
-  let retryablesFound: boolean = false;
+  let retryablesFound: boolean = false
 
   const getInboxMessageDeliveredEventData = async (
     parentInboxAddress: string,
@@ -80,16 +89,19 @@ const processChildChain = async (
     },
     parentChainProvider: providers.Provider
   ) => {
-    const eventFetcher = new EventFetcher(parentChainProvider);
+    const eventFetcher = new EventFetcher(parentChainProvider)
     const logs = await eventFetcher.getEvents(
       Inbox__factory,
       (g: any) => g.filters.InboxMessageDelivered(),
       { ...filter, address: parentInboxAddress }
-    );
-    return logs;
-  };
+    )
+    return logs
+  }
 
-  const checkRetryablesOneOff = async (fromBlock: number, toBlock: number) : Promise<number> => {
+  const checkRetryablesOneOff = async (
+    fromBlock: number,
+    toBlock: number
+  ): Promise<number> => {
     if (toBlock === 0) {
       try {
         const currentBlock = await parentChainProvider.getBlockNumber()
@@ -101,7 +113,7 @@ const processChildChain = async (
         toBlock = 0
       }
     }
-    console.log(`processing from ${fromBlock} to ${toBlock}` );
+    //console.log(`processing from ${fromBlock} to ${toBlock}` );
 
     retryablesFound = await checkRetryables(
       parentChainProvider,
@@ -127,7 +139,17 @@ const processChildChain = async (
       parentChainProvider
     )
 
-    console.log(`Found ${inboxDeliveredLogs.length} inboxDeliveredLogs from block ${fromBlock} to ${toBlock}`);
+    //console.log(`Found ${inboxDeliveredLogs.length} inboxDeliveredLogs from block ${fromBlock} to ${toBlock}`);
+
+    const thresholdWarning = 100 // the threshhold at which it will give the warning that processing may take a while
+
+    if (inboxDeliveredLogs.length > thresholdWarning) {
+      console.log('----------------------------------------------------------')
+      console.warn(
+        `Warning: High number of inboxDeliveredLogs detected (${inboxDeliveredLogs.length}). Processing may take some time.`
+      )
+      console.log('----------------------------------------------------------')
+    }
 
     const uniqueTxHashes = new Set<string>()
 
@@ -136,10 +158,10 @@ const processChildChain = async (
       const { transactionHash: parentTxHash } = inboxDeliveredLog
       uniqueTxHashes.add(parentTxHash)
     }
-    console.log(`Found ${uniqueTxHashes.size} unique transactions from inboxDeliveredLogs`);
+    //console.log(`Found ${uniqueTxHashes.size} unique transactions from inboxDeliveredLogs`);
 
     for (const parentTxHash of uniqueTxHashes) {
-      console.log(`Checking transaction ${parentTxHash}`);
+      //console.log(`Checking transaction ${parentTxHash}`);
       const parentTxReceipt = await parentChainProvider.getTransactionReceipt(
         parentTxHash
       )
@@ -147,7 +169,7 @@ const processChildChain = async (
       const messages = await arbParentTxReceipt.getL1ToL2Messages(
         childChainProvider
       )
-      console.log(`Found ${messages.length} L1ToL2Messages for transaction ${parentTxHash}`);
+      //console.log(`Found ${messages.length} L1ToL2Messages for transaction ${parentTxHash}`);
 
       if (messages.length > 0) {
         logResult(
@@ -159,8 +181,10 @@ const processChildChain = async (
           } chain. Checking their status:\n\nArbtxhash: ${
             childChain.parentExplorerUrl
           }tx/${parentTxHash}`
-        );
-        console.log("----------------------------------------------------------");
+        )
+        console.log(
+          '----------------------------------------------------------'
+        )
         for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
           const message = messages[msgIndex]
           const retryableTicketId = message.retryableCreationId
@@ -169,85 +193,95 @@ const processChildChain = async (
           // Format the result message
           const resultMessage = `${msgIndex + 1}. ${
             ParentToChildMessageStatus[status]
-          }:\nOrbitTxHash: ${
-            childChain.explorerUrl
-          }tx/${retryableTicketId}`
+          }:\nOrbitTxHash: ${childChain.explorerUrl}tx/${retryableTicketId}`
 
           logResult(childChain.name, resultMessage)
-          console.log("----------------------------------------------------------");
+          console.log(
+            '----------------------------------------------------------'
+          )
         }
-        retryablesFound = true; // Set to true if retryables are found
+        retryablesFound = true // Set to true if retryables are found
       }
     }
 
-    return retryablesFound;
+    return retryablesFound
   }
 
-  const checkRetryablesContinuous = async (fromBlock: number, toBlock: number) => {
-    const processingDurationInSeconds = 180;
-    let isContinuous = options.continuous;
-    const startTime = Date.now();
-  
+  const checkRetryablesContinuous = async (
+    fromBlock: number,
+    toBlock: number
+  ) => {
+    const processingDurationInSeconds = 180
+    let isContinuous = options.continuous
+    const startTime = Date.now()
+
     const processBlocks = async () => {
-      const lastBlockChecked = await checkRetryablesOneOff(fromBlock, toBlock);
-      console.log("Check completed for block:", lastBlockChecked);
-      fromBlock = lastBlockChecked + 1;
-      console.log("Continuing from block:", fromBlock);
-      
-      toBlock = await parentChainProvider.getBlockNumber();
-      console.log("Latest block:", toBlock);
-      console.log(`Processed blocks up to ${lastBlockChecked}`);
-  
-      const currentTime = Date.now();
-      const elapsedTimeInSeconds = Math.floor((currentTime - startTime) / 1000);
-  
+      const lastBlockChecked = await checkRetryablesOneOff(fromBlock, toBlock)
+      console.log('Check completed for block:', lastBlockChecked)
+      fromBlock = lastBlockChecked + 1
+      console.log('Continuing from block:', fromBlock)
+
+      toBlock = await parentChainProvider.getBlockNumber()
+      console.log(`Processed blocks up to ${lastBlockChecked}`)
+
+      const currentTime = Date.now()
+      const elapsedTimeInSeconds = Math.floor((currentTime - startTime) / 1000)
+
       // Log time-related information at regular intervals
       if (elapsedTimeInSeconds % 60 === 0) {
-        console.log(`[${childChain.name}] Current Time: ${new Date(currentTime).toISOString()}`);
-        console.log(`[${childChain.name}] Elapsed Time: ${elapsedTimeInSeconds} seconds`);
+        console.log(
+          `[${childChain.name}] Current Time: ${new Date(
+            currentTime
+          ).toISOString()}`
+        )
+        console.log(
+          `[${childChain.name}] Elapsed Time: ${elapsedTimeInSeconds} seconds`
+        )
       }
-  
-      return lastBlockChecked;
-    };
-  
+
+      return lastBlockChecked
+    }
+
     while (isContinuous) {
-      
-      const lastBlockChecked = await processBlocks();
-  
+      const lastBlockChecked = await processBlocks()
+
       if (lastBlockChecked >= toBlock) {
         // Wait for a short interval before checking again
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 1000))
       }
-  
-      const currentTime = Date.now();
-      const elapsedTimeInSeconds = Math.floor((currentTime - startTime) / 1000);
-  
+
+      const currentTime = Date.now()
+      const elapsedTimeInSeconds = Math.floor((currentTime - startTime) / 1000)
+
       if (elapsedTimeInSeconds >= processingDurationInSeconds) {
-        isContinuous = false;
+        isContinuous = false
       }
     }
-  
+
     // Log final time-related information
-    const currentTime = Date.now();
-    const elapsedTimeInSeconds = Math.floor((currentTime - startTime) / 1000);
-  
-    console.log(`[${childChain.name}] Current Time: ${new Date(currentTime).toISOString()}`);
-    console.log(`[${childChain.name}] Elapsed Time: ${elapsedTimeInSeconds} seconds`);
-  };
+    const currentTime = Date.now()
+    const elapsedTimeInSeconds = Math.floor((currentTime - startTime) / 1000)
 
+    console.log(
+      `[${childChain.name}] Current Time: ${new Date(
+        currentTime
+      ).toISOString()}`
+    )
+    console.log(
+      `[${childChain.name}] Elapsed Time: ${elapsedTimeInSeconds} seconds`
+    )
+  }
 
-
-
-if (options.continuous) {
-  console.log("Continuous mode activated.");
-  await checkRetryablesContinuous(options.fromBlock, options.toBlock);
-} else {
-  console.log("One-off mode activated.");
-  await checkRetryablesOneOff(options.fromBlock, options.toBlock);
+  if (options.continuous) {
+    console.log('Continuous mode activated.')
+    await checkRetryablesContinuous(options.fromBlock, options.toBlock)
+  } else {
+    console.log('One-off mode activated.')
+    await checkRetryablesOneOff(options.fromBlock, options.toBlock)
     // Log a message if no retryables were found for the child chain
     if (!retryablesFound) {
-      console.log(`No retryables found for ${childChain.name}`);
-      console.log("----------------------------------------------------------");
+      console.log(`No retryables found for ${childChain.name}`)
+      console.log('----------------------------------------------------------')
     }
   }
 }
