@@ -28,10 +28,18 @@ type findRetryablesOptions = {
 
 const logFilePath = 'logfile.log';
 // Truncate the log file to clear its contents
+// Check if the log file exists, if not, create it
 try {
-  fsPromises.truncate(logFilePath, 0);
+  fs.accessSync(logFilePath);
 } catch (error) {
-  console.error(`Error truncating log file: ${(error as Error).message}`);
+  try {
+    // Create the log file if it doesn't exist
+    fs.writeFileSync(logFilePath, '');
+    console.log(`Log file created: ${logFilePath}`);
+  } catch (createError) {
+    console.error(`Error creating log file: ${(createError as Error).message}`);
+    process.exit(1);
+  }
 }
 
 // Configure Winston logger
