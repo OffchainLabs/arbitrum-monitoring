@@ -89,7 +89,7 @@ const processChildChain = async (
     return logs;
   };
 
-  const checkRetryablesOneOff = async (fromBlock: number, toBlock: number) => {
+  const checkRetryablesOneOff = async (fromBlock: number, toBlock: number) : Promise<number> => {
     if (toBlock === 0) {
       try {
         const currentBlock = await parentChainProvider.getBlockNumber()
@@ -101,6 +101,7 @@ const processChildChain = async (
         toBlock = 0
       }
     }
+    console.log(`processing from ${fromBlock} to ${toBlock}` );
 
     retryablesFound = await checkRetryables(
       parentChainProvider,
@@ -126,6 +127,8 @@ const processChildChain = async (
       parentChainProvider
     )
 
+    console.log(`Found ${inboxDeliveredLogs.length} inboxDeliveredLogs from block ${fromBlock} to ${toBlock}`);
+
     const uniqueTxHashes = new Set<string>()
 
     for (let inboxDeliveredLog of inboxDeliveredLogs) {
@@ -133,8 +136,10 @@ const processChildChain = async (
       const { transactionHash: parentTxHash } = inboxDeliveredLog
       uniqueTxHashes.add(parentTxHash)
     }
+    console.log(`Found ${uniqueTxHashes.size} unique transactions from inboxDeliveredLogs`);
 
     for (const parentTxHash of uniqueTxHashes) {
+      console.log(`Checking transaction ${parentTxHash}`);
       const parentTxReceipt = await parentChainProvider.getTransactionReceipt(
         parentTxHash
       )
@@ -142,6 +147,7 @@ const processChildChain = async (
       const messages = await arbParentTxReceipt.getL1ToL2Messages(
         childChainProvider
       )
+      console.log(`Found ${messages.length} L1ToL2Messages for transaction ${parentTxHash}`);
 
       if (messages.length > 0) {
         logResult(
@@ -177,36 +183,67 @@ const processChildChain = async (
     return retryablesFound;
   }
 
-  const checkRetryablesContinuous = async () => {
-    const processingDurationInSeconds = 30
-    let isContinuous = options.continuous
-    let fromBlock = options.fromBlock
-    let toBlock = options.toBlock
-    const startTime = Date.now()
-
-    while (isContinuous) {
-
-      const lastBlockChecked = await checkRetryablesOneOff(fromBlock, toBlock)
-      fromBlock = lastBlockChecked + 1
-      toBlock = lastBlockChecked // Set to the latest block checked
-
-      const currentTime = Date.now()
-      const elapsedTimeInSeconds = Math.floor((currentTime - startTime) / 1000)
-
-      // Check if the processing duration has reached 3 minutes
-      if (elapsedTimeInSeconds >= processingDurationInSeconds) {
-        isContinuous = false
+  const checkRetryablesContinuous = async (fromBlock: number, toBlock: number) => {
+    const processingDurationInSeconds = 180;
+    let isContinuous = options.continuous;
+    const startTime = Date.now();
+  
+    const processBlocks = async () => {
+      const lastBlockChecked = await checkRetryablesOneOff(fromBlock, toBlock);
+      console.log("Check completed for block:", lastBlockChecked);
+      fromBlock = lastBlockChecked + 1;
+      console.log("Continuing from block:", fromBlock);
+      
+      toBlock = await parentChainProvider.getBlockNumber();
+      console.log("Latest block:", toBlock);
+      console.log(`Processed blocks up to ${lastBlockChecked}`);
+  
+      const currentTime = Date.now();
+      const elapsedTimeInSeconds = Math.floor((currentTime - startTime) / 1000);
+  
+      // Log time-related information at regular intervals
+      if (elapsedTimeInSeconds % 60 === 0) {
+        console.log(`[${childChain.name}] Current Time: ${new Date(currentTime).toISOString()}`);
+        console.log(`[${childChain.name}] Elapsed Time: ${elapsedTimeInSeconds} seconds`);
       }
-
-      await new Promise(resolve => setTimeout(resolve, 1000)) // 1-second delay between iterations
+  
+      return lastBlockChecked;
+    };
+  
+    while (isContinuous) {
+      
+      const lastBlockChecked = await processBlocks();
+  
+      if (lastBlockChecked >= toBlock) {
+        // Wait for a short interval before checking again
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+  
+      const currentTime = Date.now();
+      const elapsedTimeInSeconds = Math.floor((currentTime - startTime) / 1000);
+  
+      if (elapsedTimeInSeconds >= processingDurationInSeconds) {
+        isContinuous = false;
+      }
     }
-  }
+  
+    // Log final time-related information
+    const currentTime = Date.now();
+    const elapsedTimeInSeconds = Math.floor((currentTime - startTime) / 1000);
+  
+    console.log(`[${childChain.name}] Current Time: ${new Date(currentTime).toISOString()}`);
+    console.log(`[${childChain.name}] Elapsed Time: ${elapsedTimeInSeconds} seconds`);
+  };
 
-  if (options.continuous) {
-    await checkRetryablesContinuous()
-  } else {
-    await checkRetryablesOneOff(options.fromBlock, options.toBlock);
 
+
+
+if (options.continuous) {
+  console.log("Continuous mode activated.");
+  await checkRetryablesContinuous(options.fromBlock, options.toBlock);
+} else {
+  console.log("One-off mode activated.");
+  await checkRetryablesOneOff(options.fromBlock, options.toBlock);
     // Log a message if no retryables were found for the child chain
     if (!retryablesFound) {
       console.log(`No retryables found for ${childChain.name}`);
