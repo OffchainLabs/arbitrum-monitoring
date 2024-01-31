@@ -5,3 +5,4 @@ yarn-error.log
 /dist
 ./*.js
 .DS_Store
+logfile.log

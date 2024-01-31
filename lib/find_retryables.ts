@@ -104,15 +104,17 @@ const processChildChain = async (
   ): Promise<number> => {
     if (toBlock === 0) {
       try {
-        const currentBlock = await parentChainProvider.getBlockNumber()
-        toBlock = currentBlock
+        const currentBlock = await parentChainProvider.getBlockNumber();
+        if (!currentBlock) {
+          throw new Error('Failed to retrieve the latest block.');
+        }
+        toBlock = currentBlock;
       } catch (error) {
-        console.error(
-          `Error getting the latest block: ${(error as Error).message}`
-        )
-        toBlock = 0
+        console.error(`Error getting the latest block: ${(error as Error).message}`);
+        throw error;
       }
     }
+  
     //console.log(`processing from ${fromBlock} to ${toBlock}` );
 
     retryablesFound = await checkRetryables(
