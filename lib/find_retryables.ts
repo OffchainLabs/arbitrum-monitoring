@@ -6,12 +6,11 @@ import {
   L1ToL2MessageStatus as ParentToChildMessageStatus,
   L2Network as ParentNetwork,
 } from '@arbitrum/sdk'
-import { Inbox__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Inbox__factory'
+import { Bridge__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Bridge__factory'
 import * as fs from 'fs'
 import * as path from 'path'
 import yargs from 'yargs'
 import winston from 'winston'
-import { promises as fsPromises } from 'fs';
 
 export interface ChildNetwork extends ParentNetwork {
   parentRpcUrl: string
@@ -26,19 +25,18 @@ type findRetryablesOptions = {
   configPath: string
 }
 
-const logFilePath = 'logfile.log';
-// Truncate the log file to clear its contents
+const logFilePath = 'logfile.log'
 // Check if the log file exists, if not, create it
 try {
-  fs.accessSync(logFilePath);
+  fs.accessSync(logFilePath)
 } catch (error) {
   try {
     // Create the log file if it doesn't exist
-    fs.writeFileSync(logFilePath, '');
-    console.log(`Log file created: ${logFilePath}`);
+    fs.writeFileSync(logFilePath, '')
+    console.log(`Log file created: ${logFilePath}`)
   } catch (createError) {
-    console.error(`Error creating log file: ${(createError as Error).message}`);
-    process.exit(1);
+    console.error(`Error creating log file: ${(createError as Error).message}`)
+    process.exit(1)
   }
 }
 
@@ -49,7 +47,7 @@ const logger = winston.createLogger({
     new winston.transports.Console(),
     new winston.transports.File({ filename: logFilePath }),
   ],
-});
+})
 
 const logResult = (chainName: string, message: string) => {
   logger.info(`[${chainName}] ${message}`)
@@ -89,8 +87,8 @@ const processChildChain = async (
 
   let retryablesFound: boolean = false
 
-  const getInboxMessageDeliveredEventData = async (
-    parentInboxAddress: string,
+  const getMessageDeliveredEventData = async (
+    parentBridgeAddress: string,
     filter: {
       fromBlock: providers.BlockTag
       toBlock: providers.BlockTag
@@ -99,11 +97,15 @@ const processChildChain = async (
   ) => {
     const eventFetcher = new EventFetcher(parentChainProvider)
     const logs = await eventFetcher.getEvents(
-      Inbox__factory,
-      (g: any) => g.filters.InboxMessageDelivered(),
-      { ...filter, address: parentInboxAddress }
+      Bridge__factory,
+      (g: any) => g.filters.MessageDelivered(),
+      { ...filter, address: parentBridgeAddress }
     )
-    return logs
+
+    // Filter logs where event.kind is equal to 9
+    const filteredLogs = logs.filter(log => log.event.kind === 9)
+
+    return filteredLogs
   }
 
   const checkRetryablesOneOff = async (
@@ -112,23 +114,25 @@ const processChildChain = async (
   ): Promise<number> => {
     if (toBlock === 0) {
       try {
-        const currentBlock = await parentChainProvider.getBlockNumber();
+        const currentBlock = await parentChainProvider.getBlockNumber()
         if (!currentBlock) {
-          throw new Error('Failed to retrieve the latest block.');
+          throw new Error('Failed to retrieve the latest block.')
         }
-        toBlock = currentBlock;
+        toBlock = currentBlock
       } catch (error) {
-        console.error(`Error getting the latest block: ${(error as Error).message}`);
-        throw error;
+        console.error(
+          `Error getting the latest block: ${(error as Error).message}`
+        )
+        throw error
       }
     }
-  
+
     //console.log(`processing from ${fromBlock} to ${toBlock}` );
 
     retryablesFound = await checkRetryables(
       parentChainProvider,
       childChainProvider,
-      childChain.ethBridge.inbox,
+      childChain.ethBridge.bridge,
       fromBlock,
       toBlock
     )
@@ -143,32 +147,21 @@ const processChildChain = async (
     fromBlock: number,
     toBlock: number
   ): Promise<boolean> => {
-    const inboxDeliveredLogs = await getInboxMessageDeliveredEventData(
+    const messageDeliveredLogs = await getMessageDeliveredEventData(
       bridgeAddress,
       { fromBlock, toBlock },
       parentChainProvider
     )
 
-    //console.log(`Found ${inboxDeliveredLogs.length} inboxDeliveredLogs from block ${fromBlock} to ${toBlock}`);
-
-    const thresholdWarning = 100 // the threshhold at which it will give the warning that processing may take a while
-
-    if (inboxDeliveredLogs.length > thresholdWarning) {
-      console.log('----------------------------------------------------------')
-      console.warn(
-        `Warning: High number of inboxDeliveredLogs detected (${inboxDeliveredLogs.length}). Processing may take some time.`
-      )
-      console.log('----------------------------------------------------------')
-    }
+    //console.log(`Found ${messageDeliveredLogs.length} messageDeliveredLogs from block ${fromBlock} to ${toBlock}`);
 
     const uniqueTxHashes = new Set<string>()
 
-    for (let inboxDeliveredLog of inboxDeliveredLogs) {
-      if (inboxDeliveredLog.data.length === 706) continue // depositETH bypass
-      const { transactionHash: parentTxHash } = inboxDeliveredLog
+    for (let messageDeliveredLog of messageDeliveredLogs) {
+      const { transactionHash: parentTxHash } = messageDeliveredLog
       uniqueTxHashes.add(parentTxHash)
     }
-    //console.log(`Found ${uniqueTxHashes.size} unique transactions from inboxDeliveredLogs`);
+    //console.log(`Found ${uniqueTxHashes.size} unique transactions from messageDeliveredLogs`);
 
     for (const parentTxHash of uniqueTxHashes) {
       //console.log(`Checking transaction ${parentTxHash}`);
