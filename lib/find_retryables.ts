@@ -12,12 +12,14 @@ import * as path from 'path'
 import yargs from 'yargs'
 import winston from 'winston'
 
+// Interface defining additional properties for ChildNetwork
 export interface ChildNetwork extends ParentNetwork {
   parentRpcUrl: string
   orbitRpcUrl: string
   parentExplorerUrl: string
 }
 
+// Type for options passed to findRetryables function
 type findRetryablesOptions = {
   fromBlock: number
   toBlock: number
@@ -25,13 +27,14 @@ type findRetryablesOptions = {
   configPath: string
 }
 
+// Path for the log file
 const logFilePath = 'logfile.log'
+
 // Check if the log file exists, if not, create it
 try {
   fs.accessSync(logFilePath)
 } catch (error) {
   try {
-    // Create the log file if it doesn't exist
     fs.writeFileSync(logFilePath, '')
     console.log(`Log file created: ${logFilePath}`)
   } catch (createError) {
@@ -49,10 +52,12 @@ const logger = winston.createLogger({
   ],
 })
 
+// Function to log results with chainName
 const logResult = (chainName: string, message: string) => {
   logger.info(`[${chainName}] ${message}`)
 }
 
+// Parsing command line arguments using yargs
 const options: findRetryablesOptions = yargs(process.argv.slice(2))
   .options({
     fromBlock: { type: 'number', default: 0 },
@@ -63,6 +68,7 @@ const options: findRetryablesOptions = yargs(process.argv.slice(2))
   .strict()
   .parseSync() as findRetryablesOptions
 
+// Function to process a child chain and check for retryable transactions
 const processChildChain = async (
   childChain: ChildNetwork,
   options: findRetryablesOptions
@@ -87,6 +93,7 @@ const processChildChain = async (
 
   let retryablesFound: boolean = false
 
+  // Function to get MessageDelivered events from the parent chain
   const getMessageDeliveredEventData = async (
     parentBridgeAddress: string,
     filter: {
@@ -103,11 +110,13 @@ const processChildChain = async (
     )
 
     // Filter logs where event.kind is equal to 9
+    // https://github.com/OffchainLabs/nitro-contracts/blob/38a70a5e14f8b52478eb5db08e7551a82ced14fe/src/libraries/MessageTypes.sol#L9
     const filteredLogs = logs.filter(log => log.event.kind === 9)
 
     return filteredLogs
   }
 
+  // Function to check retryable transactions in a specific block range
   const checkRetryablesOneOff = async (
     fromBlock: number,
     toBlock: number
@@ -126,8 +135,6 @@ const processChildChain = async (
         throw error
       }
     }
-
-    //console.log(`processing from ${fromBlock} to ${toBlock}` );
 
     retryablesFound = await checkRetryables(
       parentChainProvider,
@@ -153,18 +160,14 @@ const processChildChain = async (
       parentChainProvider
     )
 
-    //console.log(`Found ${messageDeliveredLogs.length} messageDeliveredLogs from block ${fromBlock} to ${toBlock}`);
-
     const uniqueTxHashes = new Set<string>()
 
     for (let messageDeliveredLog of messageDeliveredLogs) {
       const { transactionHash: parentTxHash } = messageDeliveredLog
       uniqueTxHashes.add(parentTxHash)
     }
-    //console.log(`Found ${uniqueTxHashes.size} unique transactions from messageDeliveredLogs`);
 
     for (const parentTxHash of uniqueTxHashes) {
-      //console.log(`Checking transaction ${parentTxHash}`);
       const parentTxReceipt = await parentChainProvider.getTransactionReceipt(
         parentTxHash
       )
@@ -172,7 +175,6 @@ const processChildChain = async (
       const messages = await arbParentTxReceipt.getL1ToL2Messages(
         childChainProvider
       )
-      //console.log(`Found ${messages.length} L1ToL2Messages for transaction ${parentTxHash}`);
 
       if (messages.length > 0) {
         logResult(
@@ -210,6 +212,7 @@ const processChildChain = async (
     return retryablesFound
   }
 
+  // Function to continuously check retryable transactions
   const checkRetryablesContinuous = async (
     fromBlock: number,
     toBlock: number
@@ -218,6 +221,7 @@ const processChildChain = async (
     let isContinuous = options.continuous
     const startTime = Date.now()
 
+    // Function to process blocks and check for retryables
     const processBlocks = async () => {
       const lastBlockChecked = await checkRetryablesOneOff(fromBlock, toBlock)
       console.log('Check completed for block:', lastBlockChecked)
@@ -227,24 +231,10 @@ const processChildChain = async (
       toBlock = await parentChainProvider.getBlockNumber()
       console.log(`Processed blocks up to ${lastBlockChecked}`)
 
-      const currentTime = Date.now()
-      const elapsedTimeInSeconds = Math.floor((currentTime - startTime) / 1000)
-
-      // Log time-related information at regular intervals
-      if (elapsedTimeInSeconds % 60 === 0) {
-        console.log(
-          `[${childChain.name}] Current Time: ${new Date(
-            currentTime
-          ).toISOString()}`
-        )
-        console.log(
-          `[${childChain.name}] Elapsed Time: ${elapsedTimeInSeconds} seconds`
-        )
-      }
-
       return lastBlockChecked
     }
 
+    // Continuous loop for checking retryables
     while (isContinuous) {
       const lastBlockChecked = await processBlocks()
 
@@ -260,19 +250,6 @@ const processChildChain = async (
         isContinuous = false
       }
     }
-
-    // Log final time-related information
-    const currentTime = Date.now()
-    const elapsedTimeInSeconds = Math.floor((currentTime - startTime) / 1000)
-
-    console.log(
-      `[${childChain.name}] Current Time: ${new Date(
-        currentTime
-      ).toISOString()}`
-    )
-    console.log(
-      `[${childChain.name}] Elapsed Time: ${elapsedTimeInSeconds} seconds`
-    )
   }
 
   if (options.continuous) {
@@ -289,22 +266,27 @@ const processChildChain = async (
   }
 }
 
+// Read the content of the config file
 const configFileContent = fs.readFileSync(
   path.join(process.cwd(), 'lib', options.configPath),
   'utf-8'
 )
 
+// Parse the config file content as JSON
 const config = JSON.parse(configFileContent)
 
+// Check if childChains array is present in the config file
 if (!Array.isArray(config.childChains)) {
   console.error('Error: Child chains not found in the config file.')
   process.exit(1)
 }
 
+// Function to process multiple child chains concurrently
 const processOrbitChainsConcurrently = async () => {
   for (const childChain of config.childChains) {
     await processChildChain(childChain, options)
   }
 }
 
+// Start processing child chains concurrently
 processOrbitChainsConcurrently()
