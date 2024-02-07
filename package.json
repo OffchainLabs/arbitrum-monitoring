@@ -11,7 +11,8 @@
     "yargs": "^17.5.1",
     "@arbitrum/sdk": "3.2.0-beta.0",
     "@arbitrum/nitro-contracts": "v1.1.0-beta.1",
-    "@arbitrum/token-bridge-contracts": "v1.1.0-beta.2"
+    "@arbitrum/token-bridge-contracts": "v1.1.0-beta.2",
+    "winston": "^3.3.3"
   },
   "devDependencies": {
     "@types/node": "^16.4.10",
