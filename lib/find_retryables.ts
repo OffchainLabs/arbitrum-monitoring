@@ -11,7 +11,10 @@ import * as fs from 'fs'
 import * as path from 'path'
 import yargs from 'yargs'
 import winston from 'winston'
-import { SEVEN_DAYS_IN_SECONDS } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
+import {
+  ARB_MINIMUM_BLOCK_TIME_IN_SECONDS,
+  SEVEN_DAYS_IN_SECONDS,
+} from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 
 // Interface defining additional properties for ChildNetwork
 export interface ChildNetwork extends ParentNetwork {
@@ -133,17 +136,20 @@ const processChildChain = async (
 
           // update the `fromBlock` to 7 days before the `toBlock` if it is more than 7 days
           // we don't want to go back more than 7 days, else we might have to process too many blocks than required
-          if (typeof childChain.blockTime === 'number') {
-            const blockBefore7Days =
-              toBlock - SEVEN_DAYS_IN_SECONDS / childChain.blockTime
-            if (fromBlock < blockBefore7Days) {
-              fromBlock = blockBefore7Days
-            }
-            console.log(
-              `[${childChain.name}]: Updated 'from' and 'to' block range to `,
-              [fromBlock, toBlock]
-            )
+          const blocksPassedIn7Days =
+            SEVEN_DAYS_IN_SECONDS /
+            (childChain.blockTime ?? ARB_MINIMUM_BLOCK_TIME_IN_SECONDS)
+
+          const blockBefore7Days = toBlock - blocksPassedIn7Days
+
+          if (fromBlock < blockBefore7Days) {
+            fromBlock = blockBefore7Days
           }
+
+          console.log(
+            `[${childChain.name}]: Updated 'from' and 'to' block range to `,
+            [fromBlock, toBlock]
+          )
         } catch (error) {
           console.error(
             `[${childChain.name}]: Error getting the latest block: ${

@@ -17,7 +17,6 @@
       "parentExplorerUrl": "https://sepolia.arbiscan.io",
       "isArbitrum": true,
       "isCustom": true,
-      "blockTime": 0.25,
       "name": "Xai Testnet",
       "slug": "xai-testnet",
       "partnerChainID": 421614,
