@@ -283,6 +283,13 @@ if (!Array.isArray(config.childChains)) {
 
 // Function to process multiple child chains concurrently
 const processOrbitChainsConcurrently = async () => {
+  // const promises = config.childChains.map((childChain: ChildNetwork) =>
+  //   processChildChain(childChain, options)
+  // )
+
+  // // keep running the script until we get resolution for ALL the chains
+  // await Promise.allSettled(promises)
+
   for (const childChain of config.childChains) {
     await processChildChain(childChain, options)
   }
