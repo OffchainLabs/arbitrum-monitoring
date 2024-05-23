@@ -5,6 +5,7 @@ import {
   L1TransactionReceipt as ParentChainTxReceipt,
   L1ToL2MessageStatus as ParentToChildMessageStatus,
   L2Network as ParentNetwork,
+  getL2Network,
 } from '@arbitrum/sdk'
 import { Bridge__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Bridge__factory'
 import * as fs from 'fs'
@@ -57,6 +58,14 @@ const logResult = (chainName: string, message: string) => {
   logger.info(`[${chainName}] ${message}`)
 }
 
+const checkNetworkAlreadyExistsInSdk = async (networkId: number) => {
+  try {
+    return !!(await getL2Network(networkId))
+  } catch (_) {
+    return false
+  }
+}
+
 // Parsing command line arguments using yargs
 const options: findRetryablesOptions = yargs(process.argv.slice(2))
   .options({
@@ -77,7 +86,12 @@ const processChildChain = async (
   console.log(`Running for Orbit chain: ${childChain.name}`)
   console.log('----------------------------------------------------------')
   try {
-    addCustomNetwork({ customL2Network: childChain })
+    const networkAlreadyExistsInSdk = await checkNetworkAlreadyExistsInSdk(
+      childChain.chainID
+    )
+    if (!networkAlreadyExistsInSdk) {
+      addCustomNetwork({ customL2Network: childChain })
+    }
   } catch (error: any) {
     console.error(`Failed to register the child network: ${error.message}`)
     return
@@ -283,8 +297,9 @@ if (!Array.isArray(config.childChains)) {
 
 // Function to process multiple child chains concurrently
 const processOrbitChainsConcurrently = async () => {
-  const promises = config.childChains.map((childChain: ChildNetwork) =>
-    processChildChain(childChain, options)
+  const promises = config.childChains.map(
+    async (childChain: ChildNetwork) =>
+      await processChildChain(childChain, options)
   )
 
   // keep running the script until we get resolution (success or error) for all the chains
