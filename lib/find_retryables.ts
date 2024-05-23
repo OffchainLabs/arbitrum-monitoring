@@ -60,7 +60,8 @@ const logResult = (chainName: string, message: string) => {
 
 const checkNetworkAlreadyExistsInSdk = async (networkId: number) => {
   try {
-    return !!(await getL2Network(networkId))
+    await getL2Network(networkId)
+    return true
   } catch (_) {
     return false
   }
