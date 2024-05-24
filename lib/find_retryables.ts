@@ -25,8 +25,6 @@ import {
 } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 import { reportFailedTicket } from './report_retryables'
 
-// import { reportFailedTicket } from './report_retryables'
-
 // Interface defining additional properties for ChildNetwork
 export interface ChildNetwork extends ParentNetwork {
   parentRpcUrl: string
