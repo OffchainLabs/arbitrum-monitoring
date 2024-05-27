@@ -9,7 +9,7 @@
     "graphql": "^16.6.0",
     "graphql-request": "^6.1.0",
     "yargs": "^17.5.1",
-    "@arbitrum/sdk": "3.2.0-beta.0",
+    "@arbitrum/sdk": "^3.4.1",
     "@arbitrum/nitro-contracts": "v1.1.0-beta.1",
     "@arbitrum/token-bridge-contracts": "v1.1.0-beta.2",
     "winston": "^3.3.3"
