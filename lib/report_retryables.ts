@@ -88,11 +88,11 @@ export const reportFailedTicket = async ({
   // build message to report
   let reportStr =
     formatPrefix(t, childChain.name) +
-    (await formatInitiator(tokenDepositData, l1Report)) +
-    (await formatDestination(t)) +
-    formatL1TX(l1Report) +
-    formatId(t) +
-    formatL2ExecutionTX(t) +
+    (await formatInitiator(tokenDepositData, l1Report, childChain)) +
+    (await formatDestination(t, childChain)) +
+    formatL1TX(l1Report, childChain) +
+    formatId(t, childChain) +
+    formatL2ExecutionTX(t, childChain) +
     (await formatL2Callvalue(t)) +
     (await formatTokenDepositData(tokenDepositData, parentChainProvider)) +
     (await formatGasData(t, childChainProvider)) +
@@ -110,8 +110,21 @@ export const reportFailedTicket = async ({
   }
 }
 
-// ALL the util functions copied over from the original file
+export const getExplorerUrlPrefixes = (childChain: ChildNetwork) => {
+  const PARENT_CHAIN_TX_PREFIX = `${childChain.parentExplorerUrl}tx/`
+  const PARENT_CHAIN_ADDRESS_PREFIX = `${childChain.parentExplorerUrl}address/`
+  const CHILD_CHAIN_TX_PREFIX = `${childChain.explorerUrl}tx/`
+  const CHILD_CHAIN_ADDRESS_PREFIX = `${childChain.explorerUrl}address/`
 
+  return {
+    PARENT_CHAIN_TX_PREFIX,
+    PARENT_CHAIN_ADDRESS_PREFIX,
+    CHILD_CHAIN_TX_PREFIX,
+    CHILD_CHAIN_ADDRESS_PREFIX,
+  }
+}
+
+// ALL the util functions copied over from the original file
 let ethPriceCache: number
 let tokenPriceCache: { [key: string]: number } = {}
 
@@ -167,51 +180,74 @@ const formatPrefix = (ticket: L2TicketReport, childChainName: string) => {
 
 const formatInitiator = async (
   deposit: TokenDepositData | undefined,
-  l1Report: L1TicketReport | undefined
+  l1Report: L1TicketReport | undefined,
+  childChain: ChildNetwork
 ) => {
+  const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(childChain)
+
   if (deposit !== undefined) {
     let msg = '\n\t *Deposit initiated by:* '
     // let text = await getContractName(Chain.ETHEREUM, deposit.sender)
-    return `${msg}<${deposit.sender}>`
+    return `${msg}<${PARENT_CHAIN_ADDRESS_PREFIX + deposit.sender}|${
+      deposit.sender
+    }>`
   }
 
   if (l1Report !== undefined) {
     let msg = '\n\t *Retryable sender:* '
     // let text = await getContractName(Chain.ETHEREUM, l1Report.sender)
-    return `${msg}<${l1Report.sender}>`
+    return `${msg}<${PARENT_CHAIN_ADDRESS_PREFIX + l1Report.sender}|${
+      l1Report.sender
+    }>`
   }
 
   return ''
 }
 
-const formatId = (ticket: L2TicketReport) => {
+const formatId = (ticket: L2TicketReport, childChain: ChildNetwork) => {
   let msg = '\n\t *Child chain ticket creation TX:* '
 
   if (ticket.id == null) {
     return msg + '-'
   }
 
-  return `${msg}<${ticket.id}|${ticket.id}>`
+  const { CHILD_CHAIN_TX_PREFIX } = getExplorerUrlPrefixes(childChain)
+
+  return `${msg}<${CHILD_CHAIN_TX_PREFIX + ticket.id}|${ticket.id}>`
 }
 
-const formatL1TX = (l1Report: L1TicketReport | undefined) => {
+const formatL1TX = (
+  l1Report: L1TicketReport | undefined,
+  childChain: ChildNetwork
+) => {
   let msg = '\n\t *Parent Chain TX:* '
 
   if (l1Report == undefined) {
     return msg + '-'
   }
 
-  return `${msg}<${l1Report.transactionHash}|${l1Report.transactionHash}>`
+  const { PARENT_CHAIN_TX_PREFIX } = getExplorerUrlPrefixes(childChain)
+
+  return `${msg}<${PARENT_CHAIN_TX_PREFIX + l1Report.transactionHash}|${
+    l1Report.transactionHash
+  }>`
 }
 
-const formatL2ExecutionTX = (ticket: L2TicketReport) => {
+const formatL2ExecutionTX = (
+  ticket: L2TicketReport,
+  childChain: ChildNetwork
+) => {
   let msg = '\n\t *Child chain execution TX:* '
 
   if (ticket.retryTxHash == null) {
     return msg + '-'
   }
 
-  return `${msg}<${ticket.retryTxHash}|${ticket.retryTxHash}>`
+  const { CHILD_CHAIN_TX_PREFIX } = getExplorerUrlPrefixes(childChain)
+
+  return `${msg}<${CHILD_CHAIN_TX_PREFIX + ticket.retryTxHash}|${
+    ticket.retryTxHash
+  }>`
 }
 
 const formatL2Callvalue = async (ticket: L2TicketReport) => {
@@ -246,9 +282,16 @@ const formatTokenDepositData = async (
   return msg
 }
 
-const formatDestination = async (ticket: L2TicketReport) => {
+const formatDestination = async (
+  ticket: L2TicketReport,
+  childChain: ChildNetwork
+) => {
   let msg = `\n\t *Destination:* `
-  return `${msg}<${ticket.retryTo}>`
+  const { CHILD_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(childChain)
+
+  return `${msg}<${CHILD_CHAIN_ADDRESS_PREFIX + ticket.retryTo}|${
+    ticket.retryTo
+  }>`
 }
 
 const formatGasData = async (

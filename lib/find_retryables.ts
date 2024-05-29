@@ -23,7 +23,7 @@ import {
   ARB_MINIMUM_BLOCK_TIME_IN_SECONDS,
   SEVEN_DAYS_IN_SECONDS,
 } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
-import { reportFailedTicket } from './report_retryables'
+import { getExplorerUrlPrefixes, reportFailedTicket } from './report_retryables'
 
 // Interface defining additional properties for ChildNetwork
 export interface ChildNetwork extends ParentNetwork {
@@ -179,6 +179,7 @@ const processChildChain = async (
         }
         toBlock = currentBlock
 
+        // monitor for 14 days worth of blocks
         if (fromBlock === 0) {
           fromBlock =
             toBlock -
@@ -241,6 +242,9 @@ const processChildChain = async (
         childChainProvider
       )
 
+      const { PARENT_CHAIN_TX_PREFIX, CHILD_CHAIN_TX_PREFIX } =
+        getExplorerUrlPrefixes(childChain)
+
       if (messages.length > 0) {
         logResult(
           childChain.name,
@@ -249,8 +253,8 @@ const processChildChain = async (
           } found for ${
             childChain.name
           } chain. Checking their status:\n\nArbtxhash: ${
-            childChain.parentExplorerUrl
-          }tx/${parentTxHash}`
+            PARENT_CHAIN_TX_PREFIX + parentTxHash
+          }`
         )
         console.log(
           '----------------------------------------------------------'
@@ -353,7 +357,7 @@ const processChildChain = async (
           // Format the result message
           const resultMessage = `${msgIndex + 1}. ${
             ParentToChildMessageStatus[status]
-          }:\nOrbitTxHash: ${childChain.explorerUrl}tx/${retryableTicketId}`
+          }:\nOrbitTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
 
           logResult(childChain.name, resultMessage)
           console.log(
