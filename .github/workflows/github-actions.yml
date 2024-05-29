@@ -1,0 +1,25 @@
+name: Orbit Retryable Tracker
+
+on:
+  schedule:
+    # Run everyday at 12:00 PM UTC
+    - cron: '0 12 * * *'
+
+jobs:
+  run-find-retryables:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Find Retryables
+        run: yarn findRetryables --continuous --enableAlerting
