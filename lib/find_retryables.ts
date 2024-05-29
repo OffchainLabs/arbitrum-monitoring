@@ -182,8 +182,8 @@ const processChildChain = async (
         if (fromBlock === 0) {
           fromBlock =
             toBlock -
-            SEVEN_DAYS_IN_SECONDS /
-              (5 * childChain.blockTime ?? ARB_MINIMUM_BLOCK_TIME_IN_SECONDS)
+            (2 * SEVEN_DAYS_IN_SECONDS) /
+              (childChain.blockTime ?? ARB_MINIMUM_BLOCK_TIME_IN_SECONDS)
         }
       } catch (error) {
         console.error(
