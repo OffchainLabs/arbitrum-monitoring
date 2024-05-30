@@ -16,5 +16,6 @@
     "esModuleInterop": true,
     "experimentalDecorators": true
   },
-  "include": ["lib/**/*.ts", "lib/**/*.d.ts", "lib/**/*.js", "lib/*.ts"]
+  "include": ["lib/**/*.ts", "lib/**/*.d.ts", "lib/**/*.js", "lib/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }
