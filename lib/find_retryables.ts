@@ -179,7 +179,7 @@ const processChildChain = async (
         }
         toBlock = currentBlock
 
-        // monitor for 14 days worth of blocks
+        // if no `fromBlock` or `toBlock` is provided, monitor for 14 days worth of blocks only
         if (fromBlock === 0) {
           fromBlock =
             toBlock -
