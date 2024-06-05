@@ -1,3 +1,7 @@
+import * as fs from 'fs'
+import * as path from 'path'
+import yargs from 'yargs'
+import winston from 'winston'
 import { BigNumber, providers } from 'ethers'
 import {
   EventFetcher,
@@ -7,7 +11,11 @@ import {
   L2Network as ParentNetwork,
   getL2Network,
   L1ToL2MessageStatus,
+  L1ToL2MessageReader,
 } from '@arbitrum/sdk'
+import { TransactionReceipt } from '@ethersproject/abstract-provider'
+import { FetchedEvent } from '@arbitrum/sdk/dist/lib/utils/eventFetcher'
+import { TypedEvent } from '@arbitrum/sdk/dist/lib/abi/common'
 import { Bridge__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Bridge__factory'
 import { ERC20__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ERC20__factory'
 import {
@@ -15,15 +23,18 @@ import {
   L1ERC20Gateway,
 } from '@arbitrum/sdk/dist/lib/abi/L1ERC20Gateway'
 import { L1ERC20Gateway__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L1ERC20Gateway__factory'
-import * as fs from 'fs'
-import * as path from 'path'
-import yargs from 'yargs'
-import winston from 'winston'
+
 import {
   ARB_MINIMUM_BLOCK_TIME_IN_SECONDS,
   SEVEN_DAYS_IN_SECONDS,
 } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
-import { getExplorerUrlPrefixes, reportFailedTicket } from './report_retryables'
+import {
+  ChildChainTicketReport,
+  ParentChainTicketReport,
+  TokenDepositData,
+  getExplorerUrlPrefixes,
+  reportFailedTicket,
+} from './report_retryables'
 
 // Interface defining additional properties for ChildNetwork
 export interface ChildNetwork extends ParentNetwork {
@@ -206,6 +217,106 @@ const processChildChain = async (
     return toBlock
   }
 
+  const getParentChainTicketReport = (
+    arbParentTxReceipt: ParentChainTxReceipt,
+    retryableMessage: L1ToL2MessageReader
+  ): ParentChainTicketReport => {
+    return {
+      id: arbParentTxReceipt.transactionHash,
+      transactionHash: arbParentTxReceipt.transactionHash,
+      sender: arbParentTxReceipt.from,
+      retryableTicketID: retryableMessage.retryableCreationId,
+    }
+  }
+
+  const getChildChainTicketReport = async ({
+    childChainTx,
+    childChainTxReceipt,
+    retryableMessage,
+  }: {
+    childChainTx: providers.TransactionResponse
+    childChainTxReceipt: TransactionReceipt
+    retryableMessage: L1ToL2MessageReader
+  }): Promise<ChildChainTicketReport> => {
+    let status = await retryableMessage.status()
+
+    const timestamp = (
+      await childChainProvider.getBlock(childChainTxReceipt.blockNumber)
+    ).timestamp
+
+    const childChainTicketReport = {
+      id: retryableMessage.retryableCreationId,
+      retryTxHash: retryableMessage.retryableCreationId,
+      createdAtTimestamp: String(timestamp),
+      createdAtBlockNumber: childChainTxReceipt.blockNumber,
+      timeoutTimestamp: String(Number(timestamp) + SEVEN_DAYS_IN_SECONDS),
+      deposit: String(retryableMessage.messageData.l2CallValue), // eth amount
+      status: L1ToL2MessageStatus[status],
+      retryTo: childChainTxReceipt.to,
+      retryData: retryableMessage.messageData.data,
+      gasFeeCap: (childChainTx.maxFeePerGas ?? BigNumber.from(0)).toNumber(),
+      gasLimit: childChainTx.gasLimit.toNumber(),
+    }
+
+    return childChainTicketReport
+  }
+
+  const getTokenDepositData = async ({
+    childChainTx,
+    retryableMessage,
+    arbParentTxReceipt,
+    depositsInitiatedLogs,
+  }: {
+    childChainTx: providers.TransactionResponse
+    retryableMessage: L1ToL2MessageReader
+    arbParentTxReceipt: ParentChainTxReceipt
+    depositsInitiatedLogs: FetchedEvent<TypedEvent<any, any>>[]
+  }): Promise<TokenDepositData | undefined> => {
+    let parentChainErc20Address: string | undefined,
+      tokenAmount: string | undefined,
+      tokenDepositData: TokenDepositData | undefined
+
+    try {
+      const retryableMessageData = childChainTx.data
+      const retryableBody = retryableMessageData.split('0xc9f95d32')[1]
+      const requestId = '0x' + retryableBody.slice(0, 64)
+      const depositsInitiatedEvent = depositsInitiatedLogs.find(
+        log => log.topics[3] === requestId
+      )
+      parentChainErc20Address = depositsInitiatedEvent?.event[0]
+      tokenAmount = depositsInitiatedEvent?.event[4]?.toString()
+    } catch (e) {
+      console.log(e)
+    }
+
+    if (parentChainErc20Address) {
+      try {
+        const erc20 = ERC20__factory.connect(
+          parentChainErc20Address,
+          parentChainProvider
+        )
+        const [symbol, decimals] = await Promise.all([
+          erc20.symbol(),
+          erc20.decimals(),
+        ])
+        tokenDepositData = {
+          l2TicketId: retryableMessage.retryableCreationId,
+          tokenAmount,
+          sender: arbParentTxReceipt.from,
+          l1Token: {
+            symbol,
+            decimals,
+            id: parentChainErc20Address,
+          },
+        }
+      } catch (e) {
+        console.log('failed to fetch token data', e)
+      }
+    }
+
+    return tokenDepositData
+  }
+
   const checkRetryables = async (
     parentChainProvider: providers.Provider,
     childChainProvider: providers.Provider,
@@ -220,6 +331,7 @@ const processChildChain = async (
       parentChainProvider
     )
 
+    // used for finding the token-details associated with a deposit, if any
     const depositsInitiatedLogs = await getDepositInitiatedEventData(
       erc20GatewayAddress,
       { fromBlock, toBlock },
@@ -227,29 +339,29 @@ const processChildChain = async (
     )
 
     const uniqueTxHashes = new Set<string>()
-
     for (let messageDeliveredLog of messageDeliveredLogs) {
       const { transactionHash: parentTxHash } = messageDeliveredLog
       uniqueTxHashes.add(parentTxHash)
     }
 
+    // for each parent-chain-transaction found, extract the Retryables thus created by it
     for (const parentTxHash of uniqueTxHashes) {
       const parentTxReceipt = await parentChainProvider.getTransactionReceipt(
         parentTxHash
       )
       const arbParentTxReceipt = new ParentChainTxReceipt(parentTxReceipt)
-      const messages = await arbParentTxReceipt.getL1ToL2Messages(
+      const retryables = await arbParentTxReceipt.getL1ToL2Messages(
         childChainProvider
       )
 
       const { PARENT_CHAIN_TX_PREFIX, CHILD_CHAIN_TX_PREFIX } =
         getExplorerUrlPrefixes(childChain)
 
-      if (messages.length > 0) {
+      if (retryables.length > 0) {
         logResult(
           childChain.name,
-          `${messages.length} retryable${
-            messages.length === 1 ? '' : 's'
+          `${retryables.length} retryable${
+            retryables.length === 1 ? '' : 's'
           } found for ${
             childChain.name
           } chain. Checking their status:\n\nArbtxhash: ${
@@ -259,93 +371,50 @@ const processChildChain = async (
         console.log(
           '----------------------------------------------------------'
         )
-        for (let msgIndex = 0; msgIndex < messages.length; msgIndex++) {
-          const message = messages[msgIndex]
-          const retryableTicketId = message.retryableCreationId
-          let status = await message.status()
 
+        // for each retryable, extract the detail for it's status / redemption
+        for (let msgIndex = 0; msgIndex < retryables.length; msgIndex++) {
+          const retryableMessage = retryables[msgIndex]
+          const retryableTicketId = retryableMessage.retryableCreationId
+          let status = await retryableMessage.status()
+
+          // if a Retryable is not in a success state, extract it's details
           if (
             options.enableAlerting &&
             status !== L1ToL2MessageStatus.REDEEMED
           ) {
+            const retryableTicketId = retryableMessage.retryableCreationId
             const childChainTx = await childChainProvider.getTransaction(
               retryableTicketId
             )
             const childChainTxReceipt =
               await childChainProvider.getTransactionReceipt(
-                message.retryableCreationId
+                retryableMessage.retryableCreationId
               )
 
-            const timestamp = (
-              await childChainProvider.getBlock(childChainTxReceipt.blockNumber)
-            ).timestamp
+            const parentChainTicketReport = getParentChainTicketReport(
+              arbParentTxReceipt,
+              retryableMessage
+            )
+            const childChainTicketReport = await getChildChainTicketReport({
+              retryableMessage,
+              childChainTx,
+              childChainTxReceipt,
+            })
+            const tokenDepositData = await getTokenDepositData({
+              childChainTx,
+              retryableMessage,
+              arbParentTxReceipt,
+              depositsInitiatedLogs,
+            })
 
-            const parentChainTicketReport = {
-              id: arbParentTxReceipt.transactionHash,
-              transactionHash: arbParentTxReceipt.transactionHash,
-              sender: arbParentTxReceipt.from,
-              retryableTicketID: message.retryableCreationId,
-            }
+            // Format the result message
+            const resultMessage = `${msgIndex + 1}. ${
+              ParentToChildMessageStatus[status]
+            }:\nOrbitTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
+            logResult(childChain.name, resultMessage)
 
-            let parentChainErc20Address: string | undefined,
-              tokenAmount: string | undefined,
-              tokenDepositData: any
-            try {
-              const retryableMessageData = childChainTx.data
-              const retryableBody = retryableMessageData.split('0xc9f95d32')[1]
-              const requestId = '0x' + retryableBody.slice(0, 64)
-              const depositsInitiatedEvent = depositsInitiatedLogs.find(
-                log => log.topics[3] === requestId
-              )
-              parentChainErc20Address = depositsInitiatedEvent?.event[0]
-              tokenAmount = depositsInitiatedEvent?.event[4]?.toString()
-            } catch (e) {
-              console.log(e)
-            }
-
-            if (parentChainErc20Address) {
-              try {
-                const erc20 = ERC20__factory.connect(
-                  parentChainErc20Address,
-                  parentChainProvider
-                )
-                const [symbol, decimals] = await Promise.all([
-                  erc20.symbol(),
-                  erc20.decimals(),
-                ])
-                tokenDepositData = {
-                  l2TicketId: message.retryableCreationId,
-                  tokenAmount,
-                  sender: arbParentTxReceipt.from,
-                  l1Token: {
-                    symbol,
-                    decimals,
-                    id: parentChainErc20Address,
-                  },
-                }
-              } catch (e) {
-                console.log('failed to fetch token data', e)
-              }
-            }
-
-            const childChainTicketReport = {
-              id: message.retryableCreationId,
-              retryTxHash: message.retryableCreationId,
-              createdAtTimestamp: String(timestamp),
-              createdAtBlockNumber: childChainTxReceipt.blockNumber,
-              timeoutTimestamp: String(
-                Number(timestamp) + SEVEN_DAYS_IN_SECONDS
-              ),
-              deposit: String(message.messageData.l2CallValue), // eth amount
-              status: L1ToL2MessageStatus[status],
-              retryTo: childChainTxReceipt.to,
-              retryData: message.messageData.data,
-              gasFeeCap: (
-                childChainTx.maxFeePerGas ?? BigNumber.from(0)
-              ).toNumber(),
-              gasLimit: childChainTx.gasLimit.toNumber(),
-            }
-
+            // report the unsuccessful ticket to the alerting system
             reportFailedTicket({
               parentChainTicketReport,
               childChainTicketReport,
@@ -354,12 +423,6 @@ const processChildChain = async (
             })
           }
 
-          // Format the result message
-          const resultMessage = `${msgIndex + 1}. ${
-            ParentToChildMessageStatus[status]
-          }:\nOrbitTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
-
-          logResult(childChain.name, resultMessage)
           console.log(
             '----------------------------------------------------------'
           )

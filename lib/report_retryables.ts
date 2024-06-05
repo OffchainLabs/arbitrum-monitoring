@@ -11,14 +11,14 @@ import { Provider } from '@ethersproject/abstract-provider'
 import { ChildNetwork } from './find_retryables'
 import { slackMessageRetryablesMonitor } from './slack'
 
-export interface L1TicketReport {
+export interface ParentChainTicketReport {
   id: string
   transactionHash: string
   sender: string
   retryableTicketID: string
 }
 
-export interface L2TicketReport {
+export interface ChildChainTicketReport {
   id: string
   retryTxHash: string
   createdAtTimestamp: string
@@ -32,9 +32,9 @@ export interface L2TicketReport {
   gasLimit: number
 }
 
-interface TokenDepositData {
+export interface TokenDepositData {
   l2TicketId: string
-  tokenAmount: string
+  tokenAmount?: string
   sender: string
   l1Token: {
     symbol: string
@@ -49,9 +49,9 @@ export const reportFailedTicket = async ({
   tokenDepositData,
   childChain,
 }: {
-  parentChainTicketReport: L1TicketReport
-  childChainTicketReport: L2TicketReport
-  tokenDepositData: TokenDepositData
+  parentChainTicketReport: ParentChainTicketReport
+  childChainTicketReport: ChildChainTicketReport
+  tokenDepositData?: TokenDepositData
   childChain: ChildNetwork
 }) => {
   // slack it
@@ -94,7 +94,7 @@ export const reportFailedTicket = async ({
     formatId(t, childChain) +
     formatL2ExecutionTX(t, childChain) +
     (await formatL2Callvalue(t)) +
-    (await formatTokenDepositData(tokenDepositData, parentChainProvider)) +
+    (await formatTokenDepositData(tokenDepositData)) +
     (await formatGasData(t, childChainProvider)) +
     // (await formatCallData(t)) +
     // (await formatFailureReason(t)) +
@@ -102,7 +102,6 @@ export const reportFailedTicket = async ({
     formatExpiration(t) +
     '\n================================================================='
 
-  console.log(reportStr)
   try {
     slackMessageRetryablesMonitor(reportStr)
   } catch (e) {
@@ -124,7 +123,15 @@ export const getExplorerUrlPrefixes = (childChain: ChildNetwork) => {
   }
 }
 
-// ALL the util functions copied over from the original file
+/**
+ *
+ *
+ * ALL the `util` functions copied over from the original monitoring repo, edited to fit the L2-L3 types
+ * https://github.com/OffchainLabs/arb-monitoring/blob/master/lib/failed_retryables.ts
+ *
+ *
+ */
+
 let ethPriceCache: number
 let tokenPriceCache: { [key: string]: number } = {}
 
@@ -148,7 +155,10 @@ const getTimeDifference = (timestampInSeconds: number) => {
   }
 }
 
-const formatPrefix = (ticket: L2TicketReport, childChainName: string) => {
+const formatPrefix = (
+  ticket: ChildChainTicketReport,
+  childChainName: string
+) => {
   const now = Math.floor(new Date().getTime() / 1000) // now in s
 
   let prefix
@@ -180,7 +190,7 @@ const formatPrefix = (ticket: L2TicketReport, childChainName: string) => {
 
 const formatInitiator = async (
   deposit: TokenDepositData | undefined,
-  l1Report: L1TicketReport | undefined,
+  l1Report: ParentChainTicketReport | undefined,
   childChain: ChildNetwork
 ) => {
   const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(childChain)
@@ -204,7 +214,7 @@ const formatInitiator = async (
   return ''
 }
 
-const formatId = (ticket: L2TicketReport, childChain: ChildNetwork) => {
+const formatId = (ticket: ChildChainTicketReport, childChain: ChildNetwork) => {
   let msg = '\n\t *Child chain ticket creation TX:* '
 
   if (ticket.id == null) {
@@ -217,7 +227,7 @@ const formatId = (ticket: L2TicketReport, childChain: ChildNetwork) => {
 }
 
 const formatL1TX = (
-  l1Report: L1TicketReport | undefined,
+  l1Report: ParentChainTicketReport | undefined,
   childChain: ChildNetwork
 ) => {
   let msg = '\n\t *Parent Chain TX:* '
@@ -234,7 +244,7 @@ const formatL1TX = (
 }
 
 const formatL2ExecutionTX = (
-  ticket: L2TicketReport,
+  ticket: ChildChainTicketReport,
   childChain: ChildNetwork
 ) => {
   let msg = '\n\t *Child chain execution TX:* '
@@ -250,15 +260,14 @@ const formatL2ExecutionTX = (
   }>`
 }
 
-const formatL2Callvalue = async (ticket: L2TicketReport) => {
+const formatL2Callvalue = async (ticket: ChildChainTicketReport) => {
   const ethAmount = ethers.utils.formatEther(ticket.deposit)
   const depositWorthInUsd = (+ethAmount * (await getEthPrice())).toFixed(2)
   return `\n\t *Child chain callvalue:* ${ethAmount} ETH ($${depositWorthInUsd})`
 }
 
 const formatTokenDepositData = async (
-  deposit: TokenDepositData | undefined,
-  parentChainProvider: providers.Provider
+  deposit: TokenDepositData | undefined
 ) => {
   let msg = '\n\t *Tokens deposited:* '
 
@@ -266,10 +275,9 @@ const formatTokenDepositData = async (
     return msg + '-'
   }
 
-  const amount = ethers.utils.formatUnits(
-    deposit.tokenAmount,
-    deposit.l1Token.decimals
-  )
+  const amount = deposit.tokenAmount
+    ? ethers.utils.formatUnits(deposit.tokenAmount, deposit.l1Token.decimals)
+    : '-'
 
   const tokenPriceInUSD = await getTokenPrice(deposit.l1Token.id)
   if (tokenPriceInUSD !== undefined) {
@@ -283,7 +291,7 @@ const formatTokenDepositData = async (
 }
 
 const formatDestination = async (
-  ticket: L2TicketReport,
+  ticket: ChildChainTicketReport,
   childChain: ChildNetwork
 ) => {
   let msg = `\n\t *Destination:* `
@@ -295,7 +303,7 @@ const formatDestination = async (
 }
 
 const formatGasData = async (
-  ticket: L2TicketReport,
+  ticket: ChildChainTicketReport,
   childChainProvider: Provider
 ) => {
   const { l2GasPrice, l2GasPriceAtCreation, redeemEstimate } = await getGasInfo(
@@ -328,11 +336,11 @@ const formatGasData = async (
   return msg
 }
 
-const formatCreatedAt = (ticket: L2TicketReport) => {
+const formatCreatedAt = (ticket: ChildChainTicketReport) => {
   return `\n\t *Created at:* ${timestampToDate(+ticket.createdAtTimestamp)}`
 }
 
-const formatExpiration = (ticket: L2TicketReport) => {
+const formatExpiration = (ticket: ChildChainTicketReport) => {
   let msg = `\n\t *${
     ticket.status == 'Expired' ? `Expired` : `Expires`
   } at:* ${timestampToDate(+ticket.timeoutTimestamp)}`
