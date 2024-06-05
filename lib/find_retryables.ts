@@ -520,10 +520,13 @@ const processOrbitChainsConcurrently = async () => {
     }))
   )
 
-  const promises = config.childChains.map(
-    async (childChain: ChildNetwork) =>
-      await processChildChain(childChain, options)
-  )
+  const promises = config.childChains.map(async (childChain: ChildNetwork) => {
+    try {
+      return await processChildChain(childChain, options)
+    } catch (e) {
+      console.error(`Error processing chain ${childChain.name}: ${e.message}`)
+    }
+  })
 
   // keep running the script until we get resolution (success or error) for all the chains
   await Promise.allSettled(promises)
