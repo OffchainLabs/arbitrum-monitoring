@@ -197,6 +197,10 @@ const processChildChain = async (
             toBlock -
             (2 * SEVEN_DAYS_IN_SECONDS) /
               (childChain.blockTime ?? ARB_MINIMUM_BLOCK_TIME_IN_SECONDS)
+          logResult(
+            childChain.name,
+            `Alerting mode enabled: limiting block-range to last 14 days [${fromBlock} to ${toBlock}]`
+          )
         }
       } catch (error) {
         console.error(
@@ -381,8 +385,6 @@ const processChildChain = async (
 
           // if a Retryable is not in a successful state, extract it's details
           if (status !== L1ToL2MessageStatus.REDEEMED) {
-            const retryableTicketId = retryableMessage.retryableCreationId
-
             // report the ticket only if `enableAlerting` flag is on
             if (options.enableAlerting) {
               const childChainTx = await childChainProvider.getTransaction(
@@ -417,17 +419,17 @@ const processChildChain = async (
                 childChain,
               })
             }
-
-            // format the result message
-            const resultMessage = `${msgIndex + 1}. ${
-              ParentToChildMessageStatus[status]
-            }:\nOrbitTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
-            logResult(childChain.name, resultMessage)
-
-            console.log(
-              '----------------------------------------------------------'
-            )
           }
+
+          // format the result message
+          const resultMessage = `${msgIndex + 1}. ${
+            ParentToChildMessageStatus[status]
+          }:\nOrbitTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
+          logResult(childChain.name, resultMessage)
+
+          console.log(
+            '----------------------------------------------------------'
+          )
         }
         retryablesFound = true // Set to true if retryables are found
       }
