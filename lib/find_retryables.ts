@@ -378,7 +378,7 @@ const processChildChain = async (
           const retryableTicketId = retryableMessage.retryableCreationId
           let status = await retryableMessage.status()
 
-          // if a Retryable is not in a success state, extract it's details
+          // if a Retryable is not in a successful state, extract it's details
           if (
             options.enableAlerting &&
             status !== L1ToL2MessageStatus.REDEEMED
@@ -408,12 +408,6 @@ const processChildChain = async (
               depositsInitiatedLogs,
             })
 
-            // Format the result message
-            const resultMessage = `${msgIndex + 1}. ${
-              ParentToChildMessageStatus[status]
-            }:\nOrbitTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
-            logResult(childChain.name, resultMessage)
-
             // report the unsuccessful ticket to the alerting system
             reportFailedTicket({
               parentChainTicketReport,
@@ -421,11 +415,17 @@ const processChildChain = async (
               tokenDepositData,
               childChain,
             })
-          }
 
-          console.log(
-            '----------------------------------------------------------'
-          )
+            // Format the result message
+            const resultMessage = `${msgIndex + 1}. ${
+              ParentToChildMessageStatus[status]
+            }:\nOrbitTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
+            logResult(childChain.name, resultMessage)
+
+            console.log(
+              '----------------------------------------------------------'
+            )
+          }
         }
         retryablesFound = true // Set to true if retryables are found
       }
