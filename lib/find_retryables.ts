@@ -191,7 +191,8 @@ const processChildChain = async (
         toBlock = currentBlock
 
         // if no `fromBlock` or `toBlock` is provided, monitor for 14 days worth of blocks only
-        if (fromBlock === 0) {
+        // only enforce `fromBlock` check if we want to report the ticket to the alerting system
+        if (fromBlock === 0 && options.enableAlerting) {
           fromBlock =
             toBlock -
             (2 * SEVEN_DAYS_IN_SECONDS) /
@@ -379,44 +380,45 @@ const processChildChain = async (
           let status = await retryableMessage.status()
 
           // if a Retryable is not in a successful state, extract it's details
-          if (
-            options.enableAlerting &&
-            status !== L1ToL2MessageStatus.REDEEMED
-          ) {
+          if (status !== L1ToL2MessageStatus.REDEEMED) {
             const retryableTicketId = retryableMessage.retryableCreationId
-            const childChainTx = await childChainProvider.getTransaction(
-              retryableTicketId
-            )
-            const childChainTxReceipt =
-              await childChainProvider.getTransactionReceipt(
-                retryableMessage.retryableCreationId
+
+            // report the ticket only if `enableAlerting` flag is on
+            if (options.enableAlerting) {
+              const childChainTx = await childChainProvider.getTransaction(
+                retryableTicketId
               )
+              const childChainTxReceipt =
+                await childChainProvider.getTransactionReceipt(
+                  retryableMessage.retryableCreationId
+                )
 
-            const parentChainTicketReport = getParentChainTicketReport(
-              arbParentTxReceipt,
-              retryableMessage
-            )
-            const childChainTicketReport = await getChildChainTicketReport({
-              retryableMessage,
-              childChainTx,
-              childChainTxReceipt,
-            })
-            const tokenDepositData = await getTokenDepositData({
-              childChainTx,
-              retryableMessage,
-              arbParentTxReceipt,
-              depositsInitiatedLogs,
-            })
+              const parentChainTicketReport = getParentChainTicketReport(
+                arbParentTxReceipt,
+                retryableMessage
+              )
+              const childChainTicketReport = await getChildChainTicketReport({
+                retryableMessage,
+                childChainTx,
+                childChainTxReceipt,
+              })
+              const tokenDepositData = await getTokenDepositData({
+                childChainTx,
+                retryableMessage,
+                arbParentTxReceipt,
+                depositsInitiatedLogs,
+              })
 
-            // report the unsuccessful ticket to the alerting system
-            reportFailedTicket({
-              parentChainTicketReport,
-              childChainTicketReport,
-              tokenDepositData,
-              childChain,
-            })
+              // report the unsuccessful ticket to the alerting system
+              reportFailedTicket({
+                parentChainTicketReport,
+                childChainTicketReport,
+                tokenDepositData,
+                childChain,
+              })
+            }
 
-            // Format the result message
+            // format the result message
             const resultMessage = `${msgIndex + 1}. ${
               ParentToChildMessageStatus[status]
             }:\nOrbitTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
