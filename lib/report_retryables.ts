@@ -81,9 +81,6 @@ export const reportFailedTicket = async ({
   const childChainProvider = new providers.JsonRpcProvider(
     String(childChain.orbitRpcUrl)
   )
-  const parentChainProvider = new providers.JsonRpcProvider(
-    String(childChain.parentRpcUrl)
-  )
 
   // build message to report
   let reportStr =
