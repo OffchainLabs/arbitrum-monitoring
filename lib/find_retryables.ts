@@ -214,13 +214,6 @@ const processChildChain = async (
       }
     }
 
-    if (toBlock - fromBlock >= MAX_BLOCKS_TO_PROCESS) {
-      logResult(
-        childChain.name,
-        `Blocks exceed the [${MAX_BLOCKS_TO_PROCESS}] limit, splitting the range...`
-      )
-    }
-
     // if the block range provided is >=MAX_BLOCKS_TO_PROCESS, we might get rate limited while fetching logs from the node
     // so we break down the range into smaller chunks and process them sequentially
     // generate the final ranges' batches to process [ [fromBlock, toBlock], [fromBlock, toBlock], ...]
