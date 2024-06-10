@@ -23,7 +23,6 @@ import {
   L1ERC20Gateway,
 } from '@arbitrum/sdk/dist/lib/abi/L1ERC20Gateway'
 import { L1ERC20Gateway__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L1ERC20Gateway__factory'
-
 import {
   ARB_MINIMUM_BLOCK_TIME_IN_SECONDS,
   SEVEN_DAYS_IN_SECONDS,
@@ -35,6 +34,7 @@ import {
   getExplorerUrlPrefixes,
   reportFailedTicket,
 } from './report_retryables'
+import { networks } from '@arbitrum/sdk/dist/lib/dataEntities/networks'
 
 // Interface defining additional properties for ChildNetwork
 export interface ChildNetwork extends ParentNetwork {
@@ -81,6 +81,14 @@ const logger = winston.createLogger({
 // Function to log results with chainName
 const logResult = (chainName: string, message: string) => {
   logger.info(`[${chainName}] ${message}`)
+}
+
+const getParentChainBlockTime = (childChain: ChildNetwork) => {
+  const parentChainId = childChain.partnerChainID
+  const parentChain = networks[parentChainId] // `parentChain` in sdk
+  if (parentChain) return parentChain.blockTime
+
+  return childChain.parentChainBlockTime ?? ARB_MINIMUM_BLOCK_TIME_IN_SECONDS
 }
 
 const checkNetworkAlreadyExistsInSdk = async (networkId: number) => {
@@ -198,9 +206,7 @@ const processChildChain = async (
         if (fromBlock === 0 && options.enableAlerting) {
           fromBlock =
             toBlock -
-            (2 * SEVEN_DAYS_IN_SECONDS) /
-              (childChain.parentChainBlockTime ??
-                ARB_MINIMUM_BLOCK_TIME_IN_SECONDS)
+            (2 * SEVEN_DAYS_IN_SECONDS) / getParentChainBlockTime(childChain)
           logResult(
             childChain.name,
             `Alerting mode enabled: limiting block-range to last 14 days [${fromBlock} to ${toBlock}]`
