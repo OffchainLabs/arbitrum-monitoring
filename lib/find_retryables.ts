@@ -221,6 +221,8 @@ const processChildChain = async (
       )
     }
 
+    // if the block range provided is >=MAX_BLOCKS_TO_PROCESS, we might get rate limited while fetching logs from the node
+    // so we break down the range into smaller chunks and process them sequentially
     // generate the final ranges' batches to process [ [fromBlock, toBlock], [fromBlock, toBlock], ...]
     const ranges = []
     for (let i = fromBlock; i <= toBlock; i += MAX_BLOCKS_TO_PROCESS) {
@@ -228,7 +230,6 @@ const processChildChain = async (
     }
 
     for (const range of ranges) {
-      // the final `retryablesFound` value is the OR of all the `retryablesFound` for ranges
       retryablesFound =
         (await checkRetryables(
           parentChainProvider,
@@ -237,8 +238,9 @@ const processChildChain = async (
           childChain.tokenBridge.l1ERC20Gateway,
           range[0],
           range[1]
-        )) || retryablesFound
+        )) || retryablesFound // the final `retryablesFound` value is the OR of all the `retryablesFound` for ranges
     }
+
     return toBlock
   }
 
