@@ -41,6 +41,7 @@ export interface ChildNetwork extends ParentNetwork {
   parentRpcUrl: string
   orbitRpcUrl: string
   parentExplorerUrl: string
+  parentChainBlockTime?: number
 }
 
 // Type for options passed to findRetryables function
@@ -177,6 +178,8 @@ const processChildChain = async (
     return filteredLogs
   }
 
+  const MAX_BLOCKS_TO_PROCESS = 10000 // event_logs can only be processed in batches of 10k blocks
+
   // Function to check retryable transactions in a specific block range
   const checkRetryablesOneOff = async (
     fromBlock: number,
@@ -196,7 +199,8 @@ const processChildChain = async (
           fromBlock =
             toBlock -
             (2 * SEVEN_DAYS_IN_SECONDS) /
-              (childChain.blockTime ?? ARB_MINIMUM_BLOCK_TIME_IN_SECONDS)
+              (childChain.parentChainBlockTime ??
+                ARB_MINIMUM_BLOCK_TIME_IN_SECONDS)
           logResult(
             childChain.name,
             `Alerting mode enabled: limiting block-range to last 14 days [${fromBlock} to ${toBlock}]`
@@ -210,15 +214,31 @@ const processChildChain = async (
       }
     }
 
-    retryablesFound = await checkRetryables(
-      parentChainProvider,
-      childChainProvider,
-      childChain.ethBridge.bridge,
-      childChain.tokenBridge.l1ERC20Gateway,
-      fromBlock,
-      toBlock
-    )
+    if (toBlock - fromBlock >= MAX_BLOCKS_TO_PROCESS) {
+      logResult(
+        childChain.name,
+        `Blocks exceed the [${MAX_BLOCKS_TO_PROCESS}] limit, splitting the range...`
+      )
+    }
 
+    // generate the final ranges' batches to process [ [fromBlock, toBlock], [fromBlock, toBlock], ...]
+    const ranges = []
+    for (let i = fromBlock; i <= toBlock; i += MAX_BLOCKS_TO_PROCESS) {
+      ranges.push([i, Math.min(i + MAX_BLOCKS_TO_PROCESS, toBlock)])
+    }
+
+    for (const range of ranges) {
+      // the final `retryablesFound` value is the OR of all the `retryablesFound` for ranges
+      retryablesFound =
+        (await checkRetryables(
+          parentChainProvider,
+          childChainProvider,
+          childChain.ethBridge.bridge,
+          childChain.tokenBridge.l1ERC20Gateway,
+          range[0],
+          range[1]
+        )) || retryablesFound
+    }
     return toBlock
   }
 
