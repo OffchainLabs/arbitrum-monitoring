@@ -118,7 +118,7 @@ const processChildChain = async (
   options: findRetryablesOptions
 ) => {
   console.log('----------------------------------------------------------')
-  console.log(`Running for Orbit chain: ${childChain.name}`)
+  console.log(`Running for Chain: ${childChain.name}`)
   console.log('----------------------------------------------------------')
   try {
     const networkAlreadyExistsInSdk = await checkNetworkAlreadyExistsInSdk(
@@ -390,7 +390,7 @@ const processChildChain = async (
             retryables.length === 1 ? '' : 's'
           } found for ${
             childChain.name
-          } chain. Checking their status:\n\nArbtxhash: ${
+          } chain. Checking their status:\n\nParentChainTxHash: ${
             PARENT_CHAIN_TX_PREFIX + parentTxHash
           }`
         )
@@ -445,7 +445,7 @@ const processChildChain = async (
           // format the result message
           const resultMessage = `${msgIndex + 1}. ${
             ParentToChildMessageStatus[status]
-          }:\nOrbitTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
+          }:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
           logResult(childChain.name, resultMessage)
 
           console.log(
