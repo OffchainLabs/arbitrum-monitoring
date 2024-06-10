@@ -1,44 +1,46 @@
 {
   "childChains": [
     {
-      "chainID": 42170,
-      "confirmPeriodBlocks": 45818,
+      "chainID": 13331371,
+      "confirmPeriodBlocks": 20,
       "ethBridge": {
-        "bridge": "0xC1Ebd02f738644983b6C4B2d440b8e77DdE276Bd",
-        "inbox": "0xc4448b71118c9071Bcb9734A0EAc55D18A153949",
-        "outbox": "0xD4B80C3D7240325D18E645B49e6535A3Bf95cc58",
-        "rollup": "0xFb209827c58283535b744575e11953DCC4bEAD88",
-        "sequencerInbox": "0x211E1c4c7f1bF5351Ac850Ed10FD68CFfCF6c21b"
+        "bridge": "0x024a10506f8a27E4CfEDeB18fd30AA1529A2960E",
+        "inbox": "0xcdCF1F59f5d4A65a3c67E1341f8b85Cba50E0a7C",
+        "outbox": "0xf731Fc4F7B70A0a6F9915f452d88Dc405a59D8b1",
+        "rollup": "0x01a8a2b32aa5328466Be47A1808a03aC6c35d94f",
+        "sequencerInbox": "0x1Ea8B3853355604673e1301A501766EbB2987a09"
       },
-      "explorerUrl": "https://nova.arbiscan.io/",
-      "orbitRpcUrl": "https://nova.arbitrum.io/rpc",
-      "parentRpcUrl": "https://eth.llamarpc.com",
-      "parentExplorerUrl": "https://etherscan.io/",
-      "parentChainBlockTime": 12,
+      "explorerUrl": "https://stylusv2-explorer.arbitrum.io/",
+      "orbitRpcUrl": "https://stylusv2.arbitrum.io/rpc",
+      "parentRpcUrl": "https://sepolia-rollup.arbitrum.io/rpc",
+      "parentExplorerUrl": "https://sepolia.arbiscan.io/",
+
       "isArbitrum": true,
       "isCustom": false,
-      "name": "Arbitrum Nova",
-      "partnerChainID": 1,
+      "name": "Stylus Testnet v2",
+      "partnerChainID": 421614,
       "partnerChainIDs": [],
+      "retryableLifetimeSeconds": 604800,
       "tokenBridge": {
-        "l1CustomGateway": "0x23122da8C581AA7E0d07A36Ff1f16F799650232f",
-        "l1ERC20Gateway": "0xB2535b988dcE19f9D71dfB22dB6da744aCac21bf",
-        "l1GatewayRouter": "0xC840838Bc438d73C16c2f8b22D2Ce3669963cD48",
-        "l1MultiCall": "0x8896D23AfEA159a5e9b72C9Eb3DC4E2684A38EA3",
-        "l1ProxyAdmin": "0xa8f7DdEd54a726eB873E98bFF2C95ABF2d03e560",
-        "l1Weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-        "l1WethGateway": "0xE4E2121b479017955Be0b175305B35f312330BaE",
-        "l2CustomGateway": "0xbf544970E6BD77b21C6492C281AB60d0770451F4",
-        "l2ERC20Gateway": "0xcF9bAb7e53DDe48A6DC4f286CB14e05298799257",
-        "l2GatewayRouter": "0x21903d3F8176b1a0c17E953Cd896610Be9fFDFa8",
-        "l2Multicall": "0x5e1eE626420A354BbC9a95FeA1BAd4492e3bcB86",
-        "l2ProxyAdmin": "0xada790b026097BfB36a5ed696859b97a96CEd92C",
-        "l2Weth": "0x722E8BdD2ce80A4422E880164f2079488e115365",
-        "l2WethGateway": "0x7626841cB6113412F9c88D3ADC720C9FAC88D9eD"
+        "l1CustomGateway": "0x093353B9f723047abf37Ebe01cE48d7dDA8320F4",
+        "l1ERC20Gateway": "0xD2C4693Dd8d44703af5CF9484fa8faAD6e33E392",
+        "l1GatewayRouter": "0xAC4F454320A253267C6Ae95e4784b9A4f9F78359",
+        "l1MultiCall": "0xce1CAd780c529e66e3aa6D952a1ED9A6447791c1",
+        "l1ProxyAdmin": "0xBD76fd3fB5F3CD7165fB6e0DB895FFE1d81463e3",
+        "l1Weth": "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73",
+        "l1WethGateway": "0x4FEbc93233aAc1523f36Abe297de9323f6C8ce79",
+        "l2CustomGateway": "0xE102D94df0179082B39Ddcad58c9430dedc89aE3",
+        "l2ERC20Gateway": "0xCf3a4aF3c48Ba19c5FccFB44FA3E3A0F2A6e60dA",
+        "l2GatewayRouter": "0xD60FD4c5D335b00287202C93C5B4EE0478D92686",
+        "l2Multicall": "0x39E068582873B2011F5a1e8E0F7D9D993c8111BC",
+        "l2ProxyAdmin": "0x9DC4Da9a940AFEbBC8329aA6534aD767b60d968c",
+        "l2Weth": "0xa3bD1fdeEb903142d16B3bd22f2aC9A82C714D62",
+        "l2WethGateway": "0xec018E81eE818b04CFb1E013D91F1b779a2AC440"
       },
       "nitroGenesisBlock": 0,
       "nitroGenesisL1Block": 0,
-      "depositTimeout": 1800000
+      "depositTimeout": 900000,
+      "blockTime": 0.25
     }
   ]
 }
