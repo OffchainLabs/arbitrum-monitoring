@@ -85,8 +85,19 @@ const logResult = (chainName: string, message: string) => {
 const getParentChainBlockTime = (childChain: ChildNetwork) => {
   const parentChainId = childChain.partnerChainID
 
-  // in case of L1 networks - Ethereum or Sepolia
-  if (parentChainId === 1 || parentChainId === 11155111) return 12
+  // for Ethereum / Sepolia / Holesky
+  if (
+    parentChainId === 1 ||
+    parentChainId === 11155111 ||
+    parentChainId === 17000
+  ) {
+    return 12
+  }
+
+  // for Base / Base Sepolia
+  if (parentChainId === 8453 || parentChainId === 84532) {
+    return 2
+  }
 
   // for arbitrum networks, return the standard block time
   return ARB_MINIMUM_BLOCK_TIME_IN_SECONDS
