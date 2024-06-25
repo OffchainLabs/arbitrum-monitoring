@@ -106,7 +106,7 @@ const options: findRetryablesOptions = yargs(process.argv.slice(2))
     fromBlock: { type: 'number', default: 0 },
     toBlock: { type: 'number', default: 0 },
     continuous: { type: 'boolean', default: false },
-    configPath: { type: 'string', default: 'config.json' },
+    configPath: { type: 'string', default: 'retryableMonitor/config.json' },
     enableAlerting: { type: 'boolean', default: false },
   })
   .strict()

@@ -32,6 +32,6 @@
   "scripts": {
     "lint": "eslint .",
     "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "findRetryables": "tsc && node ./dist/find_retryables.js"
+    "findRetryables": "tsc && node ./dist/retryableMonitor/find_retryables.js"
   }
 }
