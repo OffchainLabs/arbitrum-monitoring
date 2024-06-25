@@ -83,6 +83,27 @@ const logResult = (chainName: string, message: string) => {
   logger.info(`[${chainName}] ${message}`)
 }
 
+const getParentChainBlockTime = (childChain: ChildNetwork) => {
+  const parentChainId = childChain.partnerChainID
+
+  // for Ethereum / Sepolia / Holesky
+  if (
+    parentChainId === 1 ||
+    parentChainId === 11155111 ||
+    parentChainId === 17000
+  ) {
+    return 12
+  }
+
+  // for Base / Base Sepolia
+  if (parentChainId === 8453 || parentChainId === 84532) {
+    return 2
+  }
+
+  // for arbitrum networks, return the standard block time
+  return ARB_MINIMUM_BLOCK_TIME_IN_SECONDS
+}
+
 const checkNetworkAlreadyExistsInSdk = async (networkId: number) => {
   try {
     await getL2Network(networkId)
@@ -110,7 +131,7 @@ const processChildChain = async (
   options: findRetryablesOptions
 ) => {
   console.log('----------------------------------------------------------')
-  console.log(`Running for Orbit chain: ${childChain.name}`)
+  console.log(`Running for Chain: ${childChain.name}`)
   console.log('----------------------------------------------------------')
   try {
     const networkAlreadyExistsInSdk = await checkNetworkAlreadyExistsInSdk(
@@ -178,6 +199,8 @@ const processChildChain = async (
     return filteredLogs
   }
 
+  const MAX_BLOCKS_TO_PROCESS = 5000 // event_logs can only be processed in batches of MAX_BLOCKS_TO_PROCESS blocks
+
   // Function to check retryable transactions in a specific block range
   const checkRetryablesOneOff = async (
     fromBlock: number,
@@ -196,8 +219,7 @@ const processChildChain = async (
         if (fromBlock === 0 && options.enableAlerting) {
           fromBlock =
             toBlock -
-            (2 * SEVEN_DAYS_IN_SECONDS) /
-              (childChain.blockTime ?? ARB_MINIMUM_BLOCK_TIME_IN_SECONDS)
+            (2 * SEVEN_DAYS_IN_SECONDS) / getParentChainBlockTime(childChain)
           logResult(
             childChain.name,
             `Alerting mode enabled: limiting block-range to last 14 days [${fromBlock} to ${toBlock}]`
@@ -211,14 +233,25 @@ const processChildChain = async (
       }
     }
 
-    retryablesFound = await checkRetryables(
-      parentChainProvider,
-      childChainProvider,
-      childChain.ethBridge.bridge,
-      childChain.tokenBridge.l1ERC20Gateway,
-      fromBlock,
-      toBlock
-    )
+    // if the block range provided is >=MAX_BLOCKS_TO_PROCESS, we might get rate limited while fetching logs from the node
+    // so we break down the range into smaller chunks and process them sequentially
+    // generate the final ranges' batches to process [ [fromBlock, toBlock], [fromBlock, toBlock], ...]
+    const ranges = []
+    for (let i = fromBlock; i <= toBlock; i += MAX_BLOCKS_TO_PROCESS) {
+      ranges.push([i, Math.min(i + MAX_BLOCKS_TO_PROCESS - 1, toBlock)])
+    }
+
+    for (const range of ranges) {
+      retryablesFound =
+        (await checkRetryables(
+          parentChainProvider,
+          childChainProvider,
+          childChain.ethBridge.bridge,
+          childChain.tokenBridge.l1ERC20Gateway,
+          range[0],
+          range[1]
+        )) || retryablesFound // the final `retryablesFound` value is the OR of all the `retryablesFound` for ranges
+    }
 
     return toBlock
   }
@@ -370,7 +403,7 @@ const processChildChain = async (
             retryables.length === 1 ? '' : 's'
           } found for ${
             childChain.name
-          } chain. Checking their status:\n\nArbtxhash: ${
+          } chain. Checking their status:\n\nParentChainTxHash: ${
             PARENT_CHAIN_TX_PREFIX + parentTxHash
           }`
         )
@@ -425,7 +458,7 @@ const processChildChain = async (
           // format the result message
           const resultMessage = `${msgIndex + 1}. ${
             ParentToChildMessageStatus[status]
-          }:\nOrbitTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
+          }:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
           logResult(childChain.name, resultMessage)
 
           console.log(
