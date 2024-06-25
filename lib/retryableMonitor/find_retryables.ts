@@ -23,7 +23,10 @@ import {
   L1ERC20Gateway,
 } from '@arbitrum/sdk/dist/lib/abi/L1ERC20Gateway'
 import { L1ERC20Gateway__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L1ERC20Gateway__factory'
-import { SEVEN_DAYS_IN_SECONDS } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
+import {
+  ARB_MINIMUM_BLOCK_TIME_IN_SECONDS,
+  SEVEN_DAYS_IN_SECONDS,
+} from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 import {
   ChildChainTicketReport,
   ParentChainTicketReport,
@@ -33,7 +36,6 @@ import {
   getExplorerUrlPrefixes,
   reportFailedTicket,
 } from './report_retryables'
-import { networks } from '@arbitrum/sdk/dist/lib/dataEntities/networks'
 import { postSlackMessage } from '../common/postSlackMessage'
 
 // Interface defining additional properties for ChildNetwork
@@ -85,10 +87,23 @@ const logResult = (chainName: string, message: string) => {
 
 const getParentChainBlockTime = (childChain: ChildNetwork) => {
   const parentChainId = childChain.partnerChainID
-  const parentChain = networks[parentChainId] // `parentChain` in sdk
-  if (parentChain) return parentChain.blockTime
 
-  return childChain.parentBlockTime
+  // for Ethereum / Sepolia / Holesky
+  if (
+    parentChainId === 1 ||
+    parentChainId === 11155111 ||
+    parentChainId === 17000
+  ) {
+    return 12
+  }
+
+  // for Base / Base Sepolia
+  if (parentChainId === 8453 || parentChainId === 84532) {
+    return 2
+  }
+
+  // for arbitrum networks, return the standard block time
+  return ARB_MINIMUM_BLOCK_TIME_IN_SECONDS
 }
 
 const checkNetworkAlreadyExistsInSdk = async (networkId: number) => {
