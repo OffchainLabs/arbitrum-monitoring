@@ -183,7 +183,7 @@ const processChildChain = async (
     return filteredLogs
   }
 
-  const MAX_BLOCKS_TO_PROCESS = 10000 // event_logs can only be processed in batches of 10k blocks
+  const MAX_BLOCKS_TO_PROCESS = 5000 // event_logs can only be processed in batches of MAX_BLOCKS_TO_PROCESS blocks
 
   // Function to check retryable transactions in a specific block range
   const checkRetryablesOneOff = async (
