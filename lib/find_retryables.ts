@@ -525,7 +525,7 @@ const processOrbitChainsConcurrently = async () => {
     try {
       return await processChildChain(childChain, options)
     } catch (e) {
-      const errorStr = `Retryable Monitor: Error processing chain ${childChain.name}: ${e.message}`
+      const errorStr = `[${childChain.name}] Retryable Monitor: Error processing chain: ${e.message}`
       if (options.enableAlerting) {
         slackMessageRetryablesMonitor(errorStr)
       }
