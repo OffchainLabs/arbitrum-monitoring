@@ -23,10 +23,7 @@ import {
   L1ERC20Gateway,
 } from '@arbitrum/sdk/dist/lib/abi/L1ERC20Gateway'
 import { L1ERC20Gateway__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L1ERC20Gateway__factory'
-import {
-  ARB_MINIMUM_BLOCK_TIME_IN_SECONDS,
-  SEVEN_DAYS_IN_SECONDS,
-} from '@arbitrum/sdk/dist/lib/dataEntities/constants'
+import { SEVEN_DAYS_IN_SECONDS } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 import {
   ChildChainTicketReport,
   ParentChainTicketReport,
@@ -41,7 +38,7 @@ export interface ChildNetwork extends ParentNetwork {
   parentRpcUrl: string
   orbitRpcUrl: string
   parentExplorerUrl: string
-  parentChainBlockTime?: number
+  parentBlockTime: number
 }
 
 // Type for options passed to findRetryables function
@@ -88,7 +85,7 @@ const getParentChainBlockTime = (childChain: ChildNetwork) => {
   const parentChain = networks[parentChainId] // `parentChain` in sdk
   if (parentChain) return parentChain.blockTime
 
-  return childChain.parentChainBlockTime ?? ARB_MINIMUM_BLOCK_TIME_IN_SECONDS
+  return childChain.parentBlockTime
 }
 
 const checkNetworkAlreadyExistsInSdk = async (networkId: number) => {
@@ -225,7 +222,7 @@ const processChildChain = async (
     // generate the final ranges' batches to process [ [fromBlock, toBlock], [fromBlock, toBlock], ...]
     const ranges = []
     for (let i = fromBlock; i <= toBlock; i += MAX_BLOCKS_TO_PROCESS) {
-      ranges.push([i, Math.min(i + MAX_BLOCKS_TO_PROCESS, toBlock)])
+      ranges.push([i, Math.min(i + MAX_BLOCKS_TO_PROCESS - 1, toBlock)])
     }
 
     for (const range of ranges) {
