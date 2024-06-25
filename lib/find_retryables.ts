@@ -23,7 +23,10 @@ import {
   L1ERC20Gateway,
 } from '@arbitrum/sdk/dist/lib/abi/L1ERC20Gateway'
 import { L1ERC20Gateway__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L1ERC20Gateway__factory'
-import { SEVEN_DAYS_IN_SECONDS } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
+import {
+  ARB_MINIMUM_BLOCK_TIME_IN_SECONDS,
+  SEVEN_DAYS_IN_SECONDS,
+} from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 import {
   ChildChainTicketReport,
   ParentChainTicketReport,
@@ -31,7 +34,6 @@ import {
   getExplorerUrlPrefixes,
   reportFailedTicket,
 } from './report_retryables'
-import { networks } from '@arbitrum/sdk/dist/lib/dataEntities/networks'
 import { slackMessageRetryablesMonitor } from './slack'
 
 // Interface defining additional properties for ChildNetwork
@@ -39,7 +41,6 @@ export interface ChildNetwork extends ParentNetwork {
   parentRpcUrl: string
   orbitRpcUrl: string
   parentExplorerUrl: string
-  parentBlockTime: number
 }
 
 // Type for options passed to findRetryables function
@@ -83,10 +84,12 @@ const logResult = (chainName: string, message: string) => {
 
 const getParentChainBlockTime = (childChain: ChildNetwork) => {
   const parentChainId = childChain.partnerChainID
-  const parentChain = networks[parentChainId] // `parentChain` in sdk
-  if (parentChain) return parentChain.blockTime
 
-  return childChain.parentBlockTime
+  // in case of L1 networks - Ethereum or Sepolia
+  if (parentChainId === 1 || parentChainId === 11155111) return 12
+
+  // for arbitrum networks, return the standard block time
+  return ARB_MINIMUM_BLOCK_TIME_IN_SECONDS
 }
 
 const checkNetworkAlreadyExistsInSdk = async (networkId: number) => {
