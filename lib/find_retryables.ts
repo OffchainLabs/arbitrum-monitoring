@@ -35,6 +35,7 @@ import {
   getExplorerUrlPrefixes,
   reportFailedTicket,
 } from './report_retryables'
+import { slackMessageRetryablesMonitor } from './slack'
 
 // Interface defining additional properties for ChildNetwork
 export interface ChildNetwork extends ParentNetwork {
@@ -524,7 +525,11 @@ const processOrbitChainsConcurrently = async () => {
     try {
       return await processChildChain(childChain, options)
     } catch (e) {
-      console.error(`Error processing chain ${childChain.name}: ${e.message}`)
+      const errorStr = `Retryable Monitor: Error processing chain ${childChain.name}: ${e.message}`
+      if (options.enableAlerting) {
+        slackMessageRetryablesMonitor(errorStr)
+      }
+      console.error(errorStr)
     }
   })
 
