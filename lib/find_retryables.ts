@@ -32,6 +32,7 @@ import {
   reportFailedTicket,
 } from './report_retryables'
 import { networks } from '@arbitrum/sdk/dist/lib/dataEntities/networks'
+import { slackMessageRetryablesMonitor } from './slack'
 
 // Interface defining additional properties for ChildNetwork
 export interface ChildNetwork extends ParentNetwork {
@@ -542,7 +543,11 @@ const processOrbitChainsConcurrently = async () => {
     try {
       return await processChildChain(childChain, options)
     } catch (e) {
-      console.error(`Error processing chain ${childChain.name}: ${e.message}`)
+      const errorStr = `Retryable monitor - Error processing chain [${childChain.name}]: ${e.message}`
+      if (options.enableAlerting) {
+        slackMessageRetryablesMonitor(errorStr)
+      }
+      console.error(errorStr)
     }
   })
 
