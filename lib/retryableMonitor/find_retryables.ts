@@ -27,12 +27,14 @@ import { SEVEN_DAYS_IN_SECONDS } from '@arbitrum/sdk/dist/lib/dataEntities/const
 import {
   ChildChainTicketReport,
   ParentChainTicketReport,
+  RETRYABLE_MONITOR_SLACK_CHANNEL_ENV_KEY,
+  RETRYABLE_MONITOR_SLACK_TOKEN_ENV_KEY,
   TokenDepositData,
   getExplorerUrlPrefixes,
   reportFailedTicket,
 } from './report_retryables'
 import { networks } from '@arbitrum/sdk/dist/lib/dataEntities/networks'
-import { slackMessageRetryablesMonitor } from './slack'
+import { postSlackMessage } from '../common/postSlackMessage'
 
 // Interface defining additional properties for ChildNetwork
 export interface ChildNetwork extends ParentNetwork {
@@ -545,7 +547,11 @@ const processOrbitChainsConcurrently = async () => {
     } catch (e) {
       const errorStr = `Retryable monitor - Error processing chain [${childChain.name}]: ${e.message}`
       if (options.enableAlerting) {
-        slackMessageRetryablesMonitor(errorStr)
+        postSlackMessage({
+          slackTokenEnvKey: RETRYABLE_MONITOR_SLACK_TOKEN_ENV_KEY,
+          slackChannelEnvKey: RETRYABLE_MONITOR_SLACK_CHANNEL_ENV_KEY,
+          message: errorStr,
+        })
       }
       console.error(errorStr)
     }

@@ -9,7 +9,13 @@ import {
 import { ArbRetryableTx__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ArbRetryableTx__factory'
 import { Provider } from '@ethersproject/abstract-provider'
 import { ChildNetwork } from './find_retryables'
-import { slackMessageRetryablesMonitor } from './slack'
+import { postSlackMessage } from '../common/postSlackMessage'
+
+export const RETRYABLE_MONITOR_SLACK_TOKEN_ENV_KEY =
+  'ORBIT_RETRYABLE_MONITORING_SLACK_TOKEN'
+
+export const RETRYABLE_MONITOR_SLACK_CHANNEL_ENV_KEY =
+  'ORBIT_RETRYABLE_MONITORING_SLACK_CHANNEL'
 
 export interface ParentChainTicketReport {
   id: string
@@ -100,7 +106,11 @@ export const reportFailedTicket = async ({
     '\n================================================================='
 
   try {
-    slackMessageRetryablesMonitor(reportStr)
+    postSlackMessage({
+      slackTokenEnvKey: RETRYABLE_MONITOR_SLACK_TOKEN_ENV_KEY,
+      slackChannelEnvKey: RETRYABLE_MONITOR_SLACK_CHANNEL_ENV_KEY,
+      message: reportStr,
+    })
   } catch (e) {
     console.log('Could not send slack message', e)
   }
