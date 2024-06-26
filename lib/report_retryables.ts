@@ -314,10 +314,16 @@ const formatGasData = async (
     ticket.gasFeeCap,
     'gwei'
   )} gwei`
-  msg += `\n\t\t gas price at ticket creation block: ${ethers.utils.formatUnits(
-    l2GasPriceAtCreation,
-    'gwei'
-  )} gwei`
+
+  if (l2GasPriceAtCreation) {
+    msg += `\n\t\t gas price at ticket creation block: ${ethers.utils.formatUnits(
+      l2GasPriceAtCreation,
+      'gwei'
+    )} gwei`
+  } else {
+    msg += `\n\t\t gas price at ticket creation block: unable to fetch (missing data)`
+  }
+
   msg += `\n\t\t gas price now: ${ethers.utils.formatUnits(
     l2GasPrice,
     'gwei'
@@ -403,7 +409,7 @@ export async function getGasInfo(
   childChainProvider: ethers.providers.Provider
 ): Promise<{
   l2GasPrice: BigNumber
-  l2GasPriceAtCreation: BigNumber
+  l2GasPriceAtCreation: BigNumber | undefined
   redeemEstimate: BigNumber | undefined
 }> {
   // connect precompiles
@@ -421,10 +427,13 @@ export async function getGasInfo(
   const l2GasPrice = gasComponents[5]
 
   // get gas price when retryable was created
-  const gasComponentsAtCreation = await arbGasInfo.callStatic.getPricesInWei({
-    blockTag: createdAtBlockNumber,
-  })
-  const l2GasPriceAtCreation = gasComponentsAtCreation[5]
+  let l2GasPriceAtCreation = undefined
+  try {
+    const gasComponentsAtCreation = await arbGasInfo.callStatic.getPricesInWei({
+      blockTag: createdAtBlockNumber,
+    })
+    l2GasPriceAtCreation = gasComponentsAtCreation[5]
+  } catch {}
 
   // get gas estimation for redeem
   let redeemEstimate = undefined
