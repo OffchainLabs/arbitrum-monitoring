@@ -446,7 +446,7 @@ const processChildChain = async (
               })
 
               // report the unsuccessful ticket to the alerting system
-              reportFailedTicket({
+              await reportFailedTicket({
                 parentChainTicketReport,
                 childChainTicketReport,
                 tokenDepositData,
