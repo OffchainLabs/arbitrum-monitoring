@@ -247,7 +247,6 @@ const processChildChain = async (
           parentChainProvider,
           childChainProvider,
           childChain.ethBridge.bridge,
-          childChain.tokenBridge.l1ERC20Gateway,
           range[0],
           range[1]
         )) || retryablesFound // the final `retryablesFound` value is the OR of all the `retryablesFound` for ranges
@@ -356,11 +355,44 @@ const processChildChain = async (
     return tokenDepositData
   }
 
+  const getDepositInitiatedLogs = async ({
+    fromBlock,
+    toBlock,
+  }: {
+    fromBlock: number
+    toBlock: number
+  }) => {
+    const depositsInitiatedLogsL1Erc20Gateway =
+      await getDepositInitiatedEventData(
+        childChain.tokenBridge.l1ERC20Gateway,
+        { fromBlock, toBlock },
+        parentChainProvider
+      )
+    const depositsInitiatedLogsL1CustomGateway =
+      await getDepositInitiatedEventData(
+        childChain.tokenBridge.l1CustomGateway,
+        { fromBlock, toBlock },
+        parentChainProvider
+      )
+
+    const depositsInitiatedLogsL1WethGateway =
+      await getDepositInitiatedEventData(
+        childChain.tokenBridge.l1CustomGateway,
+        { fromBlock, toBlock },
+        parentChainProvider
+      )
+
+    return [
+      ...depositsInitiatedLogsL1Erc20Gateway,
+      ...depositsInitiatedLogsL1CustomGateway,
+      ...depositsInitiatedLogsL1WethGateway,
+    ]
+  }
+
   const checkRetryables = async (
     parentChainProvider: providers.Provider,
     childChainProvider: providers.Provider,
     bridgeAddress: string,
-    erc20GatewayAddress: string,
     fromBlock: number,
     toBlock: number
   ): Promise<boolean> => {
@@ -371,11 +403,10 @@ const processChildChain = async (
     )
 
     // used for finding the token-details associated with a deposit, if any
-    const depositsInitiatedLogs = await getDepositInitiatedEventData(
-      erc20GatewayAddress,
-      { fromBlock, toBlock },
-      parentChainProvider
-    )
+    const depositsInitiatedLogs = await getDepositInitiatedLogs({
+      fromBlock,
+      toBlock,
+    })
 
     const uniqueTxHashes = new Set<string>()
     for (let messageDeliveredLog of messageDeliveredLogs) {
