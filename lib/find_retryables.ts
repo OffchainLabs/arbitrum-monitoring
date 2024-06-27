@@ -362,25 +362,23 @@ const processChildChain = async (
     fromBlock: number
     toBlock: number
   }) => {
-    const depositsInitiatedLogsL1Erc20Gateway =
-      await getDepositInitiatedEventData(
+    const [
+      depositsInitiatedLogsL1Erc20Gateway,
+      depositsInitiatedLogsL1CustomGateway,
+      depositsInitiatedLogsL1WethGateway,
+    ] = await Promise.all(
+      [
         childChain.tokenBridge.l1ERC20Gateway,
-        { fromBlock, toBlock },
-        parentChainProvider
-      )
-    const depositsInitiatedLogsL1CustomGateway =
-      await getDepositInitiatedEventData(
         childChain.tokenBridge.l1CustomGateway,
-        { fromBlock, toBlock },
-        parentChainProvider
-      )
-
-    const depositsInitiatedLogsL1WethGateway =
-      await getDepositInitiatedEventData(
-        childChain.tokenBridge.l1CustomGateway,
-        { fromBlock, toBlock },
-        parentChainProvider
-      )
+        childChain.tokenBridge.l1WethGateway,
+      ].map(gatewayAddress => {
+        return getDepositInitiatedEventData(
+          gatewayAddress,
+          { fromBlock, toBlock },
+          parentChainProvider
+        )
+      })
+    )
 
     return [
       ...depositsInitiatedLogsL1Erc20Gateway,
