@@ -8,7 +8,7 @@ import {
 } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 import { ArbRetryableTx__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ArbRetryableTx__factory'
 import { Provider } from '@ethersproject/abstract-provider'
-import { ChildNetwork } from './find_retryables'
+import { ChildNetwork } from './'
 import { postSlackMessage } from '../common/postSlackMessage'
 
 export const RETRYABLE_MONITOR_SLACK_TOKEN_ENV_KEY =

@@ -1,6 +1,11 @@
 {
   "name": "Orbit-retryble-tracker",
   "version": "1.0.0",
+  "workspaces": [
+    "lib/*"
+  ],
+  "private": true,
+  "type": "module",
   "main": "index.ts",
   "license": "MIT",
   "dependencies": {
@@ -31,7 +36,6 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "findRetryables": "tsc && node ./dist/retryableMonitor/find_retryables.js"
+    "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix"
   }
 }

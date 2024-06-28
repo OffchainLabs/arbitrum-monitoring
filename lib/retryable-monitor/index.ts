@@ -559,7 +559,7 @@ const processOrbitChainsConcurrently = async () => {
   const promises = config.childChains.map(async (childChain: ChildNetwork) => {
     try {
       return await processChildChain(childChain, options)
-    } catch (e) {
+    } catch (e: any) {
       const errorStr = `Retryable monitor - Error processing chain [${childChain.name}]: ${e.message}`
       if (options.enableAlerting) {
         postSlackMessage({

@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "incremental": true,
+
+    "lib": ["ES2021", "DOM"],
+    "target": "ES2021",
+
+    "moduleResolution": "node",
+
+    // JavaScript support
+    "allowJs": false,
+    "checkJs": false,
+    "allowSyntheticDefaultImports": true,
+
+    // Skip type checking for node modules
+    "skipLibCheck": true
+  }
+}
