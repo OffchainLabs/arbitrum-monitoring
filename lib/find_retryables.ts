@@ -13,7 +13,7 @@ import {
   L1ToL2MessageStatus,
   L1ToL2MessageReader,
 } from '@arbitrum/sdk'
-import { TransactionReceipt } from '@ethersproject/abstract-provider'
+import { Provider, TransactionReceipt } from '@ethersproject/abstract-provider'
 import { FetchedEvent } from '@arbitrum/sdk/dist/lib/utils/eventFetcher'
 import { TypedEvent } from '@arbitrum/sdk/dist/lib/abi/common'
 import { Bridge__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Bridge__factory'
@@ -358,9 +358,11 @@ const processChildChain = async (
   const getDepositInitiatedLogs = async ({
     fromBlock,
     toBlock,
+    parentChainProvider,
   }: {
     fromBlock: number
     toBlock: number
+    parentChainProvider: Provider
   }) => {
     const [
       depositsInitiatedLogsL1Erc20Gateway,
@@ -404,6 +406,7 @@ const processChildChain = async (
     const depositsInitiatedLogs = await getDepositInitiatedLogs({
       fromBlock,
       toBlock,
+      parentChainProvider,
     })
 
     const uniqueTxHashes = new Set<string>()
