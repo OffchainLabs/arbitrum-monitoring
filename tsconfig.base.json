@@ -17,7 +17,12 @@
     "skipLibCheck": true,
     "types": []
   },
-  "include": ["lib/**/*.ts", "lib/**/*.d.ts", "lib/*.ts", "common/*.ts"],
+  "include": [
+    "packages/**/*.ts",
+    "packages/**/*.d.ts",
+    "packages/*.ts",
+    "common/*.ts"
+  ],
   "exclude": [
     "node_modules",
     "./node_modules",

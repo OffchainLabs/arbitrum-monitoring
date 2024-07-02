@@ -1,7 +1,7 @@
 {
   "name": "arbitrum-monitoring-tools",
   "workspaces": [
-    "lib/*"
+    "packages/*"
   ],
   "private": true,
   "scripts": {

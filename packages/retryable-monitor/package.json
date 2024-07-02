@@ -33,6 +33,6 @@
     "lint": "eslint .",
     "build": "rm -rf ./dist && tsc",
     "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "dev": "yarn build && node ./dist/lib/retryable-monitor/index.js"
+    "dev": "yarn build && node ./dist/packages/retryable-monitor/index.js"
   }
 }
