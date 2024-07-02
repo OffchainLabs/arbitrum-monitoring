@@ -8,8 +8,14 @@ import {
 } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 import { ArbRetryableTx__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ArbRetryableTx__factory'
 import { Provider } from '@ethersproject/abstract-provider'
-import { ChildNetwork } from './find_retryables'
-import { slackMessageRetryablesMonitor } from './slack'
+import { ChildNetwork } from './'
+import { postSlackMessage } from '../../common/postSlackMessage'
+
+export const RETRYABLE_MONITOR_SLACK_TOKEN_ENV_KEY =
+  'ORBIT_RETRYABLE_MONITORING_SLACK_TOKEN'
+
+export const RETRYABLE_MONITOR_SLACK_CHANNEL_ENV_KEY =
+  'ORBIT_RETRYABLE_MONITORING_SLACK_CHANNEL'
 
 export interface ParentChainTicketReport {
   id: string
@@ -100,7 +106,11 @@ export const reportFailedTicket = async ({
     '\n================================================================='
 
   try {
-    slackMessageRetryablesMonitor(reportStr)
+    postSlackMessage({
+      slackTokenEnvKey: RETRYABLE_MONITOR_SLACK_TOKEN_ENV_KEY,
+      slackChannelEnvKey: RETRYABLE_MONITOR_SLACK_CHANNEL_ENV_KEY,
+      message: reportStr,
+    })
   } catch (e) {
     console.log('Could not send slack message', e)
   }
@@ -314,16 +324,10 @@ const formatGasData = async (
     ticket.gasFeeCap,
     'gwei'
   )} gwei`
-
-  if (l2GasPriceAtCreation) {
-    msg += `\n\t\t gas price at ticket creation block: ${ethers.utils.formatUnits(
-      l2GasPriceAtCreation,
-      'gwei'
-    )} gwei`
-  } else {
-    msg += `\n\t\t gas price at ticket creation block: unable to fetch (missing data)`
-  }
-
+  msg += `\n\t\t gas price at ticket creation block: ${ethers.utils.formatUnits(
+    l2GasPriceAtCreation,
+    'gwei'
+  )} gwei`
   msg += `\n\t\t gas price now: ${ethers.utils.formatUnits(
     l2GasPrice,
     'gwei'
@@ -409,7 +413,7 @@ export async function getGasInfo(
   childChainProvider: ethers.providers.Provider
 ): Promise<{
   l2GasPrice: BigNumber
-  l2GasPriceAtCreation: BigNumber | undefined
+  l2GasPriceAtCreation: BigNumber
   redeemEstimate: BigNumber | undefined
 }> {
   // connect precompiles
@@ -427,13 +431,10 @@ export async function getGasInfo(
   const l2GasPrice = gasComponents[5]
 
   // get gas price when retryable was created
-  let l2GasPriceAtCreation = undefined
-  try {
-    const gasComponentsAtCreation = await arbGasInfo.callStatic.getPricesInWei({
-      blockTag: createdAtBlockNumber,
-    })
-    l2GasPriceAtCreation = gasComponentsAtCreation[5]
-  } catch {}
+  const gasComponentsAtCreation = await arbGasInfo.callStatic.getPricesInWei({
+    blockTag: createdAtBlockNumber,
+  })
+  const l2GasPriceAtCreation = gasComponentsAtCreation[5]
 
   // get gas estimation for redeem
   let redeemEstimate = undefined
