@@ -30,13 +30,11 @@ import {
 import {
   ChildChainTicketReport,
   ParentChainTicketReport,
-  RETRYABLE_MONITOR_SLACK_CHANNEL_ENV_KEY,
-  RETRYABLE_MONITOR_SLACK_TOKEN_ENV_KEY,
   TokenDepositData,
   getExplorerUrlPrefixes,
   reportFailedTicket,
-} from './report_retryables'
-import { postSlackMessage } from '../../common/postSlackMessage'
+} from './reportRetryables'
+import { reportRetryableErrorToSlack } from './reportRetryableErrorToSlack'
 
 // Interface defining additional properties for ChildNetwork
 export interface ChildNetwork extends ParentNetwork {
@@ -562,9 +560,7 @@ const processOrbitChainsConcurrently = async () => {
     } catch (e: any) {
       const errorStr = `Retryable monitor - Error processing chain [${childChain.name}]: ${e.message}`
       if (options.enableAlerting) {
-        postSlackMessage({
-          slackTokenEnvKey: RETRYABLE_MONITOR_SLACK_TOKEN_ENV_KEY,
-          slackChannelEnvKey: RETRYABLE_MONITOR_SLACK_CHANNEL_ENV_KEY,
+        reportRetryableErrorToSlack({
           message: errorStr,
         })
       }

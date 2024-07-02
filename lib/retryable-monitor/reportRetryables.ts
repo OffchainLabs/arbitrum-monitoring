@@ -8,14 +8,8 @@ import {
 } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 import { ArbRetryableTx__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ArbRetryableTx__factory'
 import { Provider } from '@ethersproject/abstract-provider'
-import { ChildNetwork } from './'
-import { postSlackMessage } from '../../common/postSlackMessage'
-
-export const RETRYABLE_MONITOR_SLACK_TOKEN_ENV_KEY =
-  'ORBIT_RETRYABLE_MONITORING_SLACK_TOKEN'
-
-export const RETRYABLE_MONITOR_SLACK_CHANNEL_ENV_KEY =
-  'ORBIT_RETRYABLE_MONITORING_SLACK_CHANNEL'
+import { ChildNetwork } from '.'
+import { reportRetryableErrorToSlack } from './reportRetryableErrorToSlack'
 
 export interface ParentChainTicketReport {
   id: string
@@ -106,9 +100,7 @@ export const reportFailedTicket = async ({
     '\n================================================================='
 
   try {
-    postSlackMessage({
-      slackTokenEnvKey: RETRYABLE_MONITOR_SLACK_TOKEN_ENV_KEY,
-      slackChannelEnvKey: RETRYABLE_MONITOR_SLACK_CHANNEL_ENV_KEY,
+    reportRetryableErrorToSlack({
       message: reportStr,
     })
   } catch (e) {
