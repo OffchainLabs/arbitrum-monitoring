@@ -16,13 +16,5 @@
     "experimentalDecorators": true,
     "skipLibCheck": true,
     "types": []
-  },
-  "include": ["packages/**/*.ts", "packages/**/*.d.ts", "packages/*.ts"],
-  "exclude": [
-    "node_modules",
-    "./node_modules",
-    "./node_modules/*",
-    "./node_modules/@types/node/index.d.ts",
-    "tsconfig.json"
-  ]
+  }
 }
