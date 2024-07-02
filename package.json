@@ -1,4 +1,5 @@
 {
+  "name": "arbitrum-monitoring-tools",
   "workspaces": [
     "lib/*"
   ],
