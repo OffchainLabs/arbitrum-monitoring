@@ -1,0 +1,37 @@
+{
+  "name": "retryable-monitor",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "license": "MIT",
+  "dependencies": {
+    "@arbitrum/nitro-contracts": "v1.1.0-beta.1",
+    "@arbitrum/sdk": "^3.4.1",
+    "@arbitrum/token-bridge-contracts": "v1.1.0-beta.2",
+    "@ethersproject/abstract-provider": "^5.5.1",
+    "@slack/web-api": "^7.0.4",
+    "axios": "^1.7.2",
+    "ethers": "^5.5.4",
+    "graphql": "^16.6.0",
+    "graphql-request": "^6.1.0",
+    "winston": "^3.3.3",
+    "yargs": "^17.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^16.4.10",
+    "@types/yargs": "^17.0.19",
+    "dotenv": "^10.0.0",
+    "eslint": "^8.15.0",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-plugin-mocha": "^9.0.0",
+    "eslint-plugin-prettier": "^4.0.0",
+    "prettier": "^2.3.2",
+    "prettier-plugin-solidity": "^1.0.0-beta.17",
+    "ts-node": "^10.8.1",
+    "typescript": "^4.5"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
+    "dev": "tsc && node ./../../dist/lib/retryable-monitor/index.js"
+  }
+}

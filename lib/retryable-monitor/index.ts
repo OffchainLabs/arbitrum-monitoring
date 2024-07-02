@@ -121,7 +121,7 @@ const options: findRetryablesOptions = yargs(process.argv.slice(2))
     fromBlock: { type: 'number', default: 0 },
     toBlock: { type: 'number', default: 0 },
     continuous: { type: 'boolean', default: false },
-    configPath: { type: 'string', default: 'retryable-monitor/config.json' },
+    configPath: { type: 'string', default: 'config.json' },
     enableAlerting: { type: 'boolean', default: false },
   })
   .strict()
@@ -530,7 +530,7 @@ const processChildChain = async (
 
 // Read the content of the config file
 const configFileContent = fs.readFileSync(
-  path.join(process.cwd(), 'lib', options.configPath),
+  path.join(process.cwd(), options.configPath),
   'utf-8'
 )
 
