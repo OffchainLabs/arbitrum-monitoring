@@ -4,11 +4,11 @@
   "main": "index.ts",
   "license": "MIT",
   "dependencies": {
+    "utils": "*",
     "@arbitrum/nitro-contracts": "v1.1.0-beta.1",
     "@arbitrum/sdk": "^3.4.1",
     "@arbitrum/token-bridge-contracts": "v1.1.0-beta.2",
     "@ethersproject/abstract-provider": "^5.5.1",
-    "@slack/web-api": "^7.0.4",
     "axios": "^1.7.2",
     "ethers": "^5.5.4",
     "graphql": "^16.6.0",
