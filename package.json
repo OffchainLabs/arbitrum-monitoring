@@ -3,5 +3,8 @@
   "workspaces": [
     "lib/*"
   ],
-  "private": true
+  "private": true,
+  "scripts": {
+    "retryable-monitor": "yarn workspace retryable-monitor dev"
+  }
 }
