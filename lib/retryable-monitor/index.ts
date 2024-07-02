@@ -41,7 +41,6 @@ export interface ChildNetwork extends ParentNetwork {
   parentRpcUrl: string
   orbitRpcUrl: string
   parentExplorerUrl: string
-  parentBlockTime: number
 }
 
 // Type for options passed to findRetryables function
@@ -446,7 +445,7 @@ const processChildChain = async (
               })
 
               // report the unsuccessful ticket to the alerting system
-              reportFailedTicket({
+              await reportFailedTicket({
                 parentChainTicketReport,
                 childChainTicketReport,
                 tokenDepositData,
@@ -557,7 +556,7 @@ const processOrbitChainsConcurrently = async () => {
   const promises = config.childChains.map(async (childChain: ChildNetwork) => {
     try {
       return await processChildChain(childChain, options)
-    } catch (e: any) {
+    } catch (e) {
       const errorStr = `Retryable monitor - Error processing chain [${childChain.name}]: ${e.message}`
       if (options.enableAlerting) {
         reportRetryableErrorToSlack({
