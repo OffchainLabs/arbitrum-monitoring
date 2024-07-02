@@ -8,40 +8,13 @@ import {
 } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 import { ArbRetryableTx__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ArbRetryableTx__factory'
 import { Provider } from '@ethersproject/abstract-provider'
-import { ChildNetwork } from '.'
 import { reportRetryableErrorToSlack } from './reportRetryableErrorToSlack'
-
-export interface ParentChainTicketReport {
-  id: string
-  transactionHash: string
-  sender: string
-  retryableTicketID: string
-}
-
-export interface ChildChainTicketReport {
-  id: string
-  retryTxHash: string
-  createdAtTimestamp: string
-  createdAtBlockNumber: number
-  timeoutTimestamp: string
-  deposit: string
-  status: string
-  retryTo: string
-  retryData: string
-  gasFeeCap: number
-  gasLimit: number
-}
-
-export interface TokenDepositData {
-  l2TicketId: string
-  tokenAmount?: string
-  sender: string
-  l1Token: {
-    symbol: string
-    id: string
-    decimals: number
-  }
-}
+import {
+  ChildChainTicketReport,
+  ChildNetwork,
+  ParentChainTicketReport,
+  TokenDepositData,
+} from './types'
 
 export const reportFailedTicket = async ({
   parentChainTicketReport,
