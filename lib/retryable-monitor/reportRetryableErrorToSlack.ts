@@ -3,8 +3,8 @@ import { postSlackMessage } from '../../common/postSlackMessage'
 
 dotenv.config()
 
-const slackToken = process.env.RETRYABLE_MONITOR_SLACK_TOKEN_ENV_KEY
-const slackChannel = process.env.RETRYABLE_MONITOR_SLACK_CHANNEL_ENV_KEY
+const slackToken = process.env.RETRYABLE_MONITOR_SLACK_TOKEN
+const slackChannel = process.env.RETRYABLE_MONITOR_SLACK_CHANNEL
 
 export const reportRetryableErrorToSlack = ({
   message,
