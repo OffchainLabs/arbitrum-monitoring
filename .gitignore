@@ -2,7 +2,7 @@ node_modules
 .env
 yarn-error.log
 .envrc
-/dist
+dist
 ./*.js
 .DS_Store
 logfile.log
