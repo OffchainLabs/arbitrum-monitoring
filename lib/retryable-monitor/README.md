@@ -52,7 +52,7 @@ To enable reporting, use `--enableAlerting` flag.
 This will enable alerts if a retryable has not succeeded. Additionally, you might also want to log these errors to Slack, for which you will need to configure, in the `.env` file:
 
 - `NODE_ENV=CI`
-- `RETRYABLE_MONITOR_SLACK_TOKEN=<your-slack-token>`
-- `RETRYABLE_MONITOR_SLACK_CHANNEL=<your-slack-channel-key>`
+- `RETRYABLE_MONITORING_SLACK_TOKEN=<your-slack-token>`
+- `RETRYABLE_MONITORING_SLACK_CHANNEL=<your-slack-channel-key>`
 
 Check [Slack integration documentation](https://api.slack.com/quickstart) for more information about getting these auth tokens.
