@@ -6,7 +6,6 @@
     "outDir": "./dist",
     "strict": true,
     "useUnknownInCatchVariables": false,
-    // "allowJs": true,
     "noImplicitAny": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
@@ -17,12 +16,5 @@
     "experimentalDecorators": true,
     "skipLibCheck": true,
     "types": []
-  },
-  "include": ["lib/**/*.ts", "lib/**/*.d.ts", "lib/**/*.js", "lib/*.ts"],
-  "exclude": [
-    "node_modules",
-    "./node_modules",
-    "./node_modules/*",
-    "./node_modules/@types/node/index.d.ts"
-  ]
+  }
 }

@@ -1,0 +1,1 @@
+export { postSlackMessage } from './postSlackMessage'

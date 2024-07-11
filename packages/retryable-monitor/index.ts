@@ -8,7 +8,6 @@ import {
   addCustomNetwork,
   L1TransactionReceipt as ParentChainTxReceipt,
   L1ToL2MessageStatus as ParentToChildMessageStatus,
-  L2Network as ParentNetwork,
   getL2Network,
   L1ToL2MessageStatus,
   L1ToL2MessageReader,
@@ -23,35 +22,19 @@ import {
   L1ERC20Gateway,
 } from '@arbitrum/sdk/dist/lib/abi/L1ERC20Gateway'
 import { L1ERC20Gateway__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L1ERC20Gateway__factory'
-
 import {
   ARB_MINIMUM_BLOCK_TIME_IN_SECONDS,
   SEVEN_DAYS_IN_SECONDS,
 } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
+import { getExplorerUrlPrefixes, reportFailedTicket } from './reportRetryables'
+import { reportRetryableErrorToSlack } from './reportRetryableErrorToSlack'
 import {
   ChildChainTicketReport,
+  ChildNetwork,
+  FindRetryablesOptions,
   ParentChainTicketReport,
   TokenDepositData,
-  getExplorerUrlPrefixes,
-  reportFailedTicket,
-} from './report_retryables'
-import { slackMessageRetryablesMonitor } from './slack'
-
-// Interface defining additional properties for ChildNetwork
-export interface ChildNetwork extends ParentNetwork {
-  parentRpcUrl: string
-  orbitRpcUrl: string
-  parentExplorerUrl: string
-}
-
-// Type for options passed to findRetryables function
-type findRetryablesOptions = {
-  fromBlock: number
-  toBlock: number
-  continuous: boolean
-  configPath: string
-  enableAlerting: boolean
-}
+} from './types'
 
 // Path for the log file
 const logFilePath = 'logfile.log'
@@ -114,7 +97,7 @@ const checkNetworkAlreadyExistsInSdk = async (networkId: number) => {
 }
 
 // Parsing command line arguments using yargs
-const options: findRetryablesOptions = yargs(process.argv.slice(2))
+const options: FindRetryablesOptions = yargs(process.argv.slice(2))
   .options({
     fromBlock: { type: 'number', default: 0 },
     toBlock: { type: 'number', default: 0 },
@@ -123,12 +106,12 @@ const options: findRetryablesOptions = yargs(process.argv.slice(2))
     enableAlerting: { type: 'boolean', default: false },
   })
   .strict()
-  .parseSync() as findRetryablesOptions
+  .parseSync() as FindRetryablesOptions
 
 // Function to process a child chain and check for retryable transactions
 const processChildChain = async (
   childChain: ChildNetwork,
-  options: findRetryablesOptions
+  options: FindRetryablesOptions
 ) => {
   console.log('----------------------------------------------------------')
   console.log(`Running for Chain: ${childChain.name}`)
@@ -560,7 +543,7 @@ const processChildChain = async (
 
 // Read the content of the config file
 const configFileContent = fs.readFileSync(
-  path.join(process.cwd(), 'lib', options.configPath),
+  path.join(process.cwd(), options.configPath),
   'utf-8'
 )
 
@@ -592,7 +575,9 @@ const processOrbitChainsConcurrently = async () => {
     } catch (e) {
       const errorStr = `Retryable monitor - Error processing chain [${childChain.name}]: ${e.message}`
       if (options.enableAlerting) {
-        slackMessageRetryablesMonitor(errorStr)
+        reportRetryableErrorToSlack({
+          message: errorStr,
+        })
       }
       console.error(errorStr)
     }
