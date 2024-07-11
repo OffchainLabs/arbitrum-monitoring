@@ -19,11 +19,11 @@ To start monitoring different aspects of Arbitrum, navigate to the relevant pack
 ### Example
 
 ```bash
-yarn workspace retryable-monitor dev
+yarn workspace retryable-monitor dev [--options]
 ```
 
 This can also be accessed simply from the root-level in this repository by:
 
 ```bash
-yarn retryable-monitor
+yarn retryable-monitor [--options]
 ```
