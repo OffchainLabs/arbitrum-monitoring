@@ -4,6 +4,7 @@
     "packages/*"
   ],
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "retryable-monitor": "yarn workspace retryable-monitor dev"
   },
