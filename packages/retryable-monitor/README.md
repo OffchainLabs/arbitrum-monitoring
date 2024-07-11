@@ -1,6 +1,6 @@
 # Retryables Monitor
 
-This tool is designed to assist in identifying and displaying the status of retryable tickets sent from a parent chain to any Arbitrum/Orbit chain. Read more about retryable tickets [here](https://docs.arbitrum.io/arbos/l1-to-l2-messaging).
+This tool is designed to assist in identifying and displaying the status of retryable tickets sent to an Arbitrum chain from its parent chain. Read more about retryable tickets [here](https://docs.arbitrum.io/arbos/l1-to-l2-messaging).
 
 ## Prerequisites
 
@@ -9,7 +9,7 @@ Before using this tool, make sure you have the following installed:
 - [Node.js](https://nodejs.org/en)
 - [Yarn](https://classic.yarnpkg.com/lang/en/docs/install/#mac-stable)
 
-Additionally, ensure that you have added your Child network configuration to the `config.json` file in the `lib` directory;
+Additionally, ensure that you have added your Arbitrum network configuration to the `config.json` file in the `lib` directory;
 
 ## Installation
 
