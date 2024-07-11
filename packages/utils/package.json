@@ -2,7 +2,6 @@
   "name": "utils",
   "version": "1.0.0",
   "main": "index.ts",
-  "license": "MIT",
   "dependencies": {
     "@slack/web-api": "^7.0.4"
   },
