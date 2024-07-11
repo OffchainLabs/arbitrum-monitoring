@@ -1,5 +1,5 @@
 import dotenv from 'dotenv'
-import { postSlackMessage } from 'utils'
+import { postSlackMessage } from '../utils/postSlackMessage'
 
 dotenv.config()
 
