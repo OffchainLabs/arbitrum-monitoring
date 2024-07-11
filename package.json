@@ -1,5 +1,5 @@
 {
-  "name": "arbitrum-monitoring-tools",
+  "name": "@arbitrum/monitoring",
   "workspaces": [
     "packages/*"
   ],
