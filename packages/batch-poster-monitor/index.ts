@@ -9,6 +9,7 @@ import {
   DEFAULT_BATCH_POSTING_DELAY_SECONDS,
 } from './chains'
 import { BatchPosterMonitorOptions, ChainInfo } from './types'
+import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
 
 // Parsing command line arguments using yargs
 const options: BatchPosterMonitorOptions = yargs(process.argv.slice(2))
@@ -119,6 +120,12 @@ const showAlert = (orbitChainInformation: ChainInfo, reason: string) => {
   )
   console.log('--------------------------------------')
   console.log('')
+
+  if (options.enableAlerting) {
+    reportBatchPosterErrorToSlack({
+      message: `Alert on ${orbitChainInformation.name}: ${reason}`,
+    })
+  }
 }
 
 const monitorBatchPoster = async (orbitChainInformation: ChainInfo) => {
