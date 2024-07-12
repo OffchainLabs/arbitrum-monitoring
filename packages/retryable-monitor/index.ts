@@ -557,10 +557,10 @@ if (!Array.isArray(config.childChains)) {
 }
 
 // Function to process multiple child chains concurrently
-const processOrbitChainsConcurrently = async () => {
+const processChainsConcurrently = async () => {
   // log the chains being processed for better debugging in github actions
   console.log(
-    '>>>>>> Processing child chains: ',
+    '>>>>>> Processing chains: ',
     config.childChains.map((childChain: ChildNetwork) => ({
       name: childChain.name,
       chainID: childChain.chainID,
@@ -587,5 +587,5 @@ const processOrbitChainsConcurrently = async () => {
   await Promise.allSettled(promises)
 }
 
-// Start processing child chains concurrently
-processOrbitChainsConcurrently()
+// Start processing chains concurrently
+processChainsConcurrently()

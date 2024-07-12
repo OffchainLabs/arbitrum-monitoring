@@ -1,20 +1,38 @@
+import * as fs from 'fs'
+import * as path from 'path'
+import yargs from 'yargs'
+import { AbiEvent, createPublicClient, defineChain, http, parseAbi } from 'viem'
 import {
-  AbiEvent,
-  AbiItem,
-  Address,
-  createPublicClient,
-  defineChain,
-  http,
-  parseAbi,
-} from 'viem'
-import {
-  orbitChains,
-  OrbitChainInformation,
   getChainFromId,
   getDefaultBlockRange,
   DEFAULT_TIMESPAN_SECONDS,
   DEFAULT_BATCH_POSTING_DELAY_SECONDS,
 } from './chains'
+import { BatchPosterMonitorOptions, ChainInfo } from './types'
+
+// Parsing command line arguments using yargs
+const options: BatchPosterMonitorOptions = yargs(process.argv.slice(2))
+  .options({
+    configPath: { type: 'string', default: 'config.json' },
+    enableAlerting: { type: 'boolean', default: false },
+  })
+  .strict()
+  .parseSync() as BatchPosterMonitorOptions
+
+// Read the content of the config file
+const configFileContent = fs.readFileSync(
+  path.join(process.cwd(), options.configPath),
+  'utf-8'
+)
+
+// Parse the config file content as JSON
+const config = JSON.parse(configFileContent)
+
+// Check if chains array is present in the config file
+if (!Array.isArray(config.chains) || config?.chains?.length === 0) {
+  console.error('Error: Chains not found in the config file.')
+  process.exit(1)
+}
 
 const sequencerBatchDeliveredEventAbi: AbiEvent = {
   anonymous: false,
@@ -73,7 +91,7 @@ const sequencerBatchDeliveredEventAbi: AbiEvent = {
 }
 
 const displaySummaryInformation = (
-  orbitChainInformation: OrbitChainInformation,
+  orbitChainInformation: ChainInfo,
   latestBatchPostedBlockNumber: bigint,
   latestBatchPostedSecondsAgo: bigint,
   latestOrbitBlockNumber: bigint,
@@ -92,10 +110,7 @@ const displaySummaryInformation = (
   console.log('')
 }
 
-const showAlert = (
-  orbitChainInformation: OrbitChainInformation,
-  reason: string
-) => {
+const showAlert = (orbitChainInformation: ChainInfo, reason: string) => {
   console.log(`Alert on ${orbitChainInformation.name}`)
   console.log('--------------------------------------')
   console.log(reason)
@@ -106,9 +121,7 @@ const showAlert = (
   console.log('')
 }
 
-const monitorBatchPoster = async (
-  orbitChainInformation: OrbitChainInformation
-) => {
+const monitorBatchPoster = async (orbitChainInformation: ChainInfo) => {
   const parentChain = getChainFromId(orbitChainInformation.parentChainId)
   const orbitChain = defineChain({
     id: orbitChainInformation.chainId,
@@ -217,9 +230,19 @@ const monitorBatchPoster = async (
 }
 
 const main = async () => {
+  // log the chains being processed for better debugging in github actions
+  console.log(
+    '>>>>>> Processing chains: ',
+    config.chains.map((chainInformation: ChainInfo) => ({
+      name: chainInformation.name,
+      chainID: chainInformation.chainId,
+      rpc: chainInformation.rpc,
+    }))
+  )
+
   await Promise.all(
-    orbitChains.map(async orbitChainInformation => {
-      await monitorBatchPoster(orbitChainInformation)
+    config.chains.map(async (chainInformation: ChainInfo) => {
+      await monitorBatchPoster(chainInformation)
     })
   )
 }
