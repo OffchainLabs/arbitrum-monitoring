@@ -587,5 +587,5 @@ const processOrbitChainsConcurrently = async () => {
   await Promise.allSettled(promises)
 }
 
-// Start processing chains concurrently
+// Start processing child chains concurrently
 processOrbitChainsConcurrently()
