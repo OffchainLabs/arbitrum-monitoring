@@ -1,0 +1,16 @@
+{
+  "name": "batch-poster-monitor",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "dev": "ts-node index.ts"
+  },
+  "dependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5",
+    "viem": "^2.13.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.1"
+  }
+}
