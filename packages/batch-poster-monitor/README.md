@@ -2,57 +2,54 @@
 
 The Batch Poster Monitor is a package that allows you to monitor the progress of batch poster jobs in real-time. It provides a simple and intuitive interface to track the status of your batch poster jobs and view detailed information about each job.
 
+## Prerequisites
+
+Before using this tool, make sure you have the following installed:
+
+- [Node.js](https://nodejs.org/en)
+- [Yarn](https://classic.yarnpkg.com/lang/en/docs/install/#mac-stable)
+
+Additionally, ensure that you have added your Arbitrum network configuration to the `config.json` file in the `lib` directory;
+
 ## Installation
 
-To install the Batch Poster Monitor package, simply run the following command:
+From the root directory of the project, run the following command to install dependencies:
 
 ```bash
-npm install @orbit-retryable-tracker/batch-poster-monitor
+yarn install
 ```
 
 ## Usage
 
 To use the Batch Poster Monitor package, follow these steps:
 
-1. Import the package into your project:
-
-```javascript
-import { BatchPosterMonitor } from '@orbit-retryable-tracker/batch-poster-monitor'
-```
-
-2. Initialize the monitor with the necessary configuration:
-
-```javascript
-const monitor = new BatchPosterMonitor({
-  endpoint: 'https://api.example.com/batch-poster',
-  apiKey: 'YOUR_API_KEY',
-})
-```
-
-3. Start monitoring the batch poster jobs:
-
-```javascript
-monitor.start()
-```
-
-4. Access the monitor's UI to view the progress and details of the jobs:
-
-```javascript
-monitor.openUI()
+```bash
+yarn dev [--configPath=<CONFIG_PATH>] --enableAlerting
 ```
 
 ## Configuration Options
 
-The Batch Poster Monitor package supports the following configuration options:
+The Batch Poster Monitor accepts an array of chain configurations with the following parameters:
 
-- `endpoint` (required): The API endpoint for the batch poster service.
-- `apiKey` (required): Your API key for authentication with the batch poster service.
-- `refreshInterval` (optional): The interval (in milliseconds) at which the monitor should refresh the job status. Default is 5000ms.
+```typescript
+      "name": string // Name of the chain being monitored
+      "chainId": number // ChainId of the chain being monitored
+      "parentChainId": number // ChainId of the chain's parent
+      "rpc": string // RPC URL of the chain being monitored
+      "rollup": string // Rollup address of the chain being monitored
+      "sequencerInbox": string //  Sequencer Inbox address of the chain being monitored
+      "bridge": string // Bridge address of the chain being monitored
 
-## Contributing
+```
 
-Contributions are welcome! If you have any ideas, suggestions, or bug reports, please open an issue or submit a pull request on the [GitHub repository](https://github.com/Orbit-retryable-tracker/batch-poster-monitor).
+### Error Generation and Reporting
 
-## License
+To enable reporting, use `--enableAlerting` flag.
 
-This package is licensed under the [MIT License](https://opensource.org/licenses/MIT).
+This will enable alerts if a batch-poster monitoring detects any anomalies. Additionally, you might also want to log these errors to Slack, for which you will need to configure, in the `.env` file:
+
+- `NODE_ENV=CI`
+- `BATCH_POSTER_MONITORING_SLACK_TOKEN=<your-slack-token>`
+- `BATCH_POSTER_MONITORING_SLACK_CHANNEL=<your-slack-channel-key>`
+
+Check [Slack integration documentation](https://api.slack.com/quickstart) for more information about getting these auth tokens.
