@@ -92,48 +92,48 @@ const sequencerBatchDeliveredEventAbi: AbiEvent = {
 }
 
 const displaySummaryInformation = (
-  orbitChainInformation: ChainInfo,
+  childChainChainInformation: ChainInfo,
   latestBatchPostedBlockNumber: bigint,
   latestBatchPostedSecondsAgo: bigint,
-  latestOrbitBlockNumber: bigint,
+  latestChildChainBlockNumber: bigint,
   batchPosterBacklogSize: bigint
 ) => {
   console.log('**********')
-  console.log(`Summary information of ${orbitChainInformation.name}`)
+  console.log(`Summary information of ${childChainChainInformation.name}`)
   console.log(
     `Latest batch posted on block ${latestBatchPostedBlockNumber}, ${latestBatchPostedSecondsAgo} seconds ago.`
   )
   console.log(
-    `Latest block number on Orbit chain is ${latestOrbitBlockNumber}.`
+    `Latest block number on [${childChainChainInformation.name}] is ${latestChildChainBlockNumber}.`
   )
   console.log(`Batch poster backlog is ${batchPosterBacklogSize} blocks.`)
   console.log('**********')
   console.log('')
 }
 
-const showAlert = (orbitChainInformation: ChainInfo, reason: string) => {
-  console.log(`Alert on ${orbitChainInformation.name}`)
+const showAlert = (childChainChainInformation: ChainInfo, reason: string) => {
+  console.log(`Alert on ${childChainChainInformation.name}`)
   console.log('--------------------------------------')
   console.log(reason)
   console.log(
-    `SequencerInbox located at ${orbitChainInformation.sequencerInbox} on chain ${orbitChainInformation.parentChainId}`
+    `SequencerInbox located at ${childChainChainInformation.sequencerInbox} on chain ${childChainChainInformation.parentChainId}`
   )
   console.log('--------------------------------------')
   console.log('')
 
   if (options.enableAlerting) {
     reportBatchPosterErrorToSlack({
-      message: `Alert on ${orbitChainInformation.name}: ${reason}`,
+      message: `Alert on ${childChainChainInformation.name}: ${reason}`,
     })
   }
 }
 
-const monitorBatchPoster = async (orbitChainInformation: ChainInfo) => {
-  const parentChain = getChainFromId(orbitChainInformation.parentChainId)
-  const orbitChain = defineChain({
-    id: orbitChainInformation.chainId,
-    name: orbitChainInformation.name,
-    network: 'orbit',
+const monitorBatchPoster = async (childChainChainInformation: ChainInfo) => {
+  const parentChain = getChainFromId(childChainChainInformation.parentChainId)
+  const childChainChain = defineChain({
+    id: childChainChainInformation.chainId,
+    name: childChainChainInformation.name,
+    network: 'childChain',
     nativeCurrency: {
       name: 'ETH',
       symbol: 'ETH',
@@ -141,10 +141,10 @@ const monitorBatchPoster = async (orbitChainInformation: ChainInfo) => {
     },
     rpcUrls: {
       default: {
-        http: [orbitChainInformation.rpc],
+        http: [childChainChainInformation.rpc],
       },
       public: {
-        http: [orbitChainInformation.rpc],
+        http: [childChainChainInformation.rpc],
       },
     },
   })
@@ -153,37 +153,38 @@ const monitorBatchPoster = async (orbitChainInformation: ChainInfo) => {
     chain: parentChain,
     transport: http(),
   })
-  const orbitChainClient = createPublicClient({
-    chain: orbitChain,
+  const childChainChainClient = createPublicClient({
+    chain: childChainChain,
     transport: http(),
   })
 
   // Getting sequencer inbox logs
   const latestBlockNumber = await parentChainClient.getBlockNumber()
   const sequencerInboxLogs = await parentChainClient.getLogs({
-    address: orbitChainInformation.sequencerInbox,
+    address: childChainChainInformation.sequencerInbox,
     event: sequencerBatchDeliveredEventAbi,
     fromBlock: latestBlockNumber - getDefaultBlockRange(parentChain),
     toBlock: latestBlockNumber,
   })
 
   // Get the last block of the chain
-  const latestOrbitBlockNumber = await orbitChainClient.getBlockNumber()
+  const latestChildChainBlockNumber =
+    await childChainChainClient.getBlockNumber()
 
   if (!sequencerInboxLogs) {
     // No SequencerInboxLog in the last 12 hours (time hardcoded in getDefaultBlockRange)
     // We compare the "latest" and "safe" blocks
-    // NOTE: another way of verifying this might be to check the timestamp of the last block in the orbit chain to verify more or less if it should have been posted
-    const latestOrbitSafeBlock = await orbitChainClient.getBlock({
+    // NOTE: another way of verifying this might be to check the timestamp of the last block in the childChain chain to verify more or less if it should have been posted
+    const latestChildChainSafeBlock = await childChainChainClient.getBlock({
       blockTag: 'safe',
     })
-    if (latestOrbitSafeBlock.number < latestOrbitBlockNumber) {
+    if (latestChildChainSafeBlock.number < latestChildChainBlockNumber) {
       showAlert(
-        orbitChainInformation,
+        childChainChainInformation,
         `No batch has been posted in the last ${
           DEFAULT_TIMESPAN_SECONDS / 60 / 60
-        } hours, and last block number (${latestOrbitBlockNumber}) is greater than the last safe block number (${
-          latestOrbitSafeBlock.number
+        } hours, and last block number (${latestChildChainBlockNumber}) is greater than the last safe block number (${
+          latestChildChainSafeBlock.number
         })`
       )
       return
@@ -203,7 +204,7 @@ const monitorBatchPoster = async (orbitChainInformation: ChainInfo) => {
 
   // Get last block that's part of a batch
   const lastBlockReported = await parentChainClient.readContract({
-    address: orbitChainInformation.bridge,
+    address: childChainChainInformation.bridge,
     abi: parseAbi([
       'function sequencerReportedSubMessageCount() view returns (uint256)',
     ]),
@@ -211,7 +212,8 @@ const monitorBatchPoster = async (orbitChainInformation: ChainInfo) => {
   })
 
   // Get batch poster backlog
-  const batchPosterBacklog = latestOrbitBlockNumber - lastBlockReported - 1n
+  const batchPosterBacklog =
+    latestChildChainBlockNumber - lastBlockReported - 1n
 
   // If there's backlog and last batch posted was 4 hours ago, send alert
   if (
@@ -219,7 +221,7 @@ const monitorBatchPoster = async (orbitChainInformation: ChainInfo) => {
     secondsSinceLastBatchPoster > DEFAULT_BATCH_POSTING_DELAY_SECONDS
   ) {
     showAlert(
-      orbitChainInformation,
+      childChainChainInformation,
       `Last batch was posted ${
         secondsSinceLastBatchPoster / 60n / 60n
       } hours ago, and there's a backlog of ${batchPosterBacklog} blocks in the chain`
@@ -228,10 +230,10 @@ const monitorBatchPoster = async (orbitChainInformation: ChainInfo) => {
   }
 
   displaySummaryInformation(
-    orbitChainInformation,
+    childChainChainInformation,
     lastSequencerInboxBlock.number,
     secondsSinceLastBatchPoster,
-    latestOrbitBlockNumber,
+    latestChildChainBlockNumber,
     batchPosterBacklog
   )
 }
