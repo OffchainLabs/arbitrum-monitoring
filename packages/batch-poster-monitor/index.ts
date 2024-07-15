@@ -99,13 +99,14 @@ const displaySummaryInformation = (
   batchPosterBacklogSize: bigint
 ) => {
   console.log('**********')
-  console.log(`Summary information of ${childChainChainInformation.name}`)
-  console.log(
-    `Latest batch posted on block ${latestBatchPostedBlockNumber}, ${latestBatchPostedSecondsAgo} seconds ago.`
-  )
+  console.log(`Batch poster summary of [${childChainChainInformation.name}]`)
   console.log(
     `Latest block number on [${childChainChainInformation.name}] is ${latestChildChainBlockNumber}.`
   )
+  console.log(
+    `Latest batch posted on [Parent chain id: ${childChainChainInformation.parentChainId}] is ${latestBatchPostedBlockNumber}, ${latestBatchPostedSecondsAgo} seconds ago.`
+  )
+
   console.log(`Batch poster backlog is ${batchPosterBacklogSize} blocks.`)
   console.log('**********')
   console.log('')
