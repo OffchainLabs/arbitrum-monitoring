@@ -105,7 +105,13 @@ const displaySummaryInformation = (
     `Latest block number on [${childChainInformation.name}] is ${latestChildChainBlockNumber}.`
   )
   console.log(
-    `Latest batch posted on [Parent chain id: ${childChainInformation.partnerChainID}] is ${latestBatchPostedBlockNumber}, ${latestBatchPostedSecondsAgo} seconds ago.`
+    `Latest batch posted on [Parent chain id: ${
+      childChainInformation.partnerChainID
+    }] is ${latestBatchPostedBlockNumber} => ${
+      latestBatchPostedSecondsAgo / 60n / 60n
+    } hours, ${(latestBatchPostedSecondsAgo / 60n) % 60n} minutes, ${
+      latestBatchPostedSecondsAgo % 60n
+    } seconds ago.`
   )
 
   console.log(`Batch poster backlog is ${batchPosterBacklogSize} blocks.`)
