@@ -188,11 +188,12 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     toBlockNum = Number(toBlock.toString())
 
   const MAX_BLOCKS_TO_PROCESS =
-    childChainInformation.partnerChainID === 1 ? 800 : 500000 // for Ethereum, have lower block range to avoid rate limiting
+    childChainInformation.partnerChainID === 1 ? 500 : 500000 // for Ethereum, have lower block range to avoid rate limiting
 
   for (let i = fromBlockNum; i <= toBlockNum; i += MAX_BLOCKS_TO_PROCESS) {
     ranges.push([i, Math.min(i + MAX_BLOCKS_TO_PROCESS - 1, toBlockNum)])
   }
+
   const sequencerInboxLogsArray = []
   for (const range of ranges) {
     const logs = await parentChainClient.getLogs({
@@ -296,7 +297,7 @@ const main = async () => {
       console.log('>>>>> Processing chain: ', childChain.name)
       await monitorBatchPoster(childChain)
     } catch (e) {
-      const errorStr = `Batch poster monitor - Error processing chain [${childChain.name}]: ${e.message}`
+      const errorStr = `Batch Posting alert on [${childChain.name}]:\nError processing chain: ${e.message}`
       if (options.enableAlerting) {
         reportBatchPosterErrorToSlack({
           message: errorStr,
