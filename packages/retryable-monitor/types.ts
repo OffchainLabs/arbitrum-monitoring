@@ -4,6 +4,7 @@ import { ArbitrumNetwork } from '@arbitrum/sdk'
 export interface ChildNetwork extends ArbitrumNetwork {
   parentRpcUrl: string
   orbitRpcUrl: string
+  explorerUrl: string
   parentExplorerUrl: string
 }
 
