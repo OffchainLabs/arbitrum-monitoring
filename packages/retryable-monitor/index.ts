@@ -86,6 +86,15 @@ const getParentChainBlockTime = (childChain: ChildNetwork) => {
   return ARB_MINIMUM_BLOCK_TIME_IN_SECONDS
 }
 
+const networkIsRegistered = (networkId: number) => {
+  try {
+    getArbitrumNetwork(networkId)
+    return true
+  } catch (_) {
+    return false
+  }
+}
+
 // Parsing command line arguments using yargs
 const options: FindRetryablesOptions = yargs(process.argv.slice(2))
   .options({
@@ -106,7 +115,9 @@ const processChildChain = async (
   console.log('----------------------------------------------------------')
   console.log(`Running for Chain: ${childChain.name}`)
   console.log('----------------------------------------------------------')
-  registerCustomArbitrumNetwork(childChain)
+  if (!networkIsRegistered(childChain.chainId)) {
+    registerCustomArbitrumNetwork(childChain)
+  }
 
   const parentChainProvider = new providers.JsonRpcProvider(
     String(childChain.parentRpcUrl)
