@@ -26,7 +26,7 @@ import {
   ARB_MINIMUM_BLOCK_TIME_IN_SECONDS,
   SEVEN_DAYS_IN_SECONDS,
 } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
-import { getExplorerUrlPrefixes, reportFailedTicket } from './reportRetryables'
+import { reportFailedTicket } from './reportRetryables'
 import { reportRetryableErrorToSlack } from './reportRetryableErrorToSlack'
 import {
   ChildChainTicketReport,
@@ -34,7 +34,7 @@ import {
   ParentChainTicketReport,
   TokenDepositData,
 } from './types'
-import { ChildNetwork } from '../utils/types'
+import { ChildNetwork, getExplorerUrlPrefixes } from '../utils'
 
 // Path for the log file
 const logFilePath = 'logfile.log'
