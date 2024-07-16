@@ -5,12 +5,11 @@ import winston from 'winston'
 import { BigNumber, providers } from 'ethers'
 import {
   EventFetcher,
-  addCustomNetwork,
-  L1TransactionReceipt as ParentChainTxReceipt,
-  L1ToL2MessageStatus as ParentToChildMessageStatus,
-  getL2Network,
-  L1ToL2MessageStatus,
-  L1ToL2MessageReader,
+  getArbitrumNetwork,
+  registerCustomArbitrumNetwork,
+  ParentTransactionReceipt,
+  ParentToChildMessageStatus,
+  ParentToChildMessageReader,
 } from '@arbitrum/sdk'
 import { Provider, TransactionReceipt } from '@ethersproject/abstract-provider'
 import { FetchedEvent } from '@arbitrum/sdk/dist/lib/utils/eventFetcher'
@@ -67,7 +66,7 @@ const logResult = (chainName: string, message: string) => {
 }
 
 const getParentChainBlockTime = (childChain: ChildNetwork) => {
-  const parentChainId = childChain.partnerChainID
+  const parentChainId = childChain.parentChainId
 
   // for Ethereum / Sepolia / Holesky
   if (
@@ -87,9 +86,9 @@ const getParentChainBlockTime = (childChain: ChildNetwork) => {
   return ARB_MINIMUM_BLOCK_TIME_IN_SECONDS
 }
 
-const checkNetworkAlreadyExistsInSdk = async (networkId: number) => {
+const networkIsRegistered = (networkId: number) => {
   try {
-    await getL2Network(networkId)
+    getArbitrumNetwork(networkId)
     return true
   } catch (_) {
     return false
@@ -116,16 +115,8 @@ const processChildChain = async (
   console.log('----------------------------------------------------------')
   console.log(`Running for Chain: ${childChain.name}`)
   console.log('----------------------------------------------------------')
-  try {
-    const networkAlreadyExistsInSdk = await checkNetworkAlreadyExistsInSdk(
-      childChain.chainID
-    )
-    if (!networkAlreadyExistsInSdk) {
-      addCustomNetwork({ customL2Network: childChain })
-    }
-  } catch (error: any) {
-    console.error(`Failed to register the child network: ${error.message}`)
-    return
+  if (!networkIsRegistered(childChain.chainId)) {
+    registerCustomArbitrumNetwork(childChain)
   }
 
   const parentChainProvider = new providers.JsonRpcProvider(
@@ -239,8 +230,8 @@ const processChildChain = async (
   }
 
   const getParentChainTicketReport = (
-    arbParentTxReceipt: ParentChainTxReceipt,
-    retryableMessage: L1ToL2MessageReader
+    arbParentTxReceipt: ParentTransactionReceipt,
+    retryableMessage: ParentToChildMessageReader
   ): ParentChainTicketReport => {
     return {
       id: arbParentTxReceipt.transactionHash,
@@ -257,7 +248,7 @@ const processChildChain = async (
   }: {
     childChainTx: providers.TransactionResponse
     childChainTxReceipt: TransactionReceipt
-    retryableMessage: L1ToL2MessageReader
+    retryableMessage: ParentToChildMessageReader
   }): Promise<ChildChainTicketReport> => {
     let status = await retryableMessage.status()
 
@@ -272,7 +263,7 @@ const processChildChain = async (
       createdAtBlockNumber: childChainTxReceipt.blockNumber,
       timeoutTimestamp: String(Number(timestamp) + SEVEN_DAYS_IN_SECONDS),
       deposit: String(retryableMessage.messageData.l2CallValue), // eth amount
-      status: L1ToL2MessageStatus[status],
+      status: ParentToChildMessageStatus[status],
       retryTo: childChainTxReceipt.to,
       retryData: retryableMessage.messageData.data,
       gasFeeCap: (childChainTx.maxFeePerGas ?? BigNumber.from(0)).toNumber(),
@@ -289,8 +280,8 @@ const processChildChain = async (
     depositsInitiatedLogs,
   }: {
     childChainTx: providers.TransactionResponse
-    retryableMessage: L1ToL2MessageReader
-    arbParentTxReceipt: ParentChainTxReceipt
+    retryableMessage: ParentToChildMessageReader
+    arbParentTxReceipt: ParentTransactionReceipt
     depositsInitiatedLogs: FetchedEvent<TypedEvent<any, any>>[]
   }): Promise<TokenDepositData | undefined> => {
     let parentChainErc20Address: string | undefined,
@@ -353,9 +344,9 @@ const processChildChain = async (
       depositsInitiatedLogsL1WethGateway,
     ] = await Promise.all(
       [
-        childChain.tokenBridge.l1ERC20Gateway,
-        childChain.tokenBridge.l1CustomGateway,
-        childChain.tokenBridge.l1WethGateway,
+        childChain.tokenBridge!.parentErc20Gateway,
+        childChain.tokenBridge!.parentCustomGateway,
+        childChain.tokenBridge!.parentWethGateway,
       ].map(gatewayAddress => {
         return getDepositInitiatedEventData(
           gatewayAddress,
@@ -403,8 +394,8 @@ const processChildChain = async (
       const parentTxReceipt = await parentChainProvider.getTransactionReceipt(
         parentTxHash
       )
-      const arbParentTxReceipt = new ParentChainTxReceipt(parentTxReceipt)
-      const retryables = await arbParentTxReceipt.getL1ToL2Messages(
+      const arbParentTxReceipt = new ParentTransactionReceipt(parentTxReceipt)
+      const retryables = await arbParentTxReceipt.getParentToChildMessages(
         childChainProvider
       )
 
@@ -433,7 +424,7 @@ const processChildChain = async (
           let status = await retryableMessage.status()
 
           // if a Retryable is not in a successful state, extract it's details
-          if (status !== L1ToL2MessageStatus.REDEEMED) {
+          if (status !== ParentToChildMessageStatus.REDEEMED) {
             // report the ticket only if `enableAlerting` flag is on
             if (options.enableAlerting) {
               const childChainTx = await childChainProvider.getTransaction(
@@ -563,7 +554,7 @@ const processOrbitChainsConcurrently = async () => {
     '>>>>>> Processing child chains: ',
     config.childChains.map((childChain: ChildNetwork) => ({
       name: childChain.name,
-      chainID: childChain.chainID,
+      chainID: childChain.chainId,
       orbitRpcUrl: childChain.orbitRpcUrl,
       parentRpcUrl: childChain.parentRpcUrl,
     }))

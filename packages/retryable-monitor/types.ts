@@ -1,9 +1,10 @@
-import { L2Network as ParentNetwork } from '@arbitrum/sdk'
+import { ArbitrumNetwork } from '@arbitrum/sdk'
 
 // Interface defining additional properties for ChildNetwork
-export interface ChildNetwork extends ParentNetwork {
+export interface ChildNetwork extends ArbitrumNetwork {
   parentRpcUrl: string
   orbitRpcUrl: string
+  explorerUrl: string
   parentExplorerUrl: string
 }
 

@@ -3,15 +3,15 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
-    "utils": "*",
     "@arbitrum/nitro-contracts": "v1.1.0-beta.1",
-    "@arbitrum/sdk": "^3.4.1",
+    "@arbitrum/sdk": "^4.0.0-alpha.10",
     "@arbitrum/token-bridge-contracts": "v1.1.0-beta.2",
     "@ethersproject/abstract-provider": "^5.5.1",
     "axios": "^1.7.2",
     "ethers": "^5.5.4",
     "graphql": "^16.6.0",
     "graphql-request": "^6.1.0",
+    "utils": "*",
     "winston": "^3.3.3",
     "yargs": "^17.5.1"
   },
