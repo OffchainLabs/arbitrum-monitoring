@@ -86,15 +86,6 @@ const getParentChainBlockTime = (childChain: ChildNetwork) => {
   return ARB_MINIMUM_BLOCK_TIME_IN_SECONDS
 }
 
-const checkNetworkAlreadyExistsInSdk = async (networkId: number) => {
-  try {
-    await getArbitrumNetwork(networkId)
-    return true
-  } catch (_) {
-    return false
-  }
-}
-
 // Parsing command line arguments using yargs
 const options: FindRetryablesOptions = yargs(process.argv.slice(2))
   .options({
