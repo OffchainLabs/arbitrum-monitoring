@@ -11,10 +11,10 @@ import { Provider } from '@ethersproject/abstract-provider'
 import { reportRetryableErrorToSlack } from './reportRetryableErrorToSlack'
 import {
   ChildChainTicketReport,
-  ChildNetwork,
   ParentChainTicketReport,
   TokenDepositData,
 } from './types'
+import { ChildNetwork, getExplorerUrlPrefixes } from '../utils'
 
 export const reportFailedTicket = async ({
   parentChainTicketReport,
@@ -76,20 +76,6 @@ export const reportFailedTicket = async ({
     reportRetryableErrorToSlack({ message: reportStr })
   } catch (e) {
     console.log('Could not send slack message', e)
-  }
-}
-
-export const getExplorerUrlPrefixes = (childChain: ChildNetwork) => {
-  const PARENT_CHAIN_TX_PREFIX = `${childChain.parentExplorerUrl}tx/`
-  const PARENT_CHAIN_ADDRESS_PREFIX = `${childChain.parentExplorerUrl}address/`
-  const CHILD_CHAIN_TX_PREFIX = `${childChain.explorerUrl}tx/`
-  const CHILD_CHAIN_ADDRESS_PREFIX = `${childChain.explorerUrl}address/`
-
-  return {
-    PARENT_CHAIN_TX_PREFIX,
-    PARENT_CHAIN_ADDRESS_PREFIX,
-    CHILD_CHAIN_TX_PREFIX,
-    CHILD_CHAIN_ADDRESS_PREFIX,
   }
 }
 

@@ -8,8 +8,9 @@ import {
   DEFAULT_TIMESPAN_SECONDS,
   DEFAULT_BATCH_POSTING_DELAY_SECONDS,
 } from './chains'
-import { BatchPosterMonitorOptions, ChainInfo } from './types'
+import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
+import { ChildNetwork as ChainInfo, getExplorerUrlPrefixes } from '../utils'
 
 // Parsing command line arguments using yargs
 const options: BatchPosterMonitorOptions = yargs(process.argv.slice(2))
@@ -30,7 +31,7 @@ const configFileContent = fs.readFileSync(
 const config = JSON.parse(configFileContent)
 
 // Check if chains array is present in the config file
-if (!Array.isArray(config.chains) || config?.chains?.length === 0) {
+if (!Array.isArray(config.childChains) || config?.childChains?.length === 0) {
   console.error('Error: Chains not found in the config file.')
   process.exit(1)
 }
@@ -92,19 +93,19 @@ const sequencerBatchDeliveredEventAbi: AbiEvent = {
 }
 
 const displaySummaryInformation = (
-  childChainChainInformation: ChainInfo,
+  childChainInformation: ChainInfo,
   latestBatchPostedBlockNumber: bigint,
   latestBatchPostedSecondsAgo: bigint,
   latestChildChainBlockNumber: bigint,
   batchPosterBacklogSize: bigint
 ) => {
   console.log('**********')
-  console.log(`Batch poster summary of [${childChainChainInformation.name}]`)
+  console.log(`Batch poster summary of [${childChainInformation.name}]`)
   console.log(
-    `Latest block number on [${childChainChainInformation.name}] is ${latestChildChainBlockNumber}.`
+    `Latest block number on [${childChainInformation.name}] is ${latestChildChainBlockNumber}.`
   )
   console.log(
-    `Latest batch posted on [Parent chain id: ${childChainChainInformation.parentChainId}] is ${latestBatchPostedBlockNumber}, ${latestBatchPostedSecondsAgo} seconds ago.`
+    `Latest batch posted on [Parent chain id: ${childChainInformation.partnerChainID}] is ${latestBatchPostedBlockNumber}, ${latestBatchPostedSecondsAgo} seconds ago.`
   )
 
   console.log(`Batch poster backlog is ${batchPosterBacklogSize} blocks.`)
@@ -112,28 +113,37 @@ const displaySummaryInformation = (
   console.log('')
 }
 
-const showAlert = (childChainChainInformation: ChainInfo, reason: string) => {
-  console.log(`Alert on ${childChainChainInformation.name}`)
+const showAlert = (childChainInformation: ChainInfo, reason: string) => {
+  const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(
+    childChainInformation
+  )
+
+  console.log(`Alert on ${childChainInformation.name}`)
   console.log('--------------------------------------')
   console.log(reason)
   console.log(
-    `SequencerInbox located at ${childChainChainInformation.sequencerInbox} on chain ${childChainChainInformation.parentChainId}`
+    `SequencerInbox located at <${
+      PARENT_CHAIN_ADDRESS_PREFIX +
+      childChainInformation.ethBridge.sequencerInbox
+    }|${childChainInformation.ethBridge.sequencerInbox}> on [chain id ${
+      childChainInformation.partnerChainID
+    }]`
   )
   console.log('--------------------------------------')
   console.log('')
 
   if (options.enableAlerting) {
     reportBatchPosterErrorToSlack({
-      message: `Alert on ${childChainChainInformation.name}: ${reason}`,
+      message: `Alert on ${childChainInformation.name}: ${reason}`,
     })
   }
 }
 
-const monitorBatchPoster = async (childChainChainInformation: ChainInfo) => {
-  const parentChain = getChainFromId(childChainChainInformation.parentChainId)
-  const childChainChain = defineChain({
-    id: childChainChainInformation.chainId,
-    name: childChainChainInformation.name,
+const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
+  const parentChain = getChainFromId(childChainInformation.partnerChainID)
+  const childChain = defineChain({
+    id: childChainInformation.chainID,
+    name: childChainInformation.name,
     network: 'childChain',
     nativeCurrency: {
       name: 'ETH',
@@ -142,10 +152,10 @@ const monitorBatchPoster = async (childChainChainInformation: ChainInfo) => {
     },
     rpcUrls: {
       default: {
-        http: [childChainChainInformation.rpc],
+        http: [childChainInformation.orbitRpcUrl],
       },
       public: {
-        http: [childChainChainInformation.rpc],
+        http: [childChainInformation.orbitRpcUrl],
       },
     },
   })
@@ -154,34 +164,58 @@ const monitorBatchPoster = async (childChainChainInformation: ChainInfo) => {
     chain: parentChain,
     transport: http(),
   })
-  const childChainChainClient = createPublicClient({
-    chain: childChainChain,
+  const childChainClient = createPublicClient({
+    chain: childChain,
     transport: http(),
   })
 
   // Getting sequencer inbox logs
   const latestBlockNumber = await parentChainClient.getBlockNumber()
-  const sequencerInboxLogs = await parentChainClient.getLogs({
-    address: childChainChainInformation.sequencerInbox,
-    event: sequencerBatchDeliveredEventAbi,
-    fromBlock: latestBlockNumber - getDefaultBlockRange(parentChain),
-    toBlock: latestBlockNumber,
-  })
+
+  const blocksToProcess = getDefaultBlockRange(parentChain)
+  const toBlock = latestBlockNumber
+  const fromBlock = toBlock - blocksToProcess
+
+  // if the block range provided is >=MAX_BLOCKS_TO_PROCESS, we might get rate limited while fetching logs from the node
+  // so we break down the range into smaller chunks and process them sequentially
+  // generate the final ranges' batches to process [ [fromBlock, toBlock], [fromBlock, toBlock], ...]
+  const ranges = [],
+    fromBlockNum = Number(fromBlock.toString()),
+    toBlockNum = Number(toBlock.toString())
+
+  const MAX_BLOCKS_TO_PROCESS =
+    childChainInformation.partnerChainID === 1 ? 800 : 500000 // for Ethereum, have lower block range to avoid rate limiting
+
+  for (let i = fromBlockNum; i <= toBlockNum; i += MAX_BLOCKS_TO_PROCESS) {
+    ranges.push([i, Math.min(i + MAX_BLOCKS_TO_PROCESS - 1, toBlockNum)])
+  }
+  const sequencerInboxLogsArray = []
+  for (const range of ranges) {
+    const logs = await parentChainClient.getLogs({
+      address: childChainInformation.ethBridge.sequencerInbox as `0x${string}`,
+      event: sequencerBatchDeliveredEventAbi,
+      fromBlock: BigInt(range[0]),
+      toBlock: BigInt(range[1]),
+    })
+    sequencerInboxLogsArray.push(logs)
+  }
+
+  // Flatten the array of arrays to get final array of logs
+  const sequencerInboxLogs = sequencerInboxLogsArray.flat()
 
   // Get the last block of the chain
-  const latestChildChainBlockNumber =
-    await childChainChainClient.getBlockNumber()
+  const latestChildChainBlockNumber = await childChainClient.getBlockNumber()
 
-  if (!sequencerInboxLogs) {
+  if (!sequencerInboxLogs || sequencerInboxLogs.length === 0) {
     // No SequencerInboxLog in the last 12 hours (time hardcoded in getDefaultBlockRange)
     // We compare the "latest" and "safe" blocks
     // NOTE: another way of verifying this might be to check the timestamp of the last block in the childChain chain to verify more or less if it should have been posted
-    const latestChildChainSafeBlock = await childChainChainClient.getBlock({
+    const latestChildChainSafeBlock = await childChainClient.getBlock({
       blockTag: 'safe',
     })
     if (latestChildChainSafeBlock.number < latestChildChainBlockNumber) {
       showAlert(
-        childChainChainInformation,
+        childChainInformation,
         `No batch has been posted in the last ${
           DEFAULT_TIMESPAN_SECONDS / 60 / 60
         } hours, and last block number (${latestChildChainBlockNumber}) is greater than the last safe block number (${
@@ -205,7 +239,7 @@ const monitorBatchPoster = async (childChainChainInformation: ChainInfo) => {
 
   // Get last block that's part of a batch
   const lastBlockReported = await parentChainClient.readContract({
-    address: childChainChainInformation.bridge,
+    address: childChainInformation.ethBridge.bridge as `0x${string}`,
     abi: parseAbi([
       'function sequencerReportedSubMessageCount() view returns (uint256)',
     ]),
@@ -222,16 +256,18 @@ const monitorBatchPoster = async (childChainChainInformation: ChainInfo) => {
     secondsSinceLastBatchPoster > DEFAULT_BATCH_POSTING_DELAY_SECONDS
   ) {
     showAlert(
-      childChainChainInformation,
+      childChainInformation,
       `Last batch was posted ${
         secondsSinceLastBatchPoster / 60n / 60n
-      } hours ago, and there's a backlog of ${batchPosterBacklog} blocks in the chain`
+      } hours and ${
+        (secondsSinceLastBatchPoster / 60n) % 60n
+      } mins ago, and there's a backlog of ${batchPosterBacklog} blocks in the chain`
     )
     return
   }
 
   displaySummaryInformation(
-    childChainChainInformation,
+    childChainInformation,
     lastSequencerInboxBlock.number,
     secondsSinceLastBatchPoster,
     latestChildChainBlockNumber,
@@ -243,18 +279,28 @@ const main = async () => {
   // log the chains being processed for better debugging in github actions
   console.log(
     '>>>>>> Processing chains: ',
-    config.chains.map((chainInformation: ChainInfo) => ({
+    config.childChains.map((chainInformation: ChainInfo) => ({
       name: chainInformation.name,
-      chainID: chainInformation.chainId,
-      rpc: chainInformation.rpc,
+      chainID: chainInformation.chainID,
+      rpc: chainInformation.orbitRpcUrl,
     }))
   )
 
-  await Promise.all(
-    config.chains.map(async (chainInformation: ChainInfo) => {
-      await monitorBatchPoster(chainInformation)
-    })
-  )
+  // process each chain sequentially to avoid RPC rate limiting
+  for (const childChain of config.childChains) {
+    try {
+      console.log('>>>>> Processing chain: ', childChain.name)
+      await monitorBatchPoster(childChain)
+    } catch (e) {
+      const errorStr = `Batch poster monitor - Error processing chain [${childChain.name}]: ${e.message}`
+      if (options.enableAlerting) {
+        reportBatchPosterErrorToSlack({
+          message: errorStr,
+        })
+      }
+      console.error(errorStr)
+    }
+  }
 }
 
 main()

@@ -30,11 +30,11 @@ import { getExplorerUrlPrefixes, reportFailedTicket } from './reportRetryables'
 import { reportRetryableErrorToSlack } from './reportRetryableErrorToSlack'
 import {
   ChildChainTicketReport,
-  ChildNetwork,
   FindRetryablesOptions,
   ParentChainTicketReport,
   TokenDepositData,
 } from './types'
+import { ChildNetwork } from '../utils/types'
 
 // Path for the log file
 const logFilePath = 'logfile.log'
