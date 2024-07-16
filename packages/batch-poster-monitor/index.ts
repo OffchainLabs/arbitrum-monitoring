@@ -127,20 +127,18 @@ const showAlert = (childChainInformation: ChainInfo, reason: string) => {
   console.log(`Alert on ${childChainInformation.name}`)
   console.log('--------------------------------------')
   console.log(reason)
-  console.log(
-    `SequencerInbox located at <${
-      PARENT_CHAIN_ADDRESS_PREFIX +
-      childChainInformation.ethBridge.sequencerInbox
-    }|${childChainInformation.ethBridge.sequencerInbox}> on [chain id ${
-      childChainInformation.partnerChainID
-    }]`
-  )
+  const sequencerInboxInformation = `To inspect further - SequencerInbox located at <${
+    PARENT_CHAIN_ADDRESS_PREFIX + childChainInformation.ethBridge.sequencerInbox
+  }|${childChainInformation.ethBridge.sequencerInbox}> on [chain id ${
+    childChainInformation.partnerChainID
+  }]`
+  console.log(sequencerInboxInformation)
   console.log('--------------------------------------')
   console.log('')
 
   if (options.enableAlerting) {
     reportBatchPosterErrorToSlack({
-      message: `Alert on ${childChainInformation.name}: ${reason}`,
+      message: `Batch Posting alert on [${childChainInformation.name}]:\n${reason} \n${sequencerInboxInformation}`,
     })
   }
 }
