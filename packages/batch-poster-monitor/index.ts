@@ -217,11 +217,11 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
 
   const parentChainClient = createPublicClient({
     chain: parentChain,
-    transport: http(parentChain.rpcUrls.default.http[0]),
+    transport: http(childChainInformation.parentRpcUrl),
   })
   const childChainClient = createPublicClient({
     chain: childChain,
-    transport: http(childChain.rpcUrls.default.http[0]),
+    transport: http(childChainInformation.orbitRpcUrl),
   })
 
   // First, a basic check to get batch poster balance
