@@ -106,7 +106,7 @@ const displaySummaryInformation = (
   )
   console.log(
     `Latest batch posted on [Parent chain id: ${
-      childChainInformation.partnerChainID
+      childChainInformation.parentChainId
     }] is ${latestBatchPostedBlockNumber} => ${
       latestBatchPostedSecondsAgo / 60n / 60n
     } hours, ${(latestBatchPostedSecondsAgo / 60n) % 60n} minutes, ${
@@ -130,7 +130,7 @@ const showAlert = (childChainInformation: ChainInfo, reason: string) => {
   const sequencerInboxInformation = `To inspect further - SequencerInbox located at <${
     PARENT_CHAIN_ADDRESS_PREFIX + childChainInformation.ethBridge.sequencerInbox
   }|${childChainInformation.ethBridge.sequencerInbox}> on [chain id ${
-    childChainInformation.partnerChainID
+    childChainInformation.parentChainId
   }]`
   console.log(sequencerInboxInformation)
   console.log('--------------------------------------')
@@ -144,9 +144,9 @@ const showAlert = (childChainInformation: ChainInfo, reason: string) => {
 }
 
 const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
-  const parentChain = getChainFromId(childChainInformation.partnerChainID)
+  const parentChain = getChainFromId(childChainInformation.parentChainId)
   const childChain = defineChain({
-    id: childChainInformation.chainID,
+    id: childChainInformation.chainId,
     name: childChainInformation.name,
     network: 'childChain',
     nativeCurrency: {
@@ -188,7 +188,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     toBlockNum = Number(toBlock.toString())
 
   const MAX_BLOCKS_TO_PROCESS =
-    childChainInformation.partnerChainID === 1 ? 500 : 500000 // for Ethereum, have lower block range to avoid rate limiting
+    childChainInformation.parentChainId === 1 ? 500 : 500000 // for Ethereum, have lower block range to avoid rate limiting
 
   for (let i = fromBlockNum; i <= toBlockNum; i += MAX_BLOCKS_TO_PROCESS) {
     ranges.push([i, Math.min(i + MAX_BLOCKS_TO_PROCESS - 1, toBlockNum)])
@@ -286,7 +286,7 @@ const main = async () => {
     '>>>>>> Processing chains: ',
     config.childChains.map((chainInformation: ChainInfo) => ({
       name: chainInformation.name,
-      chainID: chainInformation.chainID,
+      chainID: chainInformation.chainId,
       rpc: chainInformation.orbitRpcUrl,
     }))
   )

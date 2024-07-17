@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { L1ToL2MessageStatus } from '@arbitrum/sdk'
+import { ParentToChildMessageStatus } from '@arbitrum/sdk'
 import { BigNumber, ethers, providers } from 'ethers'
 import { ArbGasInfo__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ArbGasInfo__factory'
 import {
@@ -119,13 +119,15 @@ const formatPrefix = (
 
   let prefix
   switch (ticket.status) {
-    case L1ToL2MessageStatus[L1ToL2MessageStatus.FUNDS_DEPOSITED_ON_L2]:
+    case ParentToChildMessageStatus[
+      ParentToChildMessageStatus.FUNDS_DEPOSITED_ON_CHILD
+    ]:
       prefix = `*[${childChainName}] Redeem failed for ticket:*`
       break
-    case L1ToL2MessageStatus[L1ToL2MessageStatus.EXPIRED]:
+    case ParentToChildMessageStatus[ParentToChildMessageStatus.EXPIRED]:
       prefix = `*[${childChainName}] Retryable ticket expired:*`
       break
-    case L1ToL2MessageStatus[L1ToL2MessageStatus.NOT_YET_CREATED]:
+    case ParentToChildMessageStatus[ParentToChildMessageStatus.NOT_YET_CREATED]:
       prefix = `*[${childChainName}] Retryable ticket hasn't been scheduled:*`
       break
     default:

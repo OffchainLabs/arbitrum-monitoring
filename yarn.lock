@@ -41,10 +41,10 @@
   optionalDependencies:
     sol2uml "2.2.0"
 
-"@arbitrum/sdk@^3.4.1":
-  version "3.4.1"
-  resolved "https://registry.npmjs.org/@arbitrum/sdk/-/sdk-3.4.1.tgz"
-  integrity sha512-NNGef0Enuf2DDV0IO0FHEClRCJohof6KgHH+vVU5hFYwssxV+Tc/yVoGYbttfGX1Ea6yYjA3HjiUSXPvQJ7xQg==
+"@arbitrum/sdk@^4.0.0-alpha.10":
+  version "4.0.0-alpha.10"
+  resolved "https://registry.yarnpkg.com/@arbitrum/sdk/-/sdk-4.0.0-alpha.10.tgz#821e321e3916f34d0b061b7705e07bd90c64468d"
+  integrity sha512-s/DKz83uJVWWBFm5zN/ygZHNcT89cRZtjd5bao+Ibia6VnlE26eNzAXaDmtgXINCP9z0AoouXQEUBFjrlsY4DA==
   dependencies:
     "@ethersproject/address" "^5.0.8"
     "@ethersproject/bignumber" "^5.1.1"
