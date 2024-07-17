@@ -2,7 +2,6 @@ import * as fs from 'fs'
 import * as path from 'path'
 import yargs from 'yargs'
 import {
-  AbiEvent,
   PublicClient,
   createPublicClient,
   defineChain,
@@ -10,6 +9,7 @@ import {
   http,
   parseAbi,
 } from 'viem'
+import { AbiEvent } from 'abitype'
 import { getBatchPosters } from '@arbitrum/orbit-sdk'
 import {
   getChainFromId,
