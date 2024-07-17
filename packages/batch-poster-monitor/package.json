@@ -10,6 +10,9 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5",
     "utils": "*",
-    "viem": "^2.17.4"
+    "viem": "^2.13.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.1"
   }
 }
