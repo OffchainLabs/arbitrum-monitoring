@@ -3,10 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
-    "lint": "eslint .",
-    "build": "rm -rf ./dist && tsc",
-    "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "dev": "yarn build && node ./dist/batch-poster-monitor/index.js"
+    "dev": "ts-node index.ts"
   },
   "dependencies": {
     "@arbitrum/orbit-sdk": "^0.17.0",
