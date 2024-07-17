@@ -36,10 +36,10 @@
   optionalDependencies:
     sol2uml "2.2.0"
 
-"@arbitrum/sdk@^4.0.0-alpha.10":
-  version "4.0.0-alpha.10"
-  resolved "https://registry.yarnpkg.com/@arbitrum/sdk/-/sdk-4.0.0-alpha.10.tgz#821e321e3916f34d0b061b7705e07bd90c64468d"
-  integrity sha512-s/DKz83uJVWWBFm5zN/ygZHNcT89cRZtjd5bao+Ibia6VnlE26eNzAXaDmtgXINCP9z0AoouXQEUBFjrlsY4DA==
+"@arbitrum/sdk@^4.0.0":
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/@arbitrum/sdk/-/sdk-4.0.0.tgz#8eb2deed1a438250acb4084a4bb8fc7eae7659b6"
+  integrity sha512-wNZFRs4yYxd6Pyc6xEjksp3C59PikmmVPIw49ceMoLY5D0e6xJt2nuA7jjsemDgRe7q6EvLFvHAY2At6XUWrkg==
   dependencies:
     "@ethersproject/address" "^5.0.8"
     "@ethersproject/bignumber" "^5.1.1"
