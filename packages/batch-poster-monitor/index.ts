@@ -16,7 +16,8 @@ import {
   getDefaultBlockRange,
   DEFAULT_TIMESPAN_SECONDS,
   DEFAULT_BATCH_POSTING_DELAY_SECONDS,
-  LOW_ETH_BALANCE_THRESHOLD_FOR_ERROR,
+  LOW_ETH_BALANCE_THRESHOLD_ETHEREUM,
+  LOW_ETH_BALANCE_THRESHOLD_ARBITRUM,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
@@ -129,6 +130,8 @@ const displaySummaryInformation = (
   console.log('')
 }
 
+const allBatchedAlertsContent: string[] = []
+
 const showAlert = (childChainInformation: ChainInfo, reasons: string[]) => {
   const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(
     childChainInformation
@@ -153,11 +156,9 @@ const showAlert = (childChainInformation: ChainInfo, reasons: string[]) => {
   console.log(`• ${reasonsString}`)
   console.log('--------------------------------------')
   console.log('')
-  if (options.enableAlerting) {
-    reportBatchPosterErrorToSlack({
-      message: `Batch Posting alert on [${childChainInformation.name}]:\n• ${reasonsString}`,
-    })
-  }
+  allBatchedAlertsContent.push(
+    `[${childChainInformation.name}]:\n• ${reasonsString}`
+  )
 }
 
 const getBatchPosterLowBalanceAlertMessage = async (
@@ -180,7 +181,13 @@ const getBatchPosterLowBalanceAlertMessage = async (
     address: batchPoster,
   })
 
-  if (balance < BigInt(LOW_ETH_BALANCE_THRESHOLD_FOR_ERROR * 1e18)) {
+  const lowBalanceDetected =
+    (childChainInformation.parentChainId === 1 &&
+      balance < BigInt(LOW_ETH_BALANCE_THRESHOLD_ETHEREUM * 1e18)) ||
+    (childChainInformation.parentChainId !== 1 &&
+      balance < BigInt(LOW_ETH_BALANCE_THRESHOLD_ARBITRUM * 1e18))
+
+  if (lowBalanceDetected) {
     const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(
       childChainInformation
     )
@@ -370,6 +377,17 @@ const main = async () => {
       }
       console.error(errorStr)
     }
+  }
+
+  if (options.enableAlerting && allBatchedAlertsContent.length > 0) {
+    const finalMessage = `Batch poster monitor summary \n\n${allBatchedAlertsContent.join(
+      '\n--------------------------------------\n'
+    )}`
+
+    console.log(finalMessage)
+    reportBatchPosterErrorToSlack({
+      message: finalMessage,
+    })
   }
 }
 
