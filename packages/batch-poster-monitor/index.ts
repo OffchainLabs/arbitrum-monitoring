@@ -164,6 +164,7 @@ const getBatchPosterLowBalanceAlertMessage = async (
   parentChainClient: PublicClient,
   childChainInformation: ChainInfo
 ) => {
+  //@ts-ignore - PublicClient that we pass vs PublicClient that orbit-sdk expects is not matching
   const { batchPosters } = await getBatchPosters(parentChainClient, {
     rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
     sequencerInbox: childChainInformation.ethBridge
