@@ -13,6 +13,7 @@ import {
 // Defaults
 export const DEFAULT_TIMESPAN_SECONDS = 60 * 60 * 12 // 12 hours
 export const DEFAULT_BATCH_POSTING_DELAY_SECONDS = 60 * 60 * 4 // 4 hours
+export const LOW_ETH_BALANCE_THRESHOLD_FOR_ERROR = 0.2
 
 export const supportedParentChains = [
   mainnet,

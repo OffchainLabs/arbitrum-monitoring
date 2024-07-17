@@ -6,12 +6,13 @@
     "dev": "ts-node index.ts"
   },
   "dependencies": {
-    "utils": "*",
+    "@arbitrum/orbit-sdk": "^0.17.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5",
-    "viem": "^2.13.5"
+    "utils": "*"
   },
   "devDependencies": {
-    "@types/node": "^20.14.1"
+    "@types/node": "^20.14.1",
+    "viem": "^2.13.5"
   }
 }

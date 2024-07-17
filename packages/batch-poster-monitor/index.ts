@@ -1,12 +1,22 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import yargs from 'yargs'
-import { AbiEvent, createPublicClient, defineChain, http, parseAbi } from 'viem'
+import {
+  AbiEvent,
+  PublicClient,
+  createPublicClient,
+  defineChain,
+  formatEther,
+  http,
+  parseAbi,
+} from 'viem'
+import { getBatchPosters } from '@arbitrum/orbit-sdk'
 import {
   getChainFromId,
   getDefaultBlockRange,
   DEFAULT_TIMESPAN_SECONDS,
   DEFAULT_BATCH_POSTING_DELAY_SECONDS,
+  LOW_ETH_BALANCE_THRESHOLD_FOR_ERROR,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
@@ -119,31 +129,71 @@ const displaySummaryInformation = (
   console.log('')
 }
 
-const showAlert = (childChainInformation: ChainInfo, reason: string) => {
+const showAlert = (childChainInformation: ChainInfo, reasons: string[]) => {
   const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(
     childChainInformation
   )
 
-  console.log(`Alert on ${childChainInformation.name}`)
-  console.log('--------------------------------------')
-  console.log(reason)
-  const sequencerInboxInformation = `To inspect further - SequencerInbox located at <${
-    PARENT_CHAIN_ADDRESS_PREFIX + childChainInformation.ethBridge.sequencerInbox
-  }|${childChainInformation.ethBridge.sequencerInbox}> on [chain id ${
-    childChainInformation.parentChainId
-  }]`
-  console.log(sequencerInboxInformation)
+  reasons
+    .reverse()
+    .push(
+      `SequencerInbox located at <${
+        PARENT_CHAIN_ADDRESS_PREFIX +
+        childChainInformation.ethBridge.sequencerInbox
+      }|${childChainInformation.ethBridge.sequencerInbox}> on [chain id ${
+        childChainInformation.parentChainId
+      }]`
+    )
+
+  const reasonsString = reasons
+    .filter(reason => !!reason.trim().length)
+    .join('\n• ')
+
+  console.log(`Alert on ${childChainInformation.name}:`)
+  console.log(`• ${reasonsString}`)
   console.log('--------------------------------------')
   console.log('')
-
   if (options.enableAlerting) {
     reportBatchPosterErrorToSlack({
-      message: `Batch Posting alert on [${childChainInformation.name}]:\n${reason} \n${sequencerInboxInformation}`,
+      message: `Batch Posting alert on [${childChainInformation.name}]:\n• ${reasonsString}`,
     })
   }
 }
 
+const getBatchPosterLowBalanceAlertMessage = async (
+  parentChainClient: PublicClient,
+  childChainInformation: ChainInfo
+) => {
+  const { batchPosters } = await getBatchPosters(parentChainClient, {
+    rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
+    sequencerInbox: childChainInformation.ethBridge
+      .sequencerInbox as `0x${string}`,
+  })
+  if (!batchPosters || batchPosters.length === 0) {
+    return `Batch poster information not found`
+  }
+
+  const batchPoster = batchPosters[0]
+
+  const balance = await parentChainClient.getBalance({
+    address: batchPoster,
+  })
+
+  if (balance < BigInt(LOW_ETH_BALANCE_THRESHOLD_FOR_ERROR * 1e18)) {
+    const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(
+      childChainInformation
+    )
+    return `Low Batch poster balance (<${
+      PARENT_CHAIN_ADDRESS_PREFIX + batchPoster
+    }|${batchPoster}>): ${formatEther(balance)} ETH`
+  }
+
+  return null
+}
+
 const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
+  const alertsForChildChain: string[] = []
+
   const parentChain = getChainFromId(childChainInformation.parentChainId)
   const childChain = defineChain({
     id: childChainInformation.chainId,
@@ -172,6 +222,16 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     chain: childChain,
     transport: http(),
   })
+
+  // First, a basic check to get batch poster balance
+  const batchPosterLowBalanceMessage =
+    await getBatchPosterLowBalanceAlertMessage(
+      parentChainClient,
+      childChainInformation
+    )
+  if (batchPosterLowBalanceMessage) {
+    alertsForChildChain.push(batchPosterLowBalanceMessage)
+  }
 
   // Getting sequencer inbox logs
   const latestBlockNumber = await parentChainClient.getBlockNumber()
@@ -219,14 +279,15 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
       blockTag: 'safe',
     })
     if (latestChildChainSafeBlock.number < latestChildChainBlockNumber) {
-      showAlert(
-        childChainInformation,
+      alertsForChildChain.push(
         `No batch has been posted in the last ${
           DEFAULT_TIMESPAN_SECONDS / 60 / 60
         } hours, and last block number (${latestChildChainBlockNumber}) is greater than the last safe block number (${
           latestChildChainSafeBlock.number
         })`
       )
+
+      showAlert(childChainInformation, alertsForChildChain)
       return
     }
   }
@@ -260,14 +321,17 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     batchPosterBacklog > 0 &&
     secondsSinceLastBatchPoster > DEFAULT_BATCH_POSTING_DELAY_SECONDS
   ) {
-    showAlert(
-      childChainInformation,
+    alertsForChildChain.push(
       `Last batch was posted ${
         secondsSinceLastBatchPoster / 60n / 60n
       } hours and ${
         (secondsSinceLastBatchPoster / 60n) % 60n
       } mins ago, and there's a backlog of ${batchPosterBacklog} blocks in the chain`
     )
+  }
+
+  if (alertsForChildChain.length > 0) {
+    showAlert(childChainInformation, alertsForChildChain)
     return
   }
 

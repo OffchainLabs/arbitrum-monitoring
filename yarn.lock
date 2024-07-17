@@ -17,6 +17,16 @@
   resolved "https://registry.npmjs.org/@aduh95/viz.js/-/viz.js-3.7.0.tgz"
   integrity sha512-20Pk2Z98fbPLkECcrZSJszKos/OgtvJJR3NcbVfgCJ6EQjDNzW2P1BKqImOz3tJ952dvO2DWEhcLhQ1Wz1e9ng==
 
+"@arbitrum/nitro-contracts@1.1.1":
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/@arbitrum/nitro-contracts/-/nitro-contracts-1.1.1.tgz#2d8a2f9ab757bb7654562aebe435bff833c4b98d"
+  integrity sha512-4Tyk3XVHz+bm8UujUC78LYSw3xAxyYvBCxfEX4z3qE4/ww7Qck/rmce5gbHMzQjArEAzAP2YSfYIFuIFuRXtfg==
+  dependencies:
+    "@offchainlabs/upgrade-executor" "1.1.0-beta.0"
+    "@openzeppelin/contracts" "4.5.0"
+    "@openzeppelin/contracts-upgradeable" "4.5.2"
+    patch-package "^6.4.7"
+
 "@arbitrum/nitro-contracts@^1.0.0-beta.8":
   version "1.1.0"
   resolved "https://registry.npmjs.org/@arbitrum/nitro-contracts/-/nitro-contracts-1.1.0.tgz"
@@ -41,6 +51,15 @@
   optionalDependencies:
     sol2uml "2.2.0"
 
+"@arbitrum/orbit-sdk@^0.17.0":
+  version "0.17.0"
+  resolved "https://registry.yarnpkg.com/@arbitrum/orbit-sdk/-/orbit-sdk-0.17.0.tgz#948d00d8eae1bea6166e0b8f089da78908d201a2"
+  integrity sha512-QoALfyoeW3tk4pO3PGl/SJ04K8Dpt/Y3JcgCslZYO/rSPllrAgGVjRRgUTQ13ltRLW7ZGNud4wQGjPs/hKxWlQ==
+  dependencies:
+    "@arbitrum/sdk" "^4.0.0-alpha.4"
+    "@arbitrum/token-bridge-contracts" "^1.2.1"
+    ethers "^5.7.2"
+
 "@arbitrum/sdk@^4.0.0-alpha.10":
   version "4.0.0-alpha.10"
   resolved "https://registry.yarnpkg.com/@arbitrum/sdk/-/sdk-4.0.0-alpha.10.tgz#821e321e3916f34d0b061b7705e07bd90c64468d"
@@ -51,6 +70,29 @@
     "@ethersproject/bytes" "^5.0.8"
     async-mutex "^0.4.0"
     ethers "^5.1.0"
+
+"@arbitrum/sdk@^4.0.0-alpha.4":
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/@arbitrum/sdk/-/sdk-4.0.0.tgz#8eb2deed1a438250acb4084a4bb8fc7eae7659b6"
+  integrity sha512-wNZFRs4yYxd6Pyc6xEjksp3C59PikmmVPIw49ceMoLY5D0e6xJt2nuA7jjsemDgRe7q6EvLFvHAY2At6XUWrkg==
+  dependencies:
+    "@ethersproject/address" "^5.0.8"
+    "@ethersproject/bignumber" "^5.1.1"
+    "@ethersproject/bytes" "^5.0.8"
+    async-mutex "^0.4.0"
+    ethers "^5.1.0"
+
+"@arbitrum/token-bridge-contracts@^1.2.1":
+  version "1.2.1"
+  resolved "https://registry.yarnpkg.com/@arbitrum/token-bridge-contracts/-/token-bridge-contracts-1.2.1.tgz#4838d70182bc0d6b36adfd733d7b4650e596c979"
+  integrity sha512-ngKeay/0O91QyVLCbcd2pyJIWtzKi2KsPm+O9q3xCfPkjuCZ0+MK5OdhYKCbvGc0jf39R7izRsvmUHE0qA603A==
+  dependencies:
+    "@arbitrum/nitro-contracts" "1.1.1"
+    "@offchainlabs/upgrade-executor" "1.1.0-beta.0"
+    "@openzeppelin/contracts" "4.8.3"
+    "@openzeppelin/contracts-upgradeable" "4.8.3"
+  optionalDependencies:
+    "@openzeppelin/upgrades-core" "^1.24.1"
 
 "@arbitrum/token-bridge-contracts@v1.1.0-beta.2":
   version "1.1.0-beta.2"
@@ -1634,7 +1676,7 @@ ethereumjs-util@^7.0.3:
     ethereum-cryptography "^0.1.3"
     rlp "^2.2.4"
 
-ethers@^5.1.0, ethers@^5.5.4, ethers@^5.6.9:
+ethers@^5.1.0, ethers@^5.5.4, ethers@^5.6.9, ethers@^5.7.2:
   version "5.7.2"
   resolved "https://registry.npmjs.org/ethers/-/ethers-5.7.2.tgz"
   integrity sha512-wswUsmWo1aOK8rR7DIKiWSw9DbLWe6x98Jrn8wcTflTVvaXhAMaB5zGAXy0GYQEQp9iO1iSHWVyARQm11zUtyg==
