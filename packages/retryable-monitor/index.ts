@@ -435,6 +435,19 @@ const processChildChain = async (
                   retryableMessage.retryableCreationId
                 )
 
+              if (!childChainTxReceipt) {
+                // if child-chain tx is very recent, the tx receipt might not be found yet
+                // if not handled, this will result in `undefined` error while trying to extract retryable details
+                const resultMessage = `${msgIndex + 1}. ${
+                  ParentToChildMessageStatus[status]
+                }:\nChildChainTxHash: ${
+                  CHILD_CHAIN_TX_PREFIX + retryableTicketId
+                } (Receipt not found yet)`
+                logResult(childChain.name, resultMessage)
+
+                return false
+              }
+
               const parentChainTicketReport = getParentChainTicketReport(
                 arbParentTxReceipt,
                 retryableMessage
