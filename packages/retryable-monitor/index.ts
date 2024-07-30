@@ -445,7 +445,7 @@ const processChildChain = async (
                 } (Receipt not found yet)`
                 logResult(childChain.name, resultMessage)
 
-                return false
+                continue
               }
 
               const parentChainTicketReport = getParentChainTicketReport(
