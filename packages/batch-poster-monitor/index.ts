@@ -385,7 +385,7 @@ const main = async () => {
     )}`
 
     console.log(finalMessage)
-    reportBatchPosterErrorToSlack({
+    await reportBatchPosterErrorToSlack({
       message: finalMessage,
     })
   }

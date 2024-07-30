@@ -17,7 +17,9 @@ export const reportBatchPosterErrorToSlack = ({
   if (process.env.NODE_ENV === 'DEV') return
   if (process.env.NODE_ENV === 'CI' && message === 'success') return
 
-  postSlackMessage({
+  console.log(`>>> Reporting message to Slack -> ${message}`)
+
+  return postSlackMessage({
     slackToken,
     slackChannel,
     message,
