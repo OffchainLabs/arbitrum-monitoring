@@ -12,8 +12,7 @@
     "graphql": "^16.6.0",
     "graphql-request": "^6.1.0",
     "utils": "*",
-    "winston": "^3.3.3",
-    "yargs": "^17.5.1"
+    "winston": "^3.3.3"
   },
   "scripts": {
     "lint": "eslint .",

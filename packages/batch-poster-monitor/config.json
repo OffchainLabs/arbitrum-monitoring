@@ -49,7 +49,7 @@
         }
       },
       "orbitRpcUrl": "https://mainnet.sanko.xyz",
-      "parentRpcUrl": "https://arbitrum-mainnet.infura.io/v3/76e00fd3e22e410e9bc0885920c9e00b",
+      "parentRpcUrl": "https://arbitrum-mainnet.infura.io/v3/undefined",
       "parentExplorerUrl": "https://arbiscan.io/"
     },
     {
@@ -94,7 +94,7 @@
         }
       },
       "orbitRpcUrl": "https://muster.alt.technology",
-      "parentRpcUrl": "https://arbitrum-mainnet.infura.io/v3/76e00fd3e22e410e9bc0885920c9e00b",
+      "parentRpcUrl": "https://arbitrum-mainnet.infura.io/v3/undefined",
       "parentExplorerUrl": "https://arbiscan.io/"
     },
     {
@@ -139,7 +139,7 @@
         }
       },
       "orbitRpcUrl": "https://rpc-mainnet.l3x.com",
-      "parentRpcUrl": "https://arbitrum-mainnet.infura.io/v3/76e00fd3e22e410e9bc0885920c9e00b",
+      "parentRpcUrl": "https://arbitrum-mainnet.infura.io/v3/undefined",
       "parentExplorerUrl": "https://arbiscan.io/"
     },
     {
@@ -190,7 +190,7 @@
         }
       },
       "orbitRpcUrl": "https://rpc.pmon.xyz",
-      "parentRpcUrl": "https://arbitrum-mainnet.infura.io/v3/76e00fd3e22e410e9bc0885920c9e00b",
+      "parentRpcUrl": "https://arbitrum-mainnet.infura.io/v3/undefined",
       "parentExplorerUrl": "https://arbiscan.io/"
     },
     {
@@ -234,7 +234,7 @@
         }
       },
       "orbitRpcUrl": "https://rpc.apex.proofofplay.com",
-      "parentRpcUrl": "https://arbitrum-mainnet.infura.io/v3/76e00fd3e22e410e9bc0885920c9e00b",
+      "parentRpcUrl": "https://arbitrum-mainnet.infura.io/v3/undefined",
       "parentExplorerUrl": "https://arbiscan.io/"
     },
     {
@@ -279,7 +279,7 @@
         }
       },
       "orbitRpcUrl": "https://xchain-rpc.idex.io",
-      "parentRpcUrl": "https://mainnet.infura.io/v3/76e00fd3e22e410e9bc0885920c9e00b",
+      "parentRpcUrl": "https://mainnet.infura.io/v3/undefined",
       "parentExplorerUrl": "https://etherscan.io/"
     },
     {
@@ -331,7 +331,7 @@
         }
       },
       "orbitRpcUrl": "https://xai-chain.net/rpc",
-      "parentRpcUrl": "https://arbitrum-mainnet.infura.io/v3/76e00fd3e22e410e9bc0885920c9e00b",
+      "parentRpcUrl": "https://arbitrum-mainnet.infura.io/v3/undefined",
       "parentExplorerUrl": "https://arbiscan.io/"
     },
     {
@@ -376,7 +376,7 @@
         }
       },
       "orbitRpcUrl": "https://mainnet.rpc.rarichain.org/http",
-      "parentRpcUrl": "https://arbitrum-mainnet.infura.io/v3/76e00fd3e22e410e9bc0885920c9e00b",
+      "parentRpcUrl": "https://arbitrum-mainnet.infura.io/v3/undefined",
       "parentExplorerUrl": "https://arbiscan.io/"
     }
   ]
