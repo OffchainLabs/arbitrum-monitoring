@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import yargs from 'yargs'
 import {
+  Log,
   PublicClient,
   createPublicClient,
   defineChain,
@@ -161,23 +162,60 @@ const showAlert = (childChainInformation: ChainInfo, reasons: string[]) => {
   )
 }
 
+type EventLogs = Log<
+  bigint,
+  number,
+  false,
+  AbiEvent,
+  undefined,
+  [AbiEvent],
+  string
+>[]
+
+const getBatchPosterFromEventLogs = async (
+  eventLogs: EventLogs,
+  parentChainClient: PublicClient
+) => {
+  // get the batch-poster for the first event log
+  const batchPostingTransactionHash = eventLogs[0].transactionHash
+  const tx = await parentChainClient.getTransaction({
+    hash: batchPostingTransactionHash,
+  })
+  return tx.from
+}
+
 const getBatchPosterLowBalanceAlertMessage = async (
   parentChainClient: PublicClient,
-  childChainInformation: ChainInfo
+  childChainInformation: ChainInfo,
+  sequencerInboxLogs: EventLogs
 ) => {
-  if (childChainInformation.parentChainId === 1) return null // skip balance check for Ethereum batch poster till it's fixed in orbit-sdk (fetches logs from genesis)
+  let batchPoster: `0x${string}` | null = null
 
-  //@ts-ignore - PublicClient that we pass vs PublicClient that orbit-sdk expects is not matching
-  const { batchPosters } = await getBatchPosters(parentChainClient, {
-    rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
-    sequencerInbox: childChainInformation.ethBridge
-      .sequencerInbox as `0x${string}`,
-  })
-  if (!batchPosters || batchPosters.length === 0) {
-    return `Batch poster information not found`
+  // try fetching batch poster address from orbit-sdk
+  try {
+    //@ts-ignore - PublicClient that we pass vs PublicClient that orbit-sdk expects is not matching
+    const { batchPosters } = await getBatchPosters(parentChainClient, {
+      rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
+      sequencerInbox: childChainInformation.ethBridge
+        .sequencerInbox as `0x${string}`,
+    })
+
+    batchPoster = batchPosters[0] // get the first batch poster
+  } catch {
+    // else try fetching the batch poster from the event logs
+    try {
+      batchPoster = await getBatchPosterFromEventLogs(
+        sequencerInboxLogs,
+        parentChainClient
+      )
+    } catch {
+      // batchPoster not found by any means
+    }
   }
 
-  const batchPoster = batchPosters[0]
+  if (!batchPoster) {
+    return `Batch poster information not found`
+  }
 
   const balance = await parentChainClient.getBalance({
     address: batchPoster,
@@ -233,16 +271,6 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     transport: http(childChainInformation.orbitRpcUrl),
   })
 
-  // First, a basic check to get batch poster balance
-  const batchPosterLowBalanceMessage =
-    await getBatchPosterLowBalanceAlertMessage(
-      parentChainClient,
-      childChainInformation
-    )
-  if (batchPosterLowBalanceMessage) {
-    alertsForChildChain.push(batchPosterLowBalanceMessage)
-  }
-
   // Getting sequencer inbox logs
   const latestBlockNumber = await parentChainClient.getBlockNumber()
 
@@ -277,6 +305,17 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
 
   // Flatten the array of arrays to get final array of logs
   const sequencerInboxLogs = sequencerInboxLogsArray.flat()
+
+  // First, a basic check to get batch poster balance
+  const batchPosterLowBalanceMessage =
+    await getBatchPosterLowBalanceAlertMessage(
+      parentChainClient,
+      childChainInformation,
+      sequencerInboxLogs
+    )
+  if (batchPosterLowBalanceMessage) {
+    alertsForChildChain.push(batchPosterLowBalanceMessage)
+  }
 
   // Get the last block of the chain
   const latestChildChainBlockNumber = await childChainClient.getBlockNumber()
