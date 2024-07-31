@@ -210,11 +210,8 @@ const getBatchPosterLowBalanceAlertMessage = async (
       )
     } catch {
       // batchPoster not found by any means
+      return `Batch poster information not found`
     }
-  }
-
-  if (!batchPoster) {
-    return `Batch poster information not found`
   }
 
   const balance = await parentChainClient.getBalance({
