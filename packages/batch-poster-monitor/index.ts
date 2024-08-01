@@ -193,14 +193,21 @@ const getBatchPosterLowBalanceAlertMessage = async (
 
   // try fetching batch poster address from orbit-sdk
   try {
-    //@ts-ignore - PublicClient that we pass vs PublicClient that orbit-sdk expects is not matching
-    const { batchPosters } = await getBatchPosters(parentChainClient, {
-      rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
-      sequencerInbox: childChainInformation.ethBridge
-        .sequencerInbox as `0x${string}`,
-    })
+    const { batchPosters, isAccurate } = await getBatchPosters(
+      //@ts-ignore - PublicClient that we pass vs PublicClient that orbit-sdk expects is not matching
+      parentChainClient,
+      {
+        rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
+        sequencerInbox: childChainInformation.ethBridge
+          .sequencerInbox as `0x${string}`,
+      }
+    )
 
-    batchPoster = batchPosters[0] // get the first batch poster
+    if (isAccurate) {
+      batchPoster = batchPosters[0] // get the first batch poster
+    } else {
+      throw Error('Batch poster list is not accurate') // get the batch poster from the event logs in catch block
+    }
   } catch {
     // else try fetching the batch poster from the event logs
     try {
@@ -210,7 +217,7 @@ const getBatchPosterLowBalanceAlertMessage = async (
       )
     } catch {
       // batchPoster not found by any means
-      return `Batch poster information not found`
+      return 'Batch poster information not found'
     }
   }
 
