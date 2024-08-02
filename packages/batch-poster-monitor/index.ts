@@ -243,6 +243,30 @@ const getBatchPosterLowBalanceAlertMessage = async (
   return null
 }
 
+const checkForUserTransactionBlocks = async ({
+  fromBlock,
+  toBlock,
+  publicClient,
+}: {
+  fromBlock: number
+  toBlock: number
+  publicClient: PublicClient
+}) => {
+  const MINER_OF_USER_TX_BLOCKS = '0xa4b000000000000000000073657175656e636572' // this will be the miner address if a block contains user tx
+
+  let userTransactionBlockFound = false
+
+  for (let i = fromBlock; i <= toBlock; i++) {
+    const block = await publicClient.getBlock({ blockNumber: BigInt(i) })
+    if (block.miner === MINER_OF_USER_TX_BLOCKS) {
+      userTransactionBlockFound = true
+      break
+    }
+  }
+
+  return userTransactionBlockFound
+}
+
 const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   const alertsForChildChain: string[] = []
 
@@ -325,13 +349,24 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   const latestChildChainBlockNumber = await childChainClient.getBlockNumber()
 
   if (!sequencerInboxLogs || sequencerInboxLogs.length === 0) {
-    // No SequencerInboxLog in the last 12 hours (time hardcoded in getDefaultBlockRange)
-    // We compare the "latest" and "safe" blocks
+    // No SequencerInboxLog in the last 24 hours (time hardcoded in getDefaultBlockRange)
+    // We compare the "latest" and "safe" blocks, and check if any of th pending blocks contain any user-transactions
     // NOTE: another way of verifying this might be to check the timestamp of the last block in the childChain chain to verify more or less if it should have been posted
     const latestChildChainSafeBlock = await childChainClient.getBlock({
       blockTag: 'safe',
     })
-    if (latestChildChainSafeBlock.number < latestChildChainBlockNumber) {
+
+    const blocksPendingToBePosted =
+      latestChildChainSafeBlock.number < latestChildChainBlockNumber
+
+    const doPendingBlocksContainUserTransactions =
+      await checkForUserTransactionBlocks({
+        fromBlock: Number(latestChildChainSafeBlock.number.toString()) + 1, // start checking AFTER the latest 'safe' block
+        toBlock: Number(latestChildChainBlockNumber.toString()),
+        publicClient: childChainClient,
+      })
+
+    if (blocksPendingToBePosted && doPendingBlocksContainUserTransactions) {
       alertsForChildChain.push(
         `No batch has been posted in the last ${
           DEFAULT_TIMESPAN_SECONDS / 60 / 60
@@ -343,6 +378,17 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
       showAlert(childChainInformation, alertsForChildChain)
       return
     }
+
+    // if no alerting situation, just log the summary
+    console.log(
+      `**********\nBatch poster summary of [${childChainInformation.name}]`
+    )
+    console.log(
+      `No user activity in the last ${
+        DEFAULT_TIMESPAN_SECONDS / 60 / 60
+      } hours, and hence no batch has been posted.`
+    )
+    return
   }
 
   // Get the latest log
