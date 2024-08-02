@@ -361,8 +361,8 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
 
     const doPendingBlocksContainUserTransactions =
       await checkForUserTransactionBlocks({
-        fromBlock: Number(latestChildChainSafeBlock.number.toString()) + 1, // start checking AFTER the latest 'safe' block
-        toBlock: Number(latestChildChainBlockNumber.toString()),
+        fromBlock: Number(latestChildChainSafeBlock.number + 1n), // start checking AFTER the latest 'safe' block
+        toBlock: Number(latestChildChainBlockNumber),
         publicClient: childChainClient,
       })
 
