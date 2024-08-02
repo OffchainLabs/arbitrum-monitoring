@@ -11,7 +11,7 @@ import {
 } from 'viem/chains'
 
 // Defaults
-export const DEFAULT_TIMESPAN_SECONDS = 60 * 60 * 12 // 12 hours
+export const DEFAULT_TIMESPAN_SECONDS = 60 * 60 * 24 // 24 hours : we don't care about txs older than 24 hours
 export const DEFAULT_BATCH_POSTING_DELAY_SECONDS = 60 * 60 * 4 // 4 hours
 export const LOW_ETH_BALANCE_THRESHOLD_ETHEREUM = 1
 export const LOW_ETH_BALANCE_THRESHOLD_ARBITRUM = 0.1
