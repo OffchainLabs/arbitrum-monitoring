@@ -350,7 +350,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
 
   if (!sequencerInboxLogs || sequencerInboxLogs.length === 0) {
     // No SequencerInboxLog in the last 24 hours (time hardcoded in getDefaultBlockRange)
-    // We compare the "latest" and "safe" blocks, and check if any of th pending blocks contain any user-transactions
+    // We compare the "latest" and "safe" blocks, and check if any of the pending blocks contain any user-transactions
     // NOTE: another way of verifying this might be to check the timestamp of the last block in the childChain chain to verify more or less if it should have been posted
     const latestChildChainSafeBlock = await childChainClient.getBlock({
       blockTag: 'safe',
