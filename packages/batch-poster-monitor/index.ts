@@ -16,11 +16,11 @@ import {
   getChainFromId,
   LOW_ETH_BALANCE_THRESHOLD_ETHEREUM,
   LOW_ETH_BALANCE_THRESHOLD_ARBITRUM,
-  BATCH_POSTING_TIMEBOUNDS_FALLBACK,
   getMaxBlockRange,
   MAX_TIMEBOUNDS_SECONDS,
-  getParentChainBlockTimeForBatchPosting,
+  BATCH_POSTING_TIMEBOUNDS_FALLBACK,
   BATCH_POSTING_TIMEBOUNDS_BUFFER,
+  getParentChainBlockTimeForBatchPosting,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
