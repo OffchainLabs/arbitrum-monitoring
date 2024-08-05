@@ -14,11 +14,13 @@ import { AbiEvent } from 'abitype'
 import { getBatchPosters } from '@arbitrum/orbit-sdk'
 import {
   getChainFromId,
-  getDefaultBlockRange,
-  DEFAULT_TIMESPAN_SECONDS,
-  DEFAULT_BATCH_POSTING_DELAY_SECONDS,
   LOW_ETH_BALANCE_THRESHOLD_ETHEREUM,
   LOW_ETH_BALANCE_THRESHOLD_ARBITRUM,
+  BATCH_POSTING_TIMEBOUNDS_FALLBACK,
+  getMaxBlockRange,
+  MAX_TIMEBOUNDS_SECONDS,
+  getParentChainBlockTimeForBatchPosting,
+  BATCH_POSTING_TIMEBOUNDS_BUFFER,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
@@ -109,7 +111,8 @@ const displaySummaryInformation = (
   latestBatchPostedBlockNumber: bigint,
   latestBatchPostedSecondsAgo: bigint,
   latestChildChainBlockNumber: bigint,
-  batchPosterBacklogSize: bigint
+  batchPosterBacklogSize: bigint,
+  batchPostingTimeBounds: number
 ) => {
   console.log('**********')
   console.log(`Batch poster summary of [${childChainInformation.name}]`)
@@ -127,6 +130,11 @@ const displaySummaryInformation = (
   )
 
   console.log(`Batch poster backlog is ${batchPosterBacklogSize} blocks.`)
+  console.log(
+    `At least 1 batch must be posted every ${
+      batchPostingTimeBounds / 60 / 60
+    } hours.`
+  )
   console.log('**********')
   console.log('')
 }
@@ -267,6 +275,36 @@ const checkForUserTransactionBlocks = async ({
   return userTransactionBlockFound
 }
 
+const getBatchPostingTimeBounds = async (
+  childChainInformation: ChainInfo,
+  parentChainClient: PublicClient
+) => {
+  let batchPostingTimeBounds = BATCH_POSTING_TIMEBOUNDS_FALLBACK
+  try {
+    const maxTimeVariation = await parentChainClient.readContract({
+      address: childChainInformation.ethBridge.sequencerInbox as `0x${string}`,
+      abi: parseAbi([
+        'function maxTimeVariation() view returns (uint256, uint256, uint256, uint256)',
+      ]),
+      functionName: 'maxTimeVariation',
+    })
+
+    const delayBlocks = Number(maxTimeVariation[0])
+    const delaySeconds = Number(maxTimeVariation[2].toString())
+
+    // use the minimum of delayBlocks or delay seconds
+    batchPostingTimeBounds = Math.min(
+      delayBlocks *
+        getParentChainBlockTimeForBatchPosting(childChainInformation),
+      delaySeconds
+    )
+  } catch (_) {
+    // no-op, use the fallback value
+  }
+
+  return batchPostingTimeBounds + BATCH_POSTING_TIMEBOUNDS_BUFFER
+}
+
 const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   const alertsForChildChain: string[] = []
 
@@ -302,7 +340,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   // Getting sequencer inbox logs
   const latestBlockNumber = await parentChainClient.getBlockNumber()
 
-  const blocksToProcess = getDefaultBlockRange(parentChain)
+  const blocksToProcess = getMaxBlockRange(parentChain)
   const toBlock = latestBlockNumber
   const fromBlock = toBlock - blocksToProcess
 
@@ -348,46 +386,54 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   // Get the last block of the chain
   const latestChildChainBlockNumber = await childChainClient.getBlockNumber()
 
-  if (!sequencerInboxLogs || sequencerInboxLogs.length === 0) {
-    // No SequencerInboxLog in the last 24 hours (time hardcoded in getDefaultBlockRange)
-    // We compare the "latest" and "safe" blocks, and check if any of the pending blocks contain any user-transactions
-    // NOTE: another way of verifying this might be to check the timestamp of the last block in the childChain chain to verify more or less if it should have been posted
-    const latestChildChainSafeBlock = await childChainClient.getBlock({
-      blockTag: 'safe',
+  const latestChildChainSafeBlock = await childChainClient.getBlock({
+    blockTag: 'safe',
+  })
+
+  const blocksPendingToBePosted =
+    latestChildChainBlockNumber - latestChildChainSafeBlock.number
+
+  const batchPostingTimeBounds = await getBatchPostingTimeBounds(
+    childChainInformation,
+    parentChainClient
+  )
+
+  const doPendingBlocksContainUserTransactions =
+    await checkForUserTransactionBlocks({
+      fromBlock: Number(latestChildChainSafeBlock.number + 1n), // start checking AFTER the latest 'safe' block
+      toBlock: Number(latestChildChainBlockNumber),
+      publicClient: childChainClient,
     })
 
-    const blocksPendingToBePosted =
-      latestChildChainSafeBlock.number < latestChildChainBlockNumber
+  const batchPostingBacklog =
+    blocksPendingToBePosted > 0n && doPendingBlocksContainUserTransactions
 
-    const doPendingBlocksContainUserTransactions =
-      await checkForUserTransactionBlocks({
-        fromBlock: Number(latestChildChainSafeBlock.number + 1n), // start checking AFTER the latest 'safe' block
-        toBlock: Number(latestChildChainBlockNumber),
-        publicClient: childChainClient,
-      })
-
-    if (blocksPendingToBePosted && doPendingBlocksContainUserTransactions) {
+  if (!sequencerInboxLogs || sequencerInboxLogs.length === 0) {
+    // if alert situation
+    if (batchPostingBacklog) {
       alertsForChildChain.push(
         `No batch has been posted in the last ${
-          DEFAULT_TIMESPAN_SECONDS / 60 / 60
+          MAX_TIMEBOUNDS_SECONDS / 60 / 60
         } hours, and last block number (${latestChildChainBlockNumber}) is greater than the last safe block number (${
           latestChildChainSafeBlock.number
-        })`
+        }). Atleast 1 block must be posted every ${
+          batchPostingTimeBounds / 60 / 60
+        } hours.`
       )
 
       showAlert(childChainInformation, alertsForChildChain)
-      return
+    } else {
+      // if no alerting situation, just log the summary
+      console.log(
+        `**********\nBatch poster summary of [${childChainInformation.name}]`
+      )
+      console.log(
+        `No user activity in the last ${
+          MAX_TIMEBOUNDS_SECONDS / 60 / 60
+        } hours, and hence no batch has been posted.\n`
+      )
     }
 
-    // if no alerting situation, just log the summary
-    console.log(
-      `**********\nBatch poster summary of [${childChainInformation.name}]`
-    )
-    console.log(
-      `No user activity in the last ${
-        DEFAULT_TIMESPAN_SECONDS / 60 / 60
-      } hours, and hence no batch has been posted.`
-    )
     return
   }
 
@@ -418,14 +464,16 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   // If there's backlog and last batch posted was 4 hours ago, send alert
   if (
     batchPosterBacklog > 0 &&
-    secondsSinceLastBatchPoster > DEFAULT_BATCH_POSTING_DELAY_SECONDS
+    secondsSinceLastBatchPoster > BigInt(batchPostingTimeBounds)
   ) {
     alertsForChildChain.push(
       `Last batch was posted ${
         secondsSinceLastBatchPoster / 60n / 60n
       } hours and ${
         (secondsSinceLastBatchPoster / 60n) % 60n
-      } mins ago, and there's a backlog of ${batchPosterBacklog} blocks in the chain`
+      } mins ago, and there's a backlog of ${batchPosterBacklog} blocks in the chain. At least 1 block must be posted every ${
+        batchPostingTimeBounds / 60 / 60
+      } hours.`
     )
   }
 
@@ -439,7 +487,8 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     lastSequencerInboxBlock.number,
     secondsSinceLastBatchPoster,
     latestChildChainBlockNumber,
-    batchPosterBacklog
+    batchPosterBacklog,
+    batchPostingTimeBounds
   )
 }
 
