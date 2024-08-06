@@ -17,10 +17,10 @@ import {
   LOW_ETH_BALANCE_THRESHOLD_ETHEREUM,
   LOW_ETH_BALANCE_THRESHOLD_ARBITRUM,
   getMaxBlockRange,
+  getParentChainBlockTimeForBatchPosting,
   MAX_TIMEBOUNDS_SECONDS,
   BATCH_POSTING_TIMEBOUNDS_FALLBACK,
   BATCH_POSTING_TIMEBOUNDS_BUFFER,
-  getParentChainBlockTimeForBatchPosting,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
@@ -298,11 +298,22 @@ const getBatchPostingTimeBounds = async (
         getParentChainBlockTimeForBatchPosting(childChainInformation),
       delaySeconds
     )
+
+    console.log({
+      delayBlocks,
+      delaySeconds,
+      batchPostingTimeBounds,
+    })
   } catch (_) {
     // no-op, use the fallback value
   }
 
-  return batchPostingTimeBounds + BATCH_POSTING_TIMEBOUNDS_BUFFER
+  // formula : min(50% of x , max(1h, x - 18h))
+  // minimum of half of the batchPostingTimeBounds vs [1 hour vs batchPostingTimeBounds - buffer]
+  return Math.min(
+    0.5 * batchPostingTimeBounds,
+    Math.max(3600, batchPostingTimeBounds - BATCH_POSTING_TIMEBOUNDS_BUFFER)
+  )
 }
 
 const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
@@ -471,7 +482,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
         secondsSinceLastBatchPoster / 60n / 60n
       } hours and ${
         (secondsSinceLastBatchPoster / 60n) % 60n
-      } mins ago, and there's a backlog of ${batchPosterBacklog} blocks in the chain. At least 1 block must be posted every ${
+      } mins ago, and there's a backlog of ${batchPosterBacklog} blocks in the chain. At least 1 batch must be posted every ${
         batchPostingTimeBounds / 60 / 60
       } hours.`
     )
