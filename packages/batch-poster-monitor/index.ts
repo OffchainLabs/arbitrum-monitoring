@@ -131,7 +131,7 @@ const displaySummaryInformation = (
 
   console.log(`Batch poster backlog is ${batchPosterBacklogSize} blocks.`)
   console.log(
-    `At least 1 batch must be posted every ${
+    `At least 1 batch is expected to be posted every ${
       batchPostingTimeBounds / 60 / 60
     } hours.`
   )
@@ -298,17 +298,11 @@ const getBatchPostingTimeBounds = async (
         getParentChainBlockTimeForBatchPosting(childChainInformation),
       delaySeconds
     )
-
-    console.log({
-      delayBlocks,
-      delaySeconds,
-      batchPostingTimeBounds,
-    })
   } catch (_) {
     // no-op, use the fallback value
   }
 
-  // formula : min(50% of x , max(1h, x - 18h))
+  // formula : min(50% of x , max(1h, x - buffer))
   // minimum of half of the batchPostingTimeBounds vs [1 hour vs batchPostingTimeBounds - buffer]
   return Math.min(
     0.5 * batchPostingTimeBounds,
@@ -394,32 +388,32 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     alertsForChildChain.push(batchPosterLowBalanceMessage)
   }
 
-  // Get the last block of the chain
-  const latestChildChainBlockNumber = await childChainClient.getBlockNumber()
-
-  const latestChildChainSafeBlock = await childChainClient.getBlock({
-    blockTag: 'safe',
-  })
-
-  const blocksPendingToBePosted =
-    latestChildChainBlockNumber - latestChildChainSafeBlock.number
-
   const batchPostingTimeBounds = await getBatchPostingTimeBounds(
     childChainInformation,
     parentChainClient
   )
 
-  const doPendingBlocksContainUserTransactions =
-    await checkForUserTransactionBlocks({
-      fromBlock: Number(latestChildChainSafeBlock.number + 1n), // start checking AFTER the latest 'safe' block
-      toBlock: Number(latestChildChainBlockNumber),
-      publicClient: childChainClient,
-    })
-
-  const batchPostingBacklog =
-    blocksPendingToBePosted > 0n && doPendingBlocksContainUserTransactions
+  // Get the last block of the chain
+  const latestChildChainBlockNumber = await childChainClient.getBlockNumber()
 
   if (!sequencerInboxLogs || sequencerInboxLogs.length === 0) {
+    const latestChildChainSafeBlock = await childChainClient.getBlock({
+      blockTag: 'safe',
+    })
+
+    const blocksPendingToBePosted =
+      latestChildChainBlockNumber - latestChildChainSafeBlock.number
+
+    const doPendingBlocksContainUserTransactions =
+      await checkForUserTransactionBlocks({
+        fromBlock: Number(latestChildChainSafeBlock.number + 1n), // start checking AFTER the latest 'safe' block
+        toBlock: Number(latestChildChainBlockNumber),
+        publicClient: childChainClient,
+      })
+
+    const batchPostingBacklog =
+      blocksPendingToBePosted > 0n && doPendingBlocksContainUserTransactions
+
     // if alert situation
     if (batchPostingBacklog) {
       alertsForChildChain.push(
@@ -427,7 +421,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
           MAX_TIMEBOUNDS_SECONDS / 60 / 60
         } hours, and last block number (${latestChildChainBlockNumber}) is greater than the last safe block number (${
           latestChildChainSafeBlock.number
-        }). Atleast 1 block must be posted every ${
+        }). At least 1 batch is expected to be posted every ${
           batchPostingTimeBounds / 60 / 60
         } hours.`
       )
@@ -482,7 +476,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
         secondsSinceLastBatchPoster / 60n / 60n
       } hours and ${
         (secondsSinceLastBatchPoster / 60n) % 60n
-      } mins ago, and there's a backlog of ${batchPosterBacklog} blocks in the chain. At least 1 batch must be posted every ${
+      } mins ago, and there's a backlog of ${batchPosterBacklog} blocks in the chain. At least 1 batch is expected to be posted every ${
         batchPostingTimeBounds / 60 / 60
       } hours.`
     )
