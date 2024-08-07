@@ -106,23 +106,34 @@ const sequencerBatchDeliveredEventAbi: AbiEvent = {
   type: 'event',
 }
 
-const displaySummaryInformation = (
-  childChainInformation: ChainInfo,
-  latestBatchPostedBlockNumber: bigint,
-  latestBatchPostedSecondsAgo: bigint,
-  latestChildChainBlockNumber: bigint,
-  batchPosterBacklogSize: bigint,
+const displaySummaryInformation = ({
+  childChainInformation,
+  lastBlockReported,
+  latestBatchPostedBlockNumber,
+  latestBatchPostedSecondsAgo,
+  latestChildChainBlockNumber,
+  batchPosterBacklogSize,
+  batchPostingTimeBounds,
+}: {
+  childChainInformation: ChainInfo
+  lastBlockReported: bigint
+  latestBatchPostedBlockNumber: bigint
+  latestBatchPostedSecondsAgo: bigint
+  latestChildChainBlockNumber: bigint
+  batchPosterBacklogSize: bigint
   batchPostingTimeBounds: number
-) => {
+}) => {
   console.log('**********')
   console.log(`Batch poster summary of [${childChainInformation.name}]`)
   console.log(
     `Latest block number on [${childChainInformation.name}] is ${latestChildChainBlockNumber}.`
   )
   console.log(
-    `Latest batch posted on [Parent chain id: ${
+    `Latest [${
+      childChainInformation.name
+    }] block included on [Parent chain id: ${
       childChainInformation.parentChainId
-    }] is ${latestBatchPostedBlockNumber} => ${
+    }, block-number ${latestBatchPostedBlockNumber}] is ${lastBlockReported} => ${
       latestBatchPostedSecondsAgo / 60n / 60n
     } hours, ${(latestBatchPostedSecondsAgo / 60n) % 60n} minutes, ${
       latestBatchPostedSecondsAgo % 60n
@@ -485,14 +496,15 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     return
   }
 
-  displaySummaryInformation(
+  displaySummaryInformation({
     childChainInformation,
-    lastSequencerInboxBlock.number,
-    secondsSinceLastBatchPoster,
+    lastBlockReported,
+    latestBatchPostedBlockNumber: lastSequencerInboxBlock.number,
+    latestBatchPostedSecondsAgo: secondsSinceLastBatchPoster,
     latestChildChainBlockNumber,
-    batchPosterBacklog,
-    batchPostingTimeBounds
-  )
+    batchPosterBacklogSize: batchPosterBacklog,
+    batchPostingTimeBounds,
+  })
 }
 
 const main = async () => {
