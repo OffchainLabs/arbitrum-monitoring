@@ -136,10 +136,10 @@ const getBlockRange = async (
   childChainInfo: ChainInfo
 ) => {
   const latestBlockNumber = await client.getBlockNumber()
-  const toBlock = options.toBlock || latestBlockNumber
+  const toBlock = BigInt(options.toBlock) || latestBlockNumber
 
   if (options.fromBlock) {
-    return { fromBlock: options.fromBlock, toBlock }
+    return { fromBlock: BigInt(options.fromBlock), toBlock }
   }
 
   const oneWeekInSeconds = 7 * 24 * 60 * 60
