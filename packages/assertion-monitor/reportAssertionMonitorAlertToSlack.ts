@@ -3,8 +3,8 @@ import { postSlackMessage } from '../utils/postSlackMessage'
 
 dotenv.config()
 
-const slackToken = process.env.BATCH_POSTER_MONITORING_SLACK_TOKEN
-const slackChannel = process.env.BATCH_POSTER_MONITORING_SLACK_CHANNEL
+const slackToken = process.env.ASSERTION_MONITORING_SLACK_TOKEN
+const slackChannel = process.env.ASSERTION_MONITORING_SLACK_CHANNEL
 
 export const reportAssertionMonitorErrorToSlack = ({
   message,

@@ -12,6 +12,8 @@ import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAler
 
 const options = yargs(process.argv.slice(2))
   .options({
+    fromBlock: { type: 'number', default: 0 },
+    toBlock: { type: 'number', default: 0 },
     configPath: { type: 'string', default: 'config.json' },
     enableAlerting: { type: 'boolean', default: false },
   })
@@ -129,50 +131,84 @@ const nodeCreatedEventAbi = {
   ],
 } as const
 
+const getBlockRange = async (
+  client: PublicClient,
+  childChainInfo: ChainInfo
+) => {
+  const latestBlockNumber = await client.getBlockNumber()
+  const toBlock = options.toBlock || latestBlockNumber
+
+  if (options.fromBlock) {
+    return { fromBlock: options.fromBlock, toBlock }
+  }
+
+  const oneWeekInSeconds = 7 * 24 * 60 * 60
+  const blockTime = getParentChainBlockTimeForBatchPosting(childChainInfo)
+  const fromBlock = await client.getBlock({
+    blockNumber: latestBlockNumber - BigInt(oneWeekInSeconds / blockTime),
+  })
+  return { fromBlock: fromBlock.number, toBlock }
+}
+
 const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
   const parentChain = getChainFromId(childChainInfo.parentChainId)
   const client = createPublicClient({
     chain: parentChain,
     transport: http(childChainInfo.parentRpcUrl),
   }) as any
-  const latestBlockNumber = await client.getBlockNumber()
-  const oneWeekInSeconds = 7 * 24 * 60 * 60
-  const blockTime = getParentChainBlockTimeForBatchPosting(childChainInfo)
-  const earliestBlock = await client.getBlock({
-    blockNumber: latestBlockNumber - BigInt(oneWeekInSeconds / blockTime),
-  })
+  const { fromBlock, toBlock } = await getBlockRange(client, childChainInfo)
 
   const logs = await client.getLogs({
     address: childChainInfo.ethBridge.rollup as `0x${string}`,
     event: nodeCreatedEventAbi,
-    fromBlock: earliestBlock.number,
-    toBlock: latestBlockNumber,
+    fromBlock,
+    toBlock,
   })
 
   if (!logs || logs.length === 0) {
-    const alertMessage = `No assertion events found on ${childChainInfo.name} in the last 7 days.`
-    console.error(alertMessage)
-    if (options.enableAlerting) {
-      await reportAssertionMonitorErrorToSlack({ message: alertMessage })
+    return {
+      chainName: childChainInfo.name,
+      alertMessage: `No assertion events found on ${childChainInfo.name} in the last 7 days.`,
     }
   } else {
     console.log(
       `Found ${logs.length} assertion events on ${childChainInfo.name} in the last 7 days.`
     )
+    return null
   }
 }
 
 const main = async () => {
-  for (const childChain of config.childChains) {
-    try {
-      await monitorNodeCreatedEvents(childChain)
-    } catch (e) {
-      const errorStr = `Error processing chain [${childChain.name}]: ${e.message}`
-      if (options.enableAlerting) {
-        reportAssertionMonitorErrorToSlack({ message: errorStr })
+  try {
+    const alerts: { chainName: string; alertMessage: string }[] = []
+
+    for (const chainInfo of config.childChains) {
+      const result = await monitorNodeCreatedEvents(chainInfo)
+      if (result) {
+        alerts.push(result)
       }
-      console.error(errorStr)
     }
+
+    if (alerts.length > 0) {
+      const summaryMessage = alerts
+        .map(alert => `- ${alert.alertMessage}`)
+        .join('\n')
+
+      const alertMessage = `Assertion Alert Summary:\n${summaryMessage}`
+      console.error(alertMessage)
+
+      if (options.enableAlerting) {
+        await reportAssertionMonitorErrorToSlack({ message: alertMessage })
+      }
+    } else {
+      console.log('No alerts generated for any chains.')
+    }
+  } catch (e) {
+    const errorStr = `Error processing chain data for assertion monitoring: ${e.message}`
+    if (options.enableAlerting) {
+      reportAssertionMonitorErrorToSlack({ message: errorStr })
+    }
+    console.error(errorStr)
   }
 }
 
