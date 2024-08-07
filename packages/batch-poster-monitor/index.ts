@@ -130,11 +130,7 @@ const displaySummaryInformation = (
   )
 
   console.log(`Batch poster backlog is ${batchPosterBacklogSize} blocks.`)
-  console.log(
-    `At least 1 batch is expected to be posted every ${
-      batchPostingTimeBounds / 60 / 60
-    } hours.`
-  )
+  console.log(timeBoundsExpectedMessage(batchPostingTimeBounds))
   console.log('**********')
   console.log('')
 }
@@ -310,6 +306,11 @@ const getBatchPostingTimeBounds = async (
   )
 }
 
+const timeBoundsExpectedMessage = (batchPostingTimebounds: number) =>
+  `At least 1 batch is expected to be posted every ${
+    batchPostingTimebounds / 60 / 60
+  } hours.`
+
 const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   const alertsForChildChain: string[] = []
 
@@ -397,6 +398,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   const latestChildChainBlockNumber = await childChainClient.getBlockNumber()
 
   if (!sequencerInboxLogs || sequencerInboxLogs.length === 0) {
+    // get the last block that is 'safe' ie. can be assumed to have been posted
     const latestChildChainSafeBlock = await childChainClient.getBlock({
       blockTag: 'safe',
     })
@@ -421,9 +423,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
           MAX_TIMEBOUNDS_SECONDS / 60 / 60
         } hours, and last block number (${latestChildChainBlockNumber}) is greater than the last safe block number (${
           latestChildChainSafeBlock.number
-        }). At least 1 batch is expected to be posted every ${
-          batchPostingTimeBounds / 60 / 60
-        } hours.`
+        }). ${timeBoundsExpectedMessage(batchPostingTimeBounds)}`
       )
 
       showAlert(childChainInformation, alertsForChildChain)
@@ -438,7 +438,6 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
         } hours, and hence no batch has been posted.\n`
       )
     }
-
     return
   }
 
@@ -476,9 +475,9 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
         secondsSinceLastBatchPoster / 60n / 60n
       } hours and ${
         (secondsSinceLastBatchPoster / 60n) % 60n
-      } mins ago, and there's a backlog of ${batchPosterBacklog} blocks in the chain. At least 1 batch is expected to be posted every ${
-        batchPostingTimeBounds / 60 / 60
-      } hours.`
+      } mins ago, and there's a backlog of ${batchPosterBacklog} blocks in the chain. ${timeBoundsExpectedMessage(
+        batchPostingTimeBounds
+      )}`
     )
   }
 
