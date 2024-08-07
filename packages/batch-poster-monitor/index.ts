@@ -462,8 +462,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   })
 
   // Get batch poster backlog
-  const batchPosterBacklog =
-    latestChildChainBlockNumber - lastBlockReported - 1n
+  const batchPosterBacklog = latestChildChainBlockNumber - lastBlockReported
 
   // If there's backlog and last batch posted was 4 hours ago, send alert
   if (
