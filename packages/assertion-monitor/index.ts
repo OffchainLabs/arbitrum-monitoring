@@ -4,7 +4,10 @@ import * as path from 'path'
 import { PublicClient, createPublicClient, http } from 'viem'
 import yargs from 'yargs'
 import { ChildNetwork as ChainInfo } from '../utils'
-import { getChainFromId } from './chains'
+import {
+  getChainFromId,
+  getParentChainBlockTimeForBatchPosting,
+} from './chains'
 import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
 
 const options = yargs(process.argv.slice(2))
@@ -126,47 +129,35 @@ const nodeCreatedEventAbi = {
   ],
 } as const
 
-const getLogsForLast7Days = async (
-  client: PublicClient,
-  address: `0x${string}` | `0x${string}`[],
-  abi: AbiEvent
-) => {
+const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
+  const parentChain = getChainFromId(childChainInfo.parentChainId)
+  const client = createPublicClient({
+    chain: parentChain,
+    transport: http(childChainInfo.parentRpcUrl),
+  }) as any
   const latestBlockNumber = await client.getBlockNumber()
   const oneWeekInSeconds = 7 * 24 * 60 * 60
+  const blockTime = getParentChainBlockTimeForBatchPosting(childChainInfo)
   const earliestBlock = await client.getBlock({
-    blockNumber: latestBlockNumber - BigInt(oneWeekInSeconds / 12),
-  }) // assuming average block time of 12 seconds
+    blockNumber: latestBlockNumber - BigInt(oneWeekInSeconds / blockTime),
+  })
 
-  return await client.getLogs({
-    address,
+  const logs = await client.getLogs({
+    address: childChainInfo.ethBridge.rollup as `0x${string}`,
     event: nodeCreatedEventAbi,
     fromBlock: earliestBlock.number,
     toBlock: latestBlockNumber,
   })
-}
-
-const monitorNodeCreatedEvents = async (childChainInformation: ChainInfo) => {
-  const parentChain = getChainFromId(childChainInformation.parentChainId)
-  const client = createPublicClient({
-    chain: parentChain,
-    transport: http(childChainInformation.parentRpcUrl),
-  }) as any
-
-  const logs = await getLogsForLast7Days(
-    client,
-    childChainInformation.ethBridge.rollup as `0x${string}`,
-    nodeCreatedEventAbi
-  )
 
   if (!logs || logs.length === 0) {
-    const alertMessage = `No assertion events found on ${childChainInformation.name} in the last 7 days.`
+    const alertMessage = `No assertion events found on ${childChainInfo.name} in the last 7 days.`
     console.error(alertMessage)
     if (options.enableAlerting) {
       await reportAssertionMonitorErrorToSlack({ message: alertMessage })
     }
   } else {
     console.log(
-      `Found ${logs.length} assertion events on ${childChainInformation.name} in the last 7 days.`
+      `Found ${logs.length} assertion events on ${childChainInfo.name} in the last 7 days.`
     )
   }
 }
