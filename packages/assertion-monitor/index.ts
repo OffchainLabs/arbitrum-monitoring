@@ -6,6 +6,7 @@ import { ChildNetwork as ChainInfo } from '../utils'
 import { nodeCreatedEventAbi } from './abi'
 import { getChainFromId, getDefaultBlockRange } from './chains'
 import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
+import { getBlock } from 'viem/_types/actions/public/getBlock'
 
 const CHUNK_SIZE = 800n
 
@@ -97,6 +98,7 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
     chain: parentChain,
     transport: http(childChainInfo.parentRpcUrl),
   })
+
   const { fromBlock, toBlock } = await getBlockRange(client, childChainInfo)
 
   const getLogsForChunk = async (
@@ -104,9 +106,6 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
     chunkToBlock: bigint,
     client: PublicClient
   ) => {
-    console.log(
-      `getting logs for chunk from ${chunkFromBlock} to ${chunkToBlock} on ${childChainInfo.name}`
-    )
     return client
       .getLogs({
         address: childChainInfo.ethBridge.rollup as `0x${string}`,
@@ -127,14 +126,24 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
 
   const logs = logsArray.flat()
 
+  const isDefaultSettings = !options.fromBlock && !options.toBlock
+  const durationString = isDefaultSettings
+    ? 'in last 7 days'
+    : `from block ${fromBlock} to block ${toBlock}`
+
+  const latestSafeBlock = await client.getBlock({ blockTag: 'safe' })
+
+  const latestSafeBlockTimestamp =
+    new Date(Number(latestSafeBlock.timestamp) * 1000).toLocaleString() + ' UTC'
+
   if (!logs || logs.length === 0) {
     return {
       chainName: childChainInfo.name,
-      alertMessage: `No assertion events found on ${childChainInfo.name} in the last 7 days.`,
+      alertMessage: `No assertion events found on ${childChainInfo.name} ${durationString}. Latest batch was posted at ${latestSafeBlockTimestamp} (block ${latestSafeBlock.number})`,
     }
   } else {
     console.log(
-      `Found ${logs.length} assertion events on ${childChainInfo.name} in the last 7 days.`
+      `Found ${logs.length} assertion events on ${childChainInfo.name} ${durationString}.`
     )
     return null
   }
