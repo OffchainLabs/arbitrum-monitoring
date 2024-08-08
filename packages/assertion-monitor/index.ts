@@ -136,10 +136,19 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
   const latestSafeBlockTimestamp =
     new Date(Number(latestSafeBlock.timestamp) * 1000).toLocaleString() + ' UTC'
 
+  const isLatestSafeBlockWithinRange =
+    latestSafeBlock.number < toBlock && latestSafeBlock.number > fromBlock
+
   if (!logs || logs.length === 0) {
     return {
       chainName: childChainInfo.name,
-      alertMessage: `No assertion events found on ${childChainInfo.name} ${durationString}. Latest batch was posted at ${latestSafeBlockTimestamp} (block ${latestSafeBlock.number})`,
+      alertMessage: `No assertion events found on ${
+        childChainInfo.name
+      } ${durationString}. Latest batch ${
+        isLatestSafeBlockWithinRange ? 'was' : 'was not'
+      } posted within this duration, at ${latestSafeBlockTimestamp} (block ${
+        latestSafeBlock.number
+      })`,
     }
   } else {
     console.log(
