@@ -14,13 +14,12 @@ import { AbiEvent } from 'abitype'
 import { getBatchPosters } from '@arbitrum/orbit-sdk'
 import {
   getChainFromId,
-  LOW_ETH_BALANCE_THRESHOLD_ETHEREUM,
-  LOW_ETH_BALANCE_THRESHOLD_ARBITRUM,
   getMaxBlockRange,
   getParentChainBlockTimeForBatchPosting,
   MAX_TIMEBOUNDS_SECONDS,
   BATCH_POSTING_TIMEBOUNDS_FALLBACK,
   BATCH_POSTING_TIMEBOUNDS_BUFFER,
+  DAYS_OF_BALANCE_LEFT,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
@@ -242,8 +241,9 @@ const getBatchPosterLowBalanceAlertMessage = async (
 
   // get the gas used in the last 24 hours
   let gasUsedInLast24Hours = BigInt(0)
+
   for (const log of sequencerInboxLogs) {
-    gasUsedInLast24Hours = (
+    gasUsedInLast24Hours += (
       await parentChainClient.getTransactionReceipt({
         hash: log.transactionHash,
       })
@@ -252,7 +252,18 @@ const getBatchPosterLowBalanceAlertMessage = async (
   const currentGasPrice = await parentChainClient.getGasPrice()
   const balanceSpentIn24Hours = gasUsedInLast24Hours * currentGasPrice
 
-  const lowBalanceDetected = currentBalance < 2n * balanceSpentIn24Hours // 2 days worth of balance
+  const minimumExpectedBalance = DAYS_OF_BALANCE_LEFT * balanceSpentIn24Hours // 2 days worth of balance
+  const lowBalanceDetected = currentBalance < minimumExpectedBalance
+
+  console.log({
+    sequencerInboxLogsLength: sequencerInboxLogs.length,
+    gasUsedInLast24Hours,
+    currentGasPrice,
+    balanceSpentIn24Hours,
+    currentBalance,
+    minimumExpectedBalance,
+    lowBalanceDetected,
+  })
 
   if (lowBalanceDetected) {
     const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(
@@ -260,7 +271,9 @@ const getBatchPosterLowBalanceAlertMessage = async (
     )
     return `Low Batch poster balance (<${
       PARENT_CHAIN_ADDRESS_PREFIX + batchPoster
-    }|${batchPoster}>): ${formatEther(currentBalance)} ETH`
+    }|${batchPoster}>): ${formatEther(
+      currentBalance
+    )} ETH (Expected balance: ${formatEther(minimumExpectedBalance)} ETH)`
   }
 
   return null

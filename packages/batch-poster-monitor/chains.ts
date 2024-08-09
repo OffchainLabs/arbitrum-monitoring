@@ -15,8 +15,7 @@ import {
 export const MAX_TIMEBOUNDS_SECONDS = 60 * 60 * 24 // 24 hours : we don't care about txs older than 24 hours
 export const BATCH_POSTING_TIMEBOUNDS_FALLBACK = 60 * 60 * 12 // fallback in case we can't derive the on-chain timebounds for batch posting
 export const BATCH_POSTING_TIMEBOUNDS_BUFFER = 60 * 60 * 9 // reduce buffer (secs) from the time bounds for proactive alerting
-export const LOW_ETH_BALANCE_THRESHOLD_ETHEREUM = 1
-export const LOW_ETH_BALANCE_THRESHOLD_ARBITRUM = 0.1
+export const DAYS_OF_BALANCE_LEFT = 20n // Number of days the batch-poster balance is estimated to last
 
 export const supportedParentChains = [
   mainnet,
