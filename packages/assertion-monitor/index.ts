@@ -6,7 +6,6 @@ import { ChildNetwork as ChainInfo } from '../utils'
 import { nodeCreatedEventAbi } from './abi'
 import { getChainFromId, getDefaultBlockRange } from './chains'
 import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
-import { getBlock } from 'viem/_types/actions/public/getBlock'
 
 const CHUNK_SIZE = 800n
 

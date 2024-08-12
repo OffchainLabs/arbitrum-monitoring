@@ -23,14 +23,15 @@ yarn install
 
 ### One-off Check
 
-To find assertions within the past week, execute the following command:
+To find assertion events and display their status for a specific block range, execute the following command:
 
 ```bash
-yarn dev [--configPath=<CONFIG_PATH>]
+yarn dev --fromBlock=<FROM_BLOCK> --toBlock=<TO_BLOCK> [--configPath=<CONFIG_PATH>]
 ```
 
+- Replace <FROM_BLOCK>, <TO_BLOCK>, and <CONFIG_PATH> with the desired block numbers and the path to your configuration file.
 - If `--configPath` is not provided, it defaults to `config.json`.
-- This command will identify all assertions from the parent chain to your Orbit chain within the last week.
+- This command will identify all assertion events initiated or created from the parent chain to your Orbit chain within the specified block range.
 
 ### Error Generation and Reporting
 
