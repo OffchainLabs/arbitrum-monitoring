@@ -1,0 +1,9 @@
+{
+  "name": "config",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {},
+  "scripts": {
+    "lint": "eslint ."
+  }
+}

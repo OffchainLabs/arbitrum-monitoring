@@ -34,6 +34,7 @@ import {
   TokenDepositData,
 } from './types'
 import { ChildNetwork, getExplorerUrlPrefixes } from '../utils'
+import { getConfig, DEFAULT_CONFIG_PATH } from '../config'
 
 // Path for the log file
 const logFilePath = 'logfile.log'
@@ -101,7 +102,7 @@ const options: FindRetryablesOptions = yargs(process.argv.slice(2))
     fromBlock: { type: 'number', default: 0 },
     toBlock: { type: 'number', default: 0 },
     continuous: { type: 'boolean', default: false },
-    configPath: { type: 'string', default: 'config.json' },
+    configPath: { type: 'string', default: DEFAULT_CONFIG_PATH },
     enableAlerting: { type: 'boolean', default: false },
   })
   .strict()
@@ -545,20 +546,7 @@ const processChildChain = async (
   }
 }
 
-// Read the content of the config file
-const configFileContent = fs.readFileSync(
-  path.join(process.cwd(), options.configPath),
-  'utf-8'
-)
-
-// Parse the config file content as JSON
-const config = JSON.parse(configFileContent)
-
-// Check if childChains array is present in the config file
-if (!Array.isArray(config.childChains)) {
-  console.error('Error: Child chains not found in the config file.')
-  process.exit(1)
-}
+const config = getConfig({ configPath: options.configPath })
 
 // Function to process multiple child chains concurrently
 const processOrbitChainsConcurrently = async () => {
