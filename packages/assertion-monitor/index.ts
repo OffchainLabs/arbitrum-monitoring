@@ -1,18 +1,17 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { PublicClient, createPublicClient, http } from 'viem'
+import { PublicClient, createPublicClient, defineChain, http } from 'viem'
 import yargs from 'yargs'
-import { ChildNetwork as ChainInfo } from '../utils'
+import { ChildNetwork as ChainInfo, sleep } from '../utils'
 import { nodeCreatedEventAbi } from './abi'
 import { getChainFromId, getDefaultBlockRange } from './chains'
 import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
 
 const CHUNK_SIZE = 800n
+const RETRIES = 3
 
 const options = yargs(process.argv.slice(2))
   .options({
-    fromBlock: { type: 'number', default: 0 },
-    toBlock: { type: 'number', default: 0 },
     configPath: { type: 'string', default: 'config.json' },
     enableAlerting: { type: 'boolean', default: false },
   })
@@ -35,7 +34,7 @@ type ChunkProcessFunction<T> = (
   toBlock: bigint,
   client: PublicClient
 ) => Promise<T>
-// Updated processChunkedRange function
+
 async function processChunkedRange<T>(
   fromBlock: bigint,
   toBlock: bigint,
@@ -46,8 +45,6 @@ async function processChunkedRange<T>(
   const results: T[] = []
 
   if (fromBlock === toBlock) {
-    const result = await processChunk(fromBlock, toBlock, client)
-    results.push(result)
     return results
   }
 
@@ -69,17 +66,12 @@ async function processChunkedRange<T>(
 
   return results
 }
+
 const getBlockRange = async (
   client: PublicClient,
   childChainInfo: ChainInfo
 ) => {
   const latestBlockNumber = await client.getBlockNumber()
-  const toBlock = BigInt(options.toBlock) || latestBlockNumber
-
-  if (options.fromBlock) {
-    return { fromBlock: BigInt(options.fromBlock), toBlock }
-  }
-
   const blockTime = getDefaultBlockRange(
     getChainFromId(childChainInfo.parentChainId)
   )
@@ -88,7 +80,7 @@ const getBlockRange = async (
     blockNumber: latestBlockNumber - BigInt(blockTime),
   })
 
-  return { fromBlock: fromBlock.number, toBlock }
+  return { fromBlock: fromBlock.number, toBlock: latestBlockNumber }
 }
 
 const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
@@ -105,14 +97,27 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
     chunkToBlock: bigint,
     client: PublicClient
   ) => {
-    return client
-      .getLogs({
-        address: childChainInfo.ethBridge.rollup as `0x${string}`,
-        event: nodeCreatedEventAbi,
-        fromBlock: chunkFromBlock,
-        toBlock: chunkToBlock,
-      })
-      .catch(console.error)
+    let attempts = 0
+
+    while (attempts < RETRIES) {
+      try {
+        return client.getLogs({
+          address: childChainInfo.ethBridge.rollup as `0x${string}`,
+          event: nodeCreatedEventAbi,
+          fromBlock: chunkFromBlock,
+          toBlock: chunkToBlock,
+        })
+      } catch (error) {
+        attempts++
+        if (attempts >= RETRIES) {
+          console.error(`Failed to get logs after ${RETRIES} attempts:`, error)
+          throw error
+        }
+        console.warn(`Attempt ${attempts} failed. Retrying...`)
+        await sleep(1000 * attempts)
+      }
+    }
+    return null
   }
 
   const logsArray = await processChunkedRange(
@@ -130,9 +135,34 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
     ? 'in last 7 days'
     : `from block ${fromBlock} to block ${toBlock}`
 
-  const latestSafeBlock = await client.getBlock({ blockTag: 'safe' })
+  const childChain = defineChain({
+    id: childChainInfo.chainId,
+    name: childChainInfo.name,
+    network: 'childChain',
+    nativeCurrency: {
+      name: 'ETH',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+    rpcUrls: {
+      default: {
+        http: [childChainInfo.orbitRpcUrl],
+      },
+      public: {
+        http: [childChainInfo.orbitRpcUrl],
+      },
+    },
+  })
 
-  const latestSafeBlockTimestamp =
+  const childChainClient = createPublicClient({
+    chain: childChain,
+    transport: http(childChainInfo.orbitRpcUrl),
+  })
+
+  const latestSafeBlock = await childChainClient.getBlock({
+    blockTag: 'safe',
+  })
+  const timestampOfLatestSafeBlock =
     new Date(Number(latestSafeBlock.timestamp) * 1000).toLocaleString() + ' UTC'
 
   const isLatestSafeBlockWithinRange =
@@ -141,17 +171,17 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
   if (!logs || logs.length === 0) {
     return {
       chainName: childChainInfo.name,
-      alertMessage: `No assertion events found on ${
+      alertMessage: `No assertion creation events found on ${
         childChainInfo.name
       } ${durationString}. Latest batch ${
         isLatestSafeBlockWithinRange ? 'was' : 'was not'
-      } posted within this duration, at ${latestSafeBlockTimestamp} (block ${
+      } posted within this duration, at ${timestampOfLatestSafeBlock} (block ${
         latestSafeBlock.number
       })`,
     }
   } else {
     console.log(
-      `Found ${logs.length} assertion events on ${childChainInfo.name} ${durationString}.`
+      `Found ${logs.length} assertion creation event(s) on ${childChainInfo.name} ${durationString}.`
     )
     return null
   }
@@ -162,9 +192,12 @@ const main = async () => {
     const alerts: { chainName: string; alertMessage: string }[] = []
 
     for (const chainInfo of config.childChains) {
+      console.log(
+        `Checking for assertion creation events on ${chainInfo.name}...`
+      )
       const result = await monitorNodeCreatedEvents(chainInfo)
       if (result) {
-        console.log('No assertion events found on', chainInfo.name)
+        console.log('No assertion creation events found on', chainInfo.name)
         alerts.push(result)
       }
     }
@@ -174,7 +207,7 @@ const main = async () => {
         .map(alert => `- ${alert.alertMessage}`)
         .join('\n')
 
-      const alertMessage = `Assertion Alert Summary:\n${summaryMessage}`
+      const alertMessage = `Assertion Creation Alert Summary:\n${summaryMessage}`
       console.error(alertMessage)
 
       if (options.enableAlerting) {

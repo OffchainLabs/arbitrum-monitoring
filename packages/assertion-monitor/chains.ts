@@ -1,4 +1,3 @@
-import { ChildNetwork } from 'utils'
 import { Chain } from 'viem'
 import {
   mainnet,
@@ -18,7 +17,6 @@ export const supportedParentChains = [
   arbitrum,
   arbitrumNova,
   base,
-
   sepolia,
   holesky,
   arbitrumSepolia,
@@ -32,32 +30,11 @@ export const getChainFromId = (chainId: number): Chain => {
 
 export const getDefaultBlockRange = (chain: Chain): bigint => {
   switch (chain) {
-    case mainnet:
-    case sepolia:
-    case holesky:
-      return BigInt(DEFAULT_TIMESPAN_SECONDS / 12)
-
     case base:
     case baseSepolia:
       return BigInt(DEFAULT_TIMESPAN_SECONDS / 2)
 
-    case arbitrum:
-    case arbitrumNova:
-    case arbitrumSepolia:
+    default:
       return BigInt(DEFAULT_TIMESPAN_SECONDS / 12)
   }
-
-  return 0n
-}
-
-export const getParentChainBlockTimeForBatchPosting = (
-  childChain: ChildNetwork
-) => {
-  const parentChainId = childChain.parentChainId
-
-  // for Base / Base Sepolia
-  if (parentChainId === 8453 || parentChainId === 84532) return 2
-
-  // for arbitrum networks, return the block-time corresponding to Ethereum
-  return 12
 }
