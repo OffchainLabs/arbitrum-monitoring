@@ -1,5 +1,8 @@
 import * as fs from 'fs'
 import * as path from 'path'
+import dotenv from 'dotenv'
+
+dotenv.config({ path: '../../.env' })
 
 // config.json file at project root
 export const DEFAULT_CONFIG_PATH = '../../config.json'

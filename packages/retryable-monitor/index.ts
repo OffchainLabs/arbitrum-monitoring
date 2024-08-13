@@ -108,6 +108,8 @@ const options: FindRetryablesOptions = yargs(process.argv.slice(2))
   .strict()
   .parseSync() as FindRetryablesOptions
 
+const config = getConfig({ configPath: options.configPath })
+
 // Function to process a child chain and check for retryable transactions
 const processChildChain = async (
   childChain: ChildNetwork,
@@ -545,8 +547,6 @@ const processChildChain = async (
     }
   }
 }
-
-const config = getConfig({ configPath: options.configPath })
 
 // Function to process multiple child chains concurrently
 const processOrbitChainsConcurrently = async () => {
