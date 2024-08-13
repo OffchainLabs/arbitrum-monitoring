@@ -1,0 +1,11 @@
+{
+  "name": "chains",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "viem": "^2.19.4"
+  },
+  "scripts": {
+    "lint": "eslint ."
+  }
+}
