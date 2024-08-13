@@ -72,12 +72,12 @@ const getBlockRange = async (
   childChainInfo: ChainInfo
 ) => {
   const latestBlockNumber = await client.getBlockNumber()
-  const blockTime = getDefaultBlockRange(
+  const blockRange = getDefaultBlockRange(
     getChainFromId(childChainInfo.parentChainId)
   )
 
   const fromBlock = await client.getBlock({
-    blockNumber: latestBlockNumber - BigInt(blockTime),
+    blockNumber: latestBlockNumber - BigInt(blockRange),
   })
 
   return { fromBlock: fromBlock.number, toBlock: latestBlockNumber }
