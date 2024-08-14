@@ -251,55 +251,59 @@ const getBatchPosterLowBalanceAlertMessage = async (
     childChainInformation,
     sequencerInboxLogs
   )
-
   const currentBalance = await parentChainClient.getBalance({
     address: batchPoster,
   })
 
-  // we need to parse through each log to get the transaction fee spent in every transaction
-  // get the last MAX_LOGS_TO_PROCESS logs, or ALL logs if less than MAX_LOGS_TO_PROCESS. Why? - the number of blocks for high activity chains over last 24 hrs can be > 1000+
-  // then, get the time elapsed since first block in this block range
-  // once we get this time-window, we can extrapolate the approx fee for logs spanning last 24 hours
-  const logsToBeProcessed = [...sequencerInboxLogs].slice(
+  // Extract the most recent logs for processing to avoid overloading with too many logs
+  const recentLogs = [...sequencerInboxLogs].slice(
     -MAX_LOGS_TO_PROCESS_FOR_BALANCE
   )
-  const firstLogTransaction = await parentChainClient.getTransaction({
-    hash: logsToBeProcessed[0].transactionHash,
-  })
-  const firstLogBlock = await parentChainClient.getBlock({
-    blockNumber: firstLogTransaction.blockNumber,
-  })
-  const firstBlockTime = firstLogBlock.timestamp
-  const secondsSinceFirstBlock =
-    BigInt(Math.floor(Date.now() / 1000)) - firstBlockTime
 
-  // get the gas used to post the batches since `secondsSinceFirstBlock`
-  let balanceSpentInPostingBatches = BigInt(0)
-  for (const log of logsToBeProcessed) {
+  // Calculate the elapsed time (in seconds) since the first block in the logs
+  const firstTransaction = await parentChainClient.getTransaction({
+    hash: recentLogs[0].transactionHash,
+  })
+  const initialBlock = await parentChainClient.getBlock({
+    blockNumber: firstTransaction.blockNumber,
+  })
+  const initialBlockTimestamp = initialBlock.timestamp
+
+  const elapsedTimeSinceFirstBlock =
+    BigInt(Math.floor(Date.now() / 1000)) - initialBlockTimestamp
+
+  // Loop through each log and calculate the gas cost for posting batches
+  let postingCost = BigInt(0)
+  for (const log of recentLogs) {
     const tx = await parentChainClient.getTransactionReceipt({
       hash: log.transactionHash,
     })
-    balanceSpentInPostingBatches += tx.gasUsed * tx.effectiveGasPrice // tx cost for posting the batch
+    postingCost += tx.gasUsed * tx.effectiveGasPrice // Accumulate the transaction cost
   }
 
-  // get the approximate balance spent in 1 day
+  // Calculate the approximate balance spent over the last 24 hours
   const secondsIn1Day = 24n * 60n * 60n
-  const balanceSpentIn1DayApprox =
-    (secondsIn1Day / secondsSinceFirstBlock) * balanceSpentInPostingBatches // 24 hours worth of balance
+  const dailyPostingCostEstimate =
+    (secondsIn1Day / elapsedTimeSinceFirstBlock) * postingCost
 
-  const daysLeftForCurrentBalance = currentBalance / balanceSpentIn1DayApprox
+  // Estimate how many days the current balance will last based on the daily cost
+  const daysLeftForCurrentBalance = currentBalance / dailyPostingCostEstimate
   console.log(
     `The current batch poster balance is ${formatEther(
       currentBalance
     )} ETH, and balance spent in 24 hours is approx ${formatEther(
-      balanceSpentIn1DayApprox
+      dailyPostingCostEstimate
     )} ETH. The current balance can last approximately ${daysLeftForCurrentBalance} days.`
   )
 
-  // check for low balance
+  // Determine the minimum expected balance needed to maintain operations for a certain number of days
   const minimumExpectedBalance =
-    MIN_DAYS_OF_BALANCE_LEFT * balanceSpentIn1DayApprox
+    MIN_DAYS_OF_BALANCE_LEFT * dailyPostingCostEstimate
+
+  // Check if the current balance is below the minimum expected balance
+  // Return a warning message if low balance is detected
   const lowBalanceDetected = currentBalance < minimumExpectedBalance
+
   if (lowBalanceDetected) {
     const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(
       childChainInformation
