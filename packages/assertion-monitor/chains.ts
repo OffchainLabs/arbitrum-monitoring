@@ -42,7 +42,7 @@ export const getBlockTimeForChain = (chain: Chain): number => {
     case arbitrum:
     case arbitrumNova:
     case arbitrumSepolia:
-      return 4
+      return 0.25
 
     default:
       return 1
