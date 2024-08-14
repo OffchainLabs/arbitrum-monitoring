@@ -279,27 +279,26 @@ const getBatchPosterLowBalanceAlertMessage = async (
     const tx = await parentChainClient.getTransactionReceipt({
       hash: log.transactionHash,
     })
-
-    balanceSpentInPostingBatches += tx.gasUsed * tx.effectiveGasPrice
+    balanceSpentInPostingBatches += tx.gasUsed * tx.effectiveGasPrice // tx cost for posting the batch
   }
 
   // get the approximate balance spent in 1 day
   const secondsIn1Day = 24n * 60n * 60n
-  const approxBalanceSpentIn1Day =
+  const balanceSpentIn1DayApprox =
     (secondsIn1Day / secondsSinceFirstBlock) * balanceSpentInPostingBatches // 24 hours worth of balance
 
-  const daysLeftForCurrentBalance = currentBalance / approxBalanceSpentIn1Day
+  const daysLeftForCurrentBalance = currentBalance / balanceSpentIn1DayApprox
   console.log(
     `The current batch poster balance is ${formatEther(
       currentBalance
     )} ETH, and balance spent in 24 hours is approx ${formatEther(
-      approxBalanceSpentIn1Day
+      balanceSpentIn1DayApprox
     )} ETH. The current balance can last approximately ${daysLeftForCurrentBalance} days.`
   )
 
   // check for low balance
   const minimumExpectedBalance =
-    MIN_DAYS_OF_BALANCE_LEFT * approxBalanceSpentIn1Day
+    MIN_DAYS_OF_BALANCE_LEFT * balanceSpentIn1DayApprox
   const lowBalanceDetected = currentBalance < minimumExpectedBalance
   if (lowBalanceDetected) {
     const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(
