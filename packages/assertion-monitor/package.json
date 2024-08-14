@@ -4,13 +4,16 @@
   "main": "index.ts",
   "dependencies": {
     "abitype": "^1.0.5",
+    "bottleneck": "^2.19.5",
+    "lodash": "^4.17.21",
     "typescript": "^5.4.5",
     "utils": "*",
     "viem": "1.20.0"
   },
   "devDependencies": {
-    "ts-node": "^10.9.2",
-    "@types/node": "^20.14.1"
+    "@types/lodash": "^4.17.7",
+    "@types/node": "^20.14.1",
+    "ts-node": "^10.9.2"
   },
   "scripts": {
     "lint": "eslint .",

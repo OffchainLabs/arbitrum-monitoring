@@ -1,4 +1,6 @@
+import Bottleneck from 'bottleneck'
 import * as fs from 'fs'
+import _ from 'lodash'
 import * as path from 'path'
 import { PublicClient, createPublicClient, defineChain, http } from 'viem'
 import yargs from 'yargs'
@@ -13,6 +15,7 @@ import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAler
 
 const CHUNK_SIZE = 800n
 const RETRIES = 3
+const minBigInt = (a: bigint, b: bigint): bigint => (a < b ? a : b)
 
 const options = yargs(process.argv.slice(2))
   .options({
@@ -44,31 +47,31 @@ async function processChunkedRange<T>(
   toBlock: bigint,
   chunkSize: bigint,
   client: PublicClient,
-  processChunk: ChunkProcessFunction<T>
-): Promise<T[]> {
-  const results: T[] = []
+  processChunk: ChunkProcessFunction<T>,
+  requestsPerSecond: number = 10
+): Promise<any> {
+  const limiter = new Bottleneck({
+    minTime: 1000 / requestsPerSecond,
+  })
 
-  if (fromBlock === toBlock) {
-    return results
-  }
+  const throttledProcessChunk = limiter.wrap(processChunk)
 
-  let currentFromBlock = fromBlock
+  const totalBlocks = toBlock - fromBlock + 1n
+  const numberOfChunks = Number((totalBlocks + chunkSize - 1n) / chunkSize)
 
-  while (currentFromBlock <= toBlock) {
-    const currentToBlock =
-      currentFromBlock + chunkSize - 1n < toBlock
-        ? currentFromBlock + chunkSize - 1n
-        : toBlock
+  const chunks = _.range(numberOfChunks).map((i: number) => {
+    const start = fromBlock + BigInt(i) * chunkSize
+    const end = minBigInt(start + chunkSize - 1n, toBlock)
+    return { start, end }
+  })
 
-    const result = await processChunk(currentFromBlock, currentToBlock, client)
-    results.push(result)
+  const results = await Promise.all(
+    chunks.map(({ start, end }: any) =>
+      throttledProcessChunk(start, end, client)
+    )
+  )
 
-    if (currentToBlock === toBlock) break
-
-    currentFromBlock = currentToBlock + 1n
-  }
-
-  return results
+  return results.flat()
 }
 
 const getBlockRange = async (
@@ -105,6 +108,7 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
 
     while (attempts < RETRIES) {
       try {
+        console.log('Processing chunks ', chunkFromBlock, chunkToBlock)
         return client.getLogs({
           address: childChainInfo.ethBridge.rollup as `0x${string}`,
           event: nodeCreatedEventAbi,
@@ -124,15 +128,13 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
     return null
   }
 
-  const logsArray = await processChunkedRange(
+  const logs = await processChunkedRange(
     fromBlock,
     toBlock,
     CHUNK_SIZE,
     client,
     getLogsForChunk
   )
-
-  const logs = logsArray.flat()
 
   const getDurationInDays = (fromBlock: bigint, toBlock: bigint) => {
     const blockTime = getBlockTimeForChain(parentChain)
