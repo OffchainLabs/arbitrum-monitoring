@@ -19,7 +19,8 @@ import {
   MAX_TIMEBOUNDS_SECONDS,
   BATCH_POSTING_TIMEBOUNDS_FALLBACK,
   BATCH_POSTING_TIMEBOUNDS_BUFFER,
-  DAYS_OF_BALANCE_LEFT,
+  MIN_DAYS_OF_BALANCE_LEFT,
+  MAX_LOGS_TO_PROCESS_FOR_BALANCE,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
@@ -198,7 +199,7 @@ const getBatchPosterFromEventLogs = async (
   return tx.from
 }
 
-const getBatchPosterLowBalanceAlertMessage = async (
+const getBatchPosterAddress = async (
   parentChainClient: PublicClient,
   childChainInformation: ChainInfo,
   sequencerInboxLogs: EventLogs
@@ -231,40 +232,75 @@ const getBatchPosterLowBalanceAlertMessage = async (
       )
     } catch {
       // batchPoster not found by any means
-      return 'Batch poster information not found'
+      throw Error('Batch poster information not found')
     }
   }
+
+  return batchPoster
+}
+
+const getBatchPosterLowBalanceAlertMessage = async (
+  parentChainClient: PublicClient,
+  childChainInformation: ChainInfo,
+  sequencerInboxLogs: EventLogs
+) => {
+  if (sequencerInboxLogs.length === 0) return null
+
+  const batchPoster = await getBatchPosterAddress(
+    parentChainClient,
+    childChainInformation,
+    sequencerInboxLogs
+  )
 
   const currentBalance = await parentChainClient.getBalance({
     address: batchPoster,
   })
 
-  // get the gas used in the last 24 hours
-  let gasUsedInLast24Hours = BigInt(0)
-
-  for (const log of sequencerInboxLogs) {
-    gasUsedInLast24Hours += (
-      await parentChainClient.getTransactionReceipt({
-        hash: log.transactionHash,
-      })
-    ).gasUsed
-  }
-  const currentGasPrice = await parentChainClient.getGasPrice()
-  const balanceSpentIn24Hours = gasUsedInLast24Hours * currentGasPrice
-
-  const minimumExpectedBalance = DAYS_OF_BALANCE_LEFT * balanceSpentIn24Hours // 2 days worth of balance
-  const lowBalanceDetected = currentBalance < minimumExpectedBalance
-
-  console.log({
-    sequencerInboxLogsLength: sequencerInboxLogs.length,
-    gasUsedInLast24Hours,
-    currentGasPrice,
-    balanceSpentIn24Hours,
-    currentBalance,
-    minimumExpectedBalance,
-    lowBalanceDetected,
+  // we need to parse through each log to get the transaction fee spent in every transaction
+  // get the last MAX_LOGS_TO_PROCESS logs, or ALL logs if less than MAX_LOGS_TO_PROCESS. Why? - the number of blocks for high activity chains over last 24 hrs can be > 1000+
+  // then, get the time elapsed since first block in this block range
+  // once we get this time-window, we can extrapolate the approx fee for logs spanning last 24 hours
+  const logsToBeProcessed = [...sequencerInboxLogs].slice(
+    -MAX_LOGS_TO_PROCESS_FOR_BALANCE
+  )
+  const firstLogTransaction = await parentChainClient.getTransaction({
+    hash: logsToBeProcessed[0].transactionHash,
   })
+  const firstLogBlock = await parentChainClient.getBlock({
+    blockNumber: firstLogTransaction.blockNumber,
+  })
+  const firstBlockTime = firstLogBlock.timestamp
+  const secondsSinceFirstBlock =
+    BigInt(Math.floor(Date.now() / 1000)) - firstBlockTime
 
+  // get the gas used to post the batches since `secondsSinceFirstBlock`
+  let balanceSpentInPostingBatches = BigInt(0)
+  for (const log of logsToBeProcessed) {
+    const tx = await parentChainClient.getTransactionReceipt({
+      hash: log.transactionHash,
+    })
+
+    balanceSpentInPostingBatches += tx.gasUsed * tx.effectiveGasPrice
+  }
+
+  // get the approximate balance spent in 1 day
+  const secondsIn1Day = 24n * 60n * 60n
+  const approxBalanceSpentIn1Day =
+    (secondsIn1Day / secondsSinceFirstBlock) * balanceSpentInPostingBatches // 24 hours worth of balance
+
+  const daysLeftForCurrentBalance = currentBalance / approxBalanceSpentIn1Day
+  console.log(
+    `The current batch poster balance is ${formatEther(
+      currentBalance
+    )} ETH, and balance spent in 24 hours is approx ${formatEther(
+      approxBalanceSpentIn1Day
+    )} ETH. The current balance can last approximately ${daysLeftForCurrentBalance} days.`
+  )
+
+  // check for low balance
+  const minimumExpectedBalance =
+    MIN_DAYS_OF_BALANCE_LEFT * approxBalanceSpentIn1Day
+  const lowBalanceDetected = currentBalance < minimumExpectedBalance
   if (lowBalanceDetected) {
     const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(
       childChainInformation
@@ -273,7 +309,9 @@ const getBatchPosterLowBalanceAlertMessage = async (
       PARENT_CHAIN_ADDRESS_PREFIX + batchPoster
     }|${batchPoster}>): ${formatEther(
       currentBalance
-    )} ETH (Expected balance: ${formatEther(minimumExpectedBalance)} ETH)`
+    )} ETH (Expected balance: ${formatEther(
+      minimumExpectedBalance
+    )} ETH). The current balance is expected to last for ~${daysLeftForCurrentBalance} days only.`
   }
 
   return null
