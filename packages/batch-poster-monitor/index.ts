@@ -312,7 +312,7 @@ const getBatchPosterLowBalanceAlertMessage = async (
       PARENT_CHAIN_ADDRESS_PREFIX + batchPoster
     }|${batchPoster}>): ${formatEther(
       currentBalance
-    )} ETH (Expected balance: ${formatEther(
+    )} ETH (Minimum expected balance: ${formatEther(
       minimumExpectedBalance
     )} ETH). The current balance is expected to last for ~${daysLeftForCurrentBalance} days only.`
   }
