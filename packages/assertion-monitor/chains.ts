@@ -28,23 +28,27 @@ export const getChainFromId = (chainId: number): Chain => {
   return chain[0] ?? null
 }
 
-export const getDefaultBlockRange = (chain: Chain): bigint => {
+export const getBlockTimeForChain = (chain: Chain): number => {
   switch (chain) {
     case mainnet:
     case sepolia:
     case holesky:
-      return BigInt(DEFAULT_TIME_SPAN_SECONDS / 12)
+      return 12
 
     case base:
     case baseSepolia:
-      return BigInt(DEFAULT_TIME_SPAN_SECONDS / 2)
+      return 2
 
     case arbitrum:
     case arbitrumNova:
     case arbitrumSepolia:
-      return BigInt(DEFAULT_TIME_SPAN_SECONDS * 4)
+      return 4
 
     default:
-      return BigInt(DEFAULT_TIME_SPAN_SECONDS)
+      return 1
   }
+}
+
+export const getDefaultBlockRange = (chain: Chain): bigint => {
+  return BigInt(DEFAULT_TIME_SPAN_SECONDS / getBlockTimeForChain(chain))
 }

@@ -4,7 +4,11 @@ import { PublicClient, createPublicClient, defineChain, http } from 'viem'
 import yargs from 'yargs'
 import { ChildNetwork as ChainInfo, sleep } from '../utils'
 import { nodeCreatedEventAbi } from './abi'
-import { getChainFromId, getDefaultBlockRange } from './chains'
+import {
+  getBlockTimeForChain,
+  getChainFromId,
+  getDefaultBlockRange,
+} from './chains'
 import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
 
 const CHUNK_SIZE = 800n
@@ -130,10 +134,15 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
 
   const logs = logsArray.flat()
 
-  const isDefaultSettings = !options.fromBlock && !options.toBlock
-  const durationString = isDefaultSettings
-    ? 'in last 7 days'
-    : `from block ${fromBlock} to block ${toBlock}`
+  const getDurationInDays = (fromBlock: bigint, toBlock: bigint) => {
+    const blockTime = getBlockTimeForChain(parentChain)
+    return (Number(toBlock - fromBlock) * blockTime) / 60 / 60 / 24
+  }
+  const durationInDays = getDurationInDays(fromBlock, toBlock)
+
+  const durationString = `in the last ${
+    durationInDays === 1 ? ' day' : durationInDays + ' days'
+  }`
 
   const childChain = defineChain({
     id: childChainInfo.chainId,
