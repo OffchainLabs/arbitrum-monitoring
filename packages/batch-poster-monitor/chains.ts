@@ -17,6 +17,7 @@ export const BATCH_POSTING_TIMEBOUNDS_FALLBACK = 60 * 60 * 12 // fallback in cas
 export const BATCH_POSTING_TIMEBOUNDS_BUFFER = 60 * 60 * 9 // reduce buffer (secs) from the time bounds for proactive alerting
 export const MIN_DAYS_OF_BALANCE_LEFT = 3n // Number of days the batch-poster balance must last, else alert
 export const MAX_LOGS_TO_PROCESS_FOR_BALANCE = 50 // Number of logs to process for batch poster balance estimation, there can be 1000+ logs for high activity chains
+export const BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK = 0.1 // (ETH) Fallback if dynamic balance calculation doesn't go through
 
 export const supportedParentChains = [
   mainnet,

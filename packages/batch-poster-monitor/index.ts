@@ -21,6 +21,7 @@ import {
   BATCH_POSTING_TIMEBOUNDS_BUFFER,
   MIN_DAYS_OF_BALANCE_LEFT,
   MAX_LOGS_TO_PROCESS_FOR_BALANCE,
+  BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
@@ -244,7 +245,9 @@ const getBatchPosterLowBalanceAlertMessage = async (
   childChainInformation: ChainInfo,
   sequencerInboxLogs: EventLogs
 ) => {
-  if (sequencerInboxLogs.length === 0) return null
+  const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(
+    childChainInformation
+  )
 
   const batchPoster = await getBatchPosterAddress(
     parentChainClient,
@@ -255,6 +258,20 @@ const getBatchPosterLowBalanceAlertMessage = async (
     address: batchPoster,
   })
 
+  // if there are no logs, add a static check for low balance
+  if (sequencerInboxLogs.length === 0) {
+    const bal = Number(formatEther(currentBalance))
+    if (bal < BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK) {
+      return `Low Batch poster balance (<${
+        PARENT_CHAIN_ADDRESS_PREFIX + batchPoster
+      }|${batchPoster}>): ${formatEther(
+        currentBalance
+      )} ETH (Minimum expected balance: ${BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK} ETH). `
+    }
+    return null
+  }
+
+  // Dynamic balance check based on the logs
   // Extract the most recent logs for processing to avoid overloading with too many logs
   const recentLogs = [...sequencerInboxLogs].slice(
     -MAX_LOGS_TO_PROCESS_FOR_BALANCE
@@ -305,9 +322,6 @@ const getBatchPosterLowBalanceAlertMessage = async (
   const lowBalanceDetected = currentBalance < minimumExpectedBalance
 
   if (lowBalanceDetected) {
-    const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(
-      childChainInformation
-    )
     return `Low Batch poster balance (<${
       PARENT_CHAIN_ADDRESS_PREFIX + batchPoster
     }|${batchPoster}>): ${formatEther(
@@ -498,8 +512,6 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
           latestChildChainSafeBlock.number
         }). ${timeBoundsExpectedMessage(batchPostingTimeBounds)}`
       )
-
-      showAlert(childChainInformation, alertsForChildChain)
     } else {
       // if no alerting situation, just log the summary
       console.log(
@@ -511,6 +523,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
         } hours, and hence no batch has been posted.\n`
       )
     }
+    showAlert(childChainInformation, alertsForChildChain)
     return
   }
 
