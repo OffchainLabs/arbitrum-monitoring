@@ -1,0 +1,21 @@
+{
+  "name": "assertion-monitor",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "abitype": "^1.0.5",
+    "typescript": "^5.4.5",
+    "utils": "*",
+    "viem": "1.20.0"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.14.1"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "build": "rm -rf ./dist && tsc",
+    "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
+    "dev": "yarn build && node ./dist/assertion-monitor/index.js"
+  }
+}

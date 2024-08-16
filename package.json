@@ -7,7 +7,8 @@
   "license": "Apache-2.0",
   "scripts": {
     "retryable-monitor": "yarn workspace retryable-monitor dev",
-    "batch-poster-monitor": "yarn workspace batch-poster-monitor dev"
+    "batch-poster-monitor": "yarn workspace batch-poster-monitor dev",
+    "assertion-monitor": "yarn workspace assertion-monitor dev"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
