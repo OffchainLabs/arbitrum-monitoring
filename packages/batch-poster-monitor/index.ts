@@ -205,39 +205,30 @@ const getBatchPosterAddress = async (
   childChainInformation: ChainInfo,
   sequencerInboxLogs: EventLogs
 ) => {
-  let batchPoster: `0x${string}` | null = null
-
-  // try fetching batch poster address from orbit-sdk
-  try {
-    const { batchPosters, isAccurate } = await getBatchPosters(
-      //@ts-ignore - PublicClient that we pass vs PublicClient that orbit-sdk expects is not matching
-      parentChainClient,
-      {
-        rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
-        sequencerInbox: childChainInformation.ethBridge
-          .sequencerInbox as `0x${string}`,
-      }
+  // if we have sequencer inbox logs, then get the batch poster directly
+  if (sequencerInboxLogs.length > 0) {
+    return await getBatchPosterFromEventLogs(
+      sequencerInboxLogs,
+      parentChainClient
     )
-
-    if (isAccurate) {
-      batchPoster = batchPosters[0] // get the first batch poster
-    } else {
-      throw Error('Batch poster list is not accurate') // get the batch poster from the event logs in catch block
-    }
-  } catch {
-    // else try fetching the batch poster from the event logs
-    try {
-      batchPoster = await getBatchPosterFromEventLogs(
-        sequencerInboxLogs,
-        parentChainClient
-      )
-    } catch {
-      // batchPoster not found by any means
-      throw Error('Batch poster information not found')
-    }
   }
 
-  return batchPoster
+  // else derive batch poster from the sdk
+  const { batchPosters, isAccurate } = await getBatchPosters(
+    //@ts-ignore - PublicClient that we pass vs PublicClient that orbit-sdk expects is not matching
+    parentChainClient,
+    {
+      rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
+      sequencerInbox: childChainInformation.ethBridge
+        .sequencerInbox as `0x${string}`,
+    }
+  )
+
+  if (isAccurate) {
+    return batchPosters[0] // get the first batch poster
+  } else {
+    throw Error('Batch poster information not found')
+  }
 }
 
 const getBatchPosterLowBalanceAlertMessage = async (
@@ -512,6 +503,8 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
           latestChildChainSafeBlock.number
         }). ${timeBoundsExpectedMessage(batchPostingTimeBounds)}`
       )
+
+      showAlert(childChainInformation, alertsForChildChain)
     } else {
       // if no alerting situation, just log the summary
       console.log(
@@ -522,8 +515,12 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
           MAX_TIMEBOUNDS_SECONDS / 60 / 60
         } hours, and hence no batch has been posted.\n`
       )
+
+      // in this case show alert only if batch poster balance is low
+      if (batchPosterLowBalanceMessage) {
+        showAlert(childChainInformation, alertsForChildChain)
+      }
     }
-    showAlert(childChainInformation, alertsForChildChain)
     return
   }
 
