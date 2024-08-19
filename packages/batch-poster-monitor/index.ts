@@ -291,8 +291,13 @@ const getBatchPosterLowBalanceAlertMessage = async (
 
   // Calculate the approximate balance spent over the last 24 hours
   const secondsIn1Day = 24n * 60n * 60n
-  const dailyPostingCostEstimate =
-    (secondsIn1Day / elapsedTimeSinceFirstBlock) * postingCost
+
+  const timeRatio =
+    secondsIn1Day / elapsedTimeSinceFirstBlock > 1n
+      ? secondsIn1Day / elapsedTimeSinceFirstBlock
+      : 1n // set minimum cap of the ratio to 1, since we are calculating the cost for 24 hours, else bigInt rounds off the ratio to zero
+
+  const dailyPostingCostEstimate = timeRatio * postingCost
 
   // Estimate how many days the current balance will last based on the daily cost
   const daysLeftForCurrentBalance = currentBalance / dailyPostingCostEstimate
