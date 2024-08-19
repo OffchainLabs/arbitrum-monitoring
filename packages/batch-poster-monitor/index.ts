@@ -14,11 +14,14 @@ import { AbiEvent } from 'abitype'
 import { getBatchPosters } from '@arbitrum/orbit-sdk'
 import {
   getChainFromId,
-  getDefaultBlockRange,
-  DEFAULT_TIMESPAN_SECONDS,
-  DEFAULT_BATCH_POSTING_DELAY_SECONDS,
-  LOW_ETH_BALANCE_THRESHOLD_ETHEREUM,
-  LOW_ETH_BALANCE_THRESHOLD_ARBITRUM,
+  getMaxBlockRange,
+  getParentChainBlockTimeForBatchPosting,
+  MAX_TIMEBOUNDS_SECONDS,
+  BATCH_POSTING_TIMEBOUNDS_FALLBACK,
+  BATCH_POSTING_TIMEBOUNDS_BUFFER,
+  MIN_DAYS_OF_BALANCE_LEFT,
+  MAX_LOGS_TO_PROCESS_FOR_BALANCE,
+  BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
@@ -92,22 +95,34 @@ const sequencerBatchDeliveredEventAbi: AbiEvent = {
   type: 'event',
 }
 
-const displaySummaryInformation = (
-  childChainInformation: ChainInfo,
-  latestBatchPostedBlockNumber: bigint,
-  latestBatchPostedSecondsAgo: bigint,
-  latestChildChainBlockNumber: bigint,
+const displaySummaryInformation = ({
+  childChainInformation,
+  lastBlockReported,
+  latestBatchPostedBlockNumber,
+  latestBatchPostedSecondsAgo,
+  latestChildChainBlockNumber,
+  batchPosterBacklogSize,
+  batchPostingTimeBounds,
+}: {
+  childChainInformation: ChainInfo
+  lastBlockReported: bigint
+  latestBatchPostedBlockNumber: bigint
+  latestBatchPostedSecondsAgo: bigint
+  latestChildChainBlockNumber: bigint
   batchPosterBacklogSize: bigint
-) => {
+  batchPostingTimeBounds: number
+}) => {
   console.log('**********')
   console.log(`Batch poster summary of [${childChainInformation.name}]`)
   console.log(
     `Latest block number on [${childChainInformation.name}] is ${latestChildChainBlockNumber}.`
   )
   console.log(
-    `Latest batch posted on [Parent chain id: ${
+    `Latest [${
+      childChainInformation.name
+    }] block included on [Parent chain id: ${
       childChainInformation.parentChainId
-    }] is ${latestBatchPostedBlockNumber} => ${
+    }, block-number ${latestBatchPostedBlockNumber}] is ${lastBlockReported} => ${
       latestBatchPostedSecondsAgo / 60n / 60n
     } hours, ${(latestBatchPostedSecondsAgo / 60n) % 60n} minutes, ${
       latestBatchPostedSecondsAgo % 60n
@@ -115,6 +130,7 @@ const displaySummaryInformation = (
   )
 
   console.log(`Batch poster backlog is ${batchPosterBacklogSize} blocks.`)
+  console.log(timeBoundsExpectedMessage(batchPostingTimeBounds))
   console.log('**********')
   console.log('')
 }
@@ -172,60 +188,131 @@ const getBatchPosterFromEventLogs = async (
   return tx.from
 }
 
+const getBatchPosterAddress = async (
+  parentChainClient: PublicClient,
+  childChainInformation: ChainInfo,
+  sequencerInboxLogs: EventLogs
+) => {
+  // if we have sequencer inbox logs, then get the batch poster directly
+  if (sequencerInboxLogs.length > 0) {
+    return await getBatchPosterFromEventLogs(
+      sequencerInboxLogs,
+      parentChainClient
+    )
+  }
+
+  // else derive batch poster from the sdk
+  const { batchPosters, isAccurate } = await getBatchPosters(
+    //@ts-ignore - PublicClient that we pass vs PublicClient that orbit-sdk expects is not matching
+    parentChainClient,
+    {
+      rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
+      sequencerInbox: childChainInformation.ethBridge
+        .sequencerInbox as `0x${string}`,
+    }
+  )
+
+  if (isAccurate) {
+    return batchPosters[0] // get the first batch poster
+  } else {
+    throw Error('Batch poster information not found')
+  }
+}
+
 const getBatchPosterLowBalanceAlertMessage = async (
   parentChainClient: PublicClient,
   childChainInformation: ChainInfo,
   sequencerInboxLogs: EventLogs
 ) => {
-  let batchPoster: `0x${string}` | null = null
+  const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(
+    childChainInformation
+  )
 
-  // try fetching batch poster address from orbit-sdk
-  try {
-    const { batchPosters, isAccurate } = await getBatchPosters(
-      //@ts-ignore - PublicClient that we pass vs PublicClient that orbit-sdk expects is not matching
-      parentChainClient,
-      {
-        rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
-        sequencerInbox: childChainInformation.ethBridge
-          .sequencerInbox as `0x${string}`,
-      }
-    )
-
-    if (isAccurate) {
-      batchPoster = batchPosters[0] // get the first batch poster
-    } else {
-      throw Error('Batch poster list is not accurate') // get the batch poster from the event logs in catch block
-    }
-  } catch {
-    // else try fetching the batch poster from the event logs
-    try {
-      batchPoster = await getBatchPosterFromEventLogs(
-        sequencerInboxLogs,
-        parentChainClient
-      )
-    } catch {
-      // batchPoster not found by any means
-      return 'Batch poster information not found'
-    }
-  }
-
-  const balance = await parentChainClient.getBalance({
+  const batchPoster = await getBatchPosterAddress(
+    parentChainClient,
+    childChainInformation,
+    sequencerInboxLogs
+  )
+  const currentBalance = await parentChainClient.getBalance({
     address: batchPoster,
   })
 
-  const lowBalanceDetected =
-    (childChainInformation.parentChainId === 1 &&
-      balance < BigInt(LOW_ETH_BALANCE_THRESHOLD_ETHEREUM * 1e18)) ||
-    (childChainInformation.parentChainId !== 1 &&
-      balance < BigInt(LOW_ETH_BALANCE_THRESHOLD_ARBITRUM * 1e18))
+  // if there are no logs, add a static check for low balance
+  if (sequencerInboxLogs.length === 0) {
+    const bal = Number(formatEther(currentBalance))
+    if (bal < BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK) {
+      return `Low Batch poster balance (<${
+        PARENT_CHAIN_ADDRESS_PREFIX + batchPoster
+      }|${batchPoster}>): ${formatEther(
+        currentBalance
+      )} ETH (Minimum expected balance: ${BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK} ETH). `
+    }
+    return null
+  }
+
+  // Dynamic balance check based on the logs
+  // Extract the most recent logs for processing to avoid overloading with too many logs
+  const recentLogs = [...sequencerInboxLogs].slice(
+    -MAX_LOGS_TO_PROCESS_FOR_BALANCE
+  )
+
+  // Calculate the elapsed time (in seconds) since the first block in the logs
+  const firstTransaction = await parentChainClient.getTransaction({
+    hash: recentLogs[0].transactionHash,
+  })
+  const initialBlock = await parentChainClient.getBlock({
+    blockNumber: firstTransaction.blockNumber,
+  })
+  const initialBlockTimestamp = initialBlock.timestamp
+
+  const elapsedTimeSinceFirstBlock =
+    BigInt(Math.floor(Date.now() / 1000)) - initialBlockTimestamp
+
+  // Loop through each log and calculate the gas cost for posting batches
+  let postingCost = BigInt(0)
+  for (const log of recentLogs) {
+    const tx = await parentChainClient.getTransactionReceipt({
+      hash: log.transactionHash,
+    })
+    postingCost += tx.gasUsed * tx.effectiveGasPrice // Accumulate the transaction cost
+  }
+
+  // Calculate the approximate balance spent over the last 24 hours
+  const secondsIn1Day = 24n * 60n * 60n
+
+  const timeRatio =
+    secondsIn1Day / elapsedTimeSinceFirstBlock > 1n
+      ? secondsIn1Day / elapsedTimeSinceFirstBlock
+      : 1n // set minimum cap of the ratio to 1, since we are calculating the cost for 24 hours, else bigInt rounds off the ratio to zero
+
+  const dailyPostingCostEstimate = timeRatio * postingCost
+
+  // Estimate how many days the current balance will last based on the daily cost
+  const daysLeftForCurrentBalance = currentBalance / dailyPostingCostEstimate
+  console.log(
+    `The current batch poster balance is ${formatEther(
+      currentBalance
+    )} ETH, and balance spent in 24 hours is approx ${formatEther(
+      dailyPostingCostEstimate
+    )} ETH. The current balance can last approximately ${daysLeftForCurrentBalance} days.`
+  )
+
+  // Determine the minimum expected balance needed to maintain operations for a certain number of days
+  const minimumExpectedBalance =
+    MIN_DAYS_OF_BALANCE_LEFT * dailyPostingCostEstimate
+
+  // Check if the current balance is below the minimum expected balance
+  // Return a warning message if low balance is detected
+  const lowBalanceDetected = currentBalance < minimumExpectedBalance
 
   if (lowBalanceDetected) {
-    const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(
-      childChainInformation
-    )
     return `Low Batch poster balance (<${
       PARENT_CHAIN_ADDRESS_PREFIX + batchPoster
-    }|${batchPoster}>): ${formatEther(balance)} ETH`
+    }|${batchPoster}>): ${formatEther(
+      currentBalance
+    )} ETH (Minimum expected balance: ${formatEther(
+      minimumExpectedBalance
+    )} ETH). The current balance is expected to last for ~${daysLeftForCurrentBalance} days only.`
   }
 
   return null
@@ -254,6 +341,46 @@ const checkForUserTransactionBlocks = async ({
 
   return userTransactionBlockFound
 }
+
+const getBatchPostingTimeBounds = async (
+  childChainInformation: ChainInfo,
+  parentChainClient: PublicClient
+) => {
+  let batchPostingTimeBounds = BATCH_POSTING_TIMEBOUNDS_FALLBACK
+  try {
+    const maxTimeVariation = await parentChainClient.readContract({
+      address: childChainInformation.ethBridge.sequencerInbox as `0x${string}`,
+      abi: parseAbi([
+        'function maxTimeVariation() view returns (uint256, uint256, uint256, uint256)',
+      ]),
+      functionName: 'maxTimeVariation',
+    })
+
+    const delayBlocks = Number(maxTimeVariation[0])
+    const delaySeconds = Number(maxTimeVariation[2].toString())
+
+    // use the minimum of delayBlocks or delay seconds
+    batchPostingTimeBounds = Math.min(
+      delayBlocks *
+        getParentChainBlockTimeForBatchPosting(childChainInformation),
+      delaySeconds
+    )
+  } catch (_) {
+    // no-op, use the fallback value
+  }
+
+  // formula : min(50% of x , max(1h, x - buffer))
+  // minimum of half of the batchPostingTimeBounds vs [1 hour vs batchPostingTimeBounds - buffer]
+  return Math.min(
+    0.5 * batchPostingTimeBounds,
+    Math.max(3600, batchPostingTimeBounds - BATCH_POSTING_TIMEBOUNDS_BUFFER)
+  )
+}
+
+const timeBoundsExpectedMessage = (batchPostingTimebounds: number) =>
+  `At least 1 batch is expected to be posted every ${
+    batchPostingTimebounds / 60 / 60
+  } hours.`
 
 const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   const alertsForChildChain: string[] = []
@@ -290,7 +417,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   // Getting sequencer inbox logs
   const latestBlockNumber = await parentChainClient.getBlockNumber()
 
-  const blocksToProcess = getDefaultBlockRange(parentChain)
+  const blocksToProcess = getMaxBlockRange(parentChain)
   const toBlock = latestBlockNumber
   const fromBlock = toBlock - blocksToProcess
 
@@ -333,19 +460,22 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     alertsForChildChain.push(batchPosterLowBalanceMessage)
   }
 
+  const batchPostingTimeBounds = await getBatchPostingTimeBounds(
+    childChainInformation,
+    parentChainClient
+  )
+
   // Get the last block of the chain
   const latestChildChainBlockNumber = await childChainClient.getBlockNumber()
 
   if (!sequencerInboxLogs || sequencerInboxLogs.length === 0) {
-    // No SequencerInboxLog in the last 24 hours (time hardcoded in getDefaultBlockRange)
-    // We compare the "latest" and "safe" blocks, and check if any of the pending blocks contain any user-transactions
-    // NOTE: another way of verifying this might be to check the timestamp of the last block in the childChain chain to verify more or less if it should have been posted
+    // get the last block that is 'safe' ie. can be assumed to have been posted
     const latestChildChainSafeBlock = await childChainClient.getBlock({
       blockTag: 'safe',
     })
 
     const blocksPendingToBePosted =
-      latestChildChainSafeBlock.number < latestChildChainBlockNumber
+      latestChildChainBlockNumber - latestChildChainSafeBlock.number
 
     const doPendingBlocksContainUserTransactions =
       await checkForUserTransactionBlocks({
@@ -354,28 +484,36 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
         publicClient: childChainClient,
       })
 
-    if (blocksPendingToBePosted && doPendingBlocksContainUserTransactions) {
+    const batchPostingBacklog =
+      blocksPendingToBePosted > 0n && doPendingBlocksContainUserTransactions
+
+    // if alert situation
+    if (batchPostingBacklog) {
       alertsForChildChain.push(
         `No batch has been posted in the last ${
-          DEFAULT_TIMESPAN_SECONDS / 60 / 60
+          MAX_TIMEBOUNDS_SECONDS / 60 / 60
         } hours, and last block number (${latestChildChainBlockNumber}) is greater than the last safe block number (${
           latestChildChainSafeBlock.number
-        })`
+        }). ${timeBoundsExpectedMessage(batchPostingTimeBounds)}`
       )
 
       showAlert(childChainInformation, alertsForChildChain)
-      return
-    }
+    } else {
+      // if no alerting situation, just log the summary
+      console.log(
+        `**********\nBatch poster summary of [${childChainInformation.name}]`
+      )
+      console.log(
+        `No user activity in the last ${
+          MAX_TIMEBOUNDS_SECONDS / 60 / 60
+        } hours, and hence no batch has been posted.\n`
+      )
 
-    // if no alerting situation, just log the summary
-    console.log(
-      `**********\nBatch poster summary of [${childChainInformation.name}]`
-    )
-    console.log(
-      `No user activity in the last ${
-        DEFAULT_TIMESPAN_SECONDS / 60 / 60
-      } hours, and hence no batch has been posted.`
-    )
+      // in this case show alert only if batch poster balance is low
+      if (batchPosterLowBalanceMessage) {
+        showAlert(childChainInformation, alertsForChildChain)
+      }
+    }
     return
   }
 
@@ -400,20 +538,21 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   })
 
   // Get batch poster backlog
-  const batchPosterBacklog =
-    latestChildChainBlockNumber - lastBlockReported - 1n
+  const batchPosterBacklog = latestChildChainBlockNumber - lastBlockReported
 
   // If there's backlog and last batch posted was 4 hours ago, send alert
   if (
     batchPosterBacklog > 0 &&
-    secondsSinceLastBatchPoster > DEFAULT_BATCH_POSTING_DELAY_SECONDS
+    secondsSinceLastBatchPoster > BigInt(batchPostingTimeBounds)
   ) {
     alertsForChildChain.push(
       `Last batch was posted ${
         secondsSinceLastBatchPoster / 60n / 60n
       } hours and ${
         (secondsSinceLastBatchPoster / 60n) % 60n
-      } mins ago, and there's a backlog of ${batchPosterBacklog} blocks in the chain`
+      } mins ago, and there's a backlog of ${batchPosterBacklog} blocks in the chain. ${timeBoundsExpectedMessage(
+        batchPostingTimeBounds
+      )}`
     )
   }
 
@@ -422,13 +561,15 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     return
   }
 
-  displaySummaryInformation(
+  displaySummaryInformation({
     childChainInformation,
-    lastSequencerInboxBlock.number,
-    secondsSinceLastBatchPoster,
+    lastBlockReported,
+    latestBatchPostedBlockNumber: lastSequencerInboxBlock.number,
+    latestBatchPostedSecondsAgo: secondsSinceLastBatchPoster,
     latestChildChainBlockNumber,
-    batchPosterBacklog
-  )
+    batchPosterBacklogSize: batchPosterBacklog,
+    batchPostingTimeBounds,
+  })
 }
 
 const main = async () => {
