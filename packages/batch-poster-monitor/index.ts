@@ -294,6 +294,7 @@ const getBatchPosterLowBalanceAlertMessage = async (
 
   const dailyPostingCostEstimate =
     (secondsIn1Day / Number(elapsedTimeSinceFirstBlock)) * Number(postingCost)
+
   const dailyPostingCostEstimateBigInt = BigInt(
     Math.floor(dailyPostingCostEstimate)
   )
