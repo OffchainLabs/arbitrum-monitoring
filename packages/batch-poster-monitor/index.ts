@@ -290,30 +290,28 @@ const getBatchPosterLowBalanceAlertMessage = async (
   }
 
   // Calculate the approximate balance spent over the last 24 hours
-  const secondsIn1Day = 24 * 60 * 60
+  const secondsIn1Day = 24n * 60n * 60n
 
-  const dailyPostingCostEstimate =
-    (secondsIn1Day / Number(elapsedTimeSinceFirstBlock)) * Number(postingCost)
+  const timeRatio =
+    secondsIn1Day / elapsedTimeSinceFirstBlock > 1n
+      ? secondsIn1Day / elapsedTimeSinceFirstBlock
+      : 1n // set minimum cap of the ratio to 1, since we are calculating the cost for 24 hours, else bigInt rounds off the ratio to zero
 
-  const dailyPostingCostEstimateBigInt = BigInt(
-    Math.floor(dailyPostingCostEstimate)
-  )
+  const dailyPostingCostEstimate = timeRatio * postingCost
 
   // Estimate how many days the current balance will last based on the daily cost
-  const daysLeftForCurrentBalance = BigInt(
-    Math.floor(Number(currentBalance) / dailyPostingCostEstimate)
-  )
+  const daysLeftForCurrentBalance = currentBalance / dailyPostingCostEstimate
   console.log(
     `The current batch poster balance is ${formatEther(
       currentBalance
     )} ETH, and balance spent in 24 hours is approx ${formatEther(
-      dailyPostingCostEstimateBigInt
+      dailyPostingCostEstimate
     )} ETH. The current balance can last approximately ${daysLeftForCurrentBalance} days.`
   )
 
   // Determine the minimum expected balance needed to maintain operations for a certain number of days
   const minimumExpectedBalance =
-    MIN_DAYS_OF_BALANCE_LEFT * dailyPostingCostEstimateBigInt
+    MIN_DAYS_OF_BALANCE_LEFT * dailyPostingCostEstimate
 
   // Check if the current balance is below the minimum expected balance
   // Return a warning message if low balance is detected
