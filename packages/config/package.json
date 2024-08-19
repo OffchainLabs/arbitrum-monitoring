@@ -2,8 +2,14 @@
   "name": "config",
   "version": "1.0.0",
   "main": "index.ts",
-  "dependencies": {},
   "scripts": {
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.5"
   }
 }
