@@ -2,15 +2,10 @@
   "name": "utils",
   "version": "1.0.0",
   "main": "index.ts",
-  "scripts": {
-    "lint": "eslint .",
-    "test": "vitest run"
-  },
   "dependencies": {
-    "viem": "^2.19.4",
-    "zod": "^3.23.8"
+    "@slack/web-api": "^7.0.4"
   },
-  "devDependencies": {
-    "vitest": "^2.0.5"
+  "scripts": {
+    "lint": "eslint ."
   }
 }
