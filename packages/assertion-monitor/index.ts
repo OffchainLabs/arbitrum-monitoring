@@ -2,7 +2,12 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { PublicClient, createPublicClient, defineChain, http } from 'viem'
 import yargs from 'yargs'
-import { ChildNetwork as ChainInfo, sleep } from '../utils'
+import {
+  ChildNetwork as ChainInfo,
+  DEFAULT_CONFIG_PATH,
+  getConfig,
+  sleep,
+} from '../utils'
 import { nodeCreatedEventAbi } from './abi'
 import {
   getBlockTimeForChain,
@@ -10,7 +15,6 @@ import {
   getDefaultBlockRange,
 } from './chains'
 import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
-import { getConfig, DEFAULT_CONFIG_PATH } from '../config'
 
 const CHUNK_SIZE = 800n
 const RETRIES = 3

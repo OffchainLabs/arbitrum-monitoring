@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as fs from 'fs'
 import * as path from 'path'
-import { ChildChains, getConfig } from '.'
+import { ChildChains, getConfig } from './config'
 
 vi.mock('fs')
 vi.mock('path')

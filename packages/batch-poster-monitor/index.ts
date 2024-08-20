@@ -25,8 +25,12 @@ import {
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
-import { ChildNetwork as ChainInfo, getExplorerUrlPrefixes } from '../utils'
-import { getConfig, DEFAULT_CONFIG_PATH } from '../config'
+import {
+  ChildNetwork as ChainInfo,
+  DEFAULT_CONFIG_PATH,
+  getConfig,
+  getExplorerUrlPrefixes,
+} from '../utils'
 
 // Parsing command line arguments using yargs
 const options: BatchPosterMonitorOptions = yargs(process.argv.slice(2))

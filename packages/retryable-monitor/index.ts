@@ -33,8 +33,12 @@ import {
   ParentChainTicketReport,
   TokenDepositData,
 } from './types'
-import { ChildNetwork, getExplorerUrlPrefixes } from '../utils'
-import { getConfig, DEFAULT_CONFIG_PATH } from '../config'
+import {
+  ChildNetwork,
+  DEFAULT_CONFIG_PATH,
+  getConfig,
+  getExplorerUrlPrefixes,
+} from '../utils'
 
 // Path for the log file
 const logFilePath = 'logfile.log'
