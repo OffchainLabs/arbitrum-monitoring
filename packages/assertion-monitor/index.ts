@@ -1,6 +1,12 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { PublicClient, createPublicClient, defineChain, http } from 'viem'
+import {
+  PublicClient,
+  createPublicClient,
+  defineChain,
+  getContract,
+  http,
+} from 'viem'
 import yargs from 'yargs'
 import { ChildNetwork as ChainInfo, sleep } from '../utils'
 import { nodeCreatedEventAbi } from './abi'
@@ -31,6 +37,29 @@ const config = JSON.parse(configFileContent)
 if (!Array.isArray(config.childChains) || config.childChains.length === 0) {
   console.error('Error: Chains not found in the config file.')
   process.exit(1)
+}
+
+const rollupABI = [
+  {
+    inputs: [],
+    name: 'validatorWhitelistDisabled',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const
+
+async function getValidatorWhitelistDisabled(
+  client: PublicClient,
+  rollupAddress: string
+): Promise<boolean> {
+  const contract = getContract({
+    address: rollupAddress as `0x${string}`,
+    abi: rollupABI,
+    publicClient: client,
+  })
+
+  return contract.read.validatorWhitelistDisabled()
 }
 
 type ChunkProcessFunction<T> = (
@@ -177,6 +206,11 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
   const isLatestSafeBlockWithinRange =
     latestSafeBlock.number < toBlock && latestSafeBlock.number > fromBlock
 
+  const validatorWhitelistDisabled = await getValidatorWhitelistDisabled(
+    client,
+    childChainInfo.ethBridge.rollup
+  )
+
   if (!logs || logs.length === 0) {
     return {
       chainName: childChainInfo.name,
@@ -186,11 +220,17 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
         isLatestSafeBlockWithinRange ? 'was' : 'was not'
       } posted within this duration, at ${timestampOfLatestSafeBlock} (block ${
         latestSafeBlock.number
-      })`,
+      }). Validator whitelist is ${
+        validatorWhitelistDisabled ? 'disabled' : 'enabled'
+      }.`,
     }
   } else {
     console.log(
-      `Found ${logs.length} assertion creation event(s) on ${childChainInfo.name} ${durationString}.`
+      `Found ${logs.length} assertion creation event(s) on ${
+        childChainInfo.name
+      } ${durationString}. Validator whitelist is ${
+        validatorWhitelistDisabled ? 'disabled' : 'enabled'
+      }.`
     )
     return null
   }
