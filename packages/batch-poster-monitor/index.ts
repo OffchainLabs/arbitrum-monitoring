@@ -25,31 +25,23 @@ import {
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
-import { ChildNetwork as ChainInfo, getExplorerUrlPrefixes } from '../utils'
+import {
+  ChildNetwork as ChainInfo,
+  DEFAULT_CONFIG_PATH,
+  getConfig,
+  getExplorerUrlPrefixes,
+} from '../utils'
 
 // Parsing command line arguments using yargs
 const options: BatchPosterMonitorOptions = yargs(process.argv.slice(2))
   .options({
-    configPath: { type: 'string', default: 'config.json' },
+    configPath: { type: 'string', default: DEFAULT_CONFIG_PATH },
     enableAlerting: { type: 'boolean', default: false },
   })
   .strict()
   .parseSync() as BatchPosterMonitorOptions
 
-// Read the content of the config file
-const configFileContent = fs.readFileSync(
-  path.join(process.cwd(), options.configPath),
-  'utf-8'
-)
-
-// Parse the config file content as JSON
-const config = JSON.parse(configFileContent)
-
-// Check if chains array is present in the config file
-if (!Array.isArray(config.childChains) || config?.childChains?.length === 0) {
-  console.error('Error: Chains not found in the config file.')
-  process.exit(1)
-}
+const config = getConfig({ configPath: options.configPath })
 
 const sequencerBatchDeliveredEventAbi: AbiEvent = {
   anonymous: false,

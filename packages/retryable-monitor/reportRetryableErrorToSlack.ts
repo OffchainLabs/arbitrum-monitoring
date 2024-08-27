@@ -1,7 +1,4 @@
-import dotenv from 'dotenv'
 import { postSlackMessage } from '../utils/postSlackMessage'
-
-dotenv.config()
 
 const slackToken = process.env.RETRYABLE_MONITORING_SLACK_TOKEN
 const slackChannel = process.env.RETRYABLE_MONITORING_SLACK_CHANNEL

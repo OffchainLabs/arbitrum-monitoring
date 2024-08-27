@@ -8,7 +8,12 @@ import {
   http,
 } from 'viem'
 import yargs from 'yargs'
-import { ChildNetwork as ChainInfo, sleep } from '../utils'
+import {
+  ChildNetwork as ChainInfo,
+  DEFAULT_CONFIG_PATH,
+  getConfig,
+  sleep,
+} from '../utils'
 import { nodeCreatedEventAbi } from './abi'
 import {
   getBlockTimeForChain,
@@ -22,17 +27,13 @@ const RETRIES = 3
 
 const options = yargs(process.argv.slice(2))
   .options({
-    configPath: { type: 'string', default: 'config.json' },
+    configPath: { type: 'string', default: DEFAULT_CONFIG_PATH },
     enableAlerting: { type: 'boolean', default: false },
   })
   .strict()
   .parseSync()
 
-const configFileContent = fs.readFileSync(
-  path.join(process.cwd(), options.configPath),
-  'utf-8'
-)
-const config = JSON.parse(configFileContent)
+const config = getConfig(options)
 
 if (!Array.isArray(config.childChains) || config.childChains.length === 0) {
   console.error('Error: Chains not found in the config file.')
