@@ -5,13 +5,14 @@ import {
   Log,
   PublicClient,
   createPublicClient,
+  decodeFunctionData,
   defineChain,
   formatEther,
   http,
   parseAbi,
 } from 'viem'
 import { AbiEvent } from 'abitype'
-import { getBatchPosters } from '@arbitrum/orbit-sdk'
+import { getBatchPosters, isAnyTrust } from '@arbitrum/orbit-sdk'
 import {
   getChainFromId,
   getMaxBlockRange,
@@ -98,6 +99,47 @@ const sequencerBatchDeliveredEventAbi: AbiEvent = {
   name: 'SequencerBatchDelivered',
   type: 'event',
 }
+
+const sequencerInboxAbi = [
+  {
+    inputs: [
+      {
+        internalType: 'uint256',
+        name: 'sequenceNumber',
+        type: 'uint256',
+      },
+      {
+        internalType: 'bytes',
+        name: 'data',
+        type: 'bytes',
+      },
+      {
+        internalType: 'uint256',
+        name: 'afterDelayedMessagesRead',
+        type: 'uint256',
+      },
+      {
+        internalType: 'address',
+        name: 'gasRefunder',
+        type: 'address',
+      },
+      {
+        internalType: 'uint256',
+        name: 'prevMessageCount',
+        type: 'uint256',
+      },
+      {
+        internalType: 'uint256',
+        name: 'newMessageCount',
+        type: 'uint256',
+      },
+    ],
+    name: 'addSequencerL2BatchFromOrigin',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+] as const
 
 const displaySummaryInformation = ({
   childChainInformation,
@@ -524,6 +566,19 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   // Get the latest log
   const lastSequencerInboxLog = sequencerInboxLogs.pop()
 
+  const isChainAnyTrust = await isAnyTrust({
+    publicClient: parentChainClient as any,
+    rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
+  })
+
+  if (isChainAnyTrust) {
+    const alerts = await checkIfAnyTrustRevertedToPostDataOnChain({
+      parentChainClient,
+      childChainInformation,
+      lastSequencerInboxLog,
+    })
+    alertsForChildChain.push(...alerts)
+  }
   // Get the timestamp of the block where that log was emitted
   const lastSequencerInboxBlock = await parentChainClient.getBlock({
     blockNumber: lastSequencerInboxLog!.blockNumber,
@@ -613,6 +668,52 @@ const main = async () => {
       message: finalMessage,
     })
   }
+}
+
+const checkIfAnyTrustRevertedToPostDataOnChain = async ({
+  parentChainClient,
+  childChainInformation,
+  lastSequencerInboxLog,
+}: {
+  parentChainClient: PublicClient
+  childChainInformation: ChainInfo
+  lastSequencerInboxLog:
+    | Log<bigint, number, false, AbiEvent, undefined, [AbiEvent], string>
+    | undefined
+}): Promise<string[]> => {
+  const alerts = []
+
+  // Get the transaction that emitted `lastSequencerInboxLog`
+  const transaction = await parentChainClient.getTransaction({
+    hash: lastSequencerInboxLog?.transactionHash as `0x${string}`,
+  })
+
+  const { args } = decodeFunctionData({
+    abi: sequencerInboxAbi,
+    data: transaction.input,
+  })
+
+  // Extract the 'data' field
+  const batchData = args[1] as `0x${string}`
+
+  // Check the first byte of the data
+  const firstByte = batchData.slice(0, 4)
+
+  if (firstByte === '0x00') {
+    alerts.push(
+      `AnyTrust chain [${childChainInformation.name}] has fallen back to posting calldata on-chain. This indicates a potential issue with the Data Availability Committee.`
+    )
+  } else if (firstByte === '0x88') {
+    console.log(
+      `Chain [${childChainInformation.name}] is using AnyTrust DACert as expected.`
+    )
+  } else {
+    console.log(
+      `Chain [${childChainInformation.name}] is using an unknown data format. First byte: ${firstByte}`
+    )
+  }
+
+  return alerts
 }
 
 main()
