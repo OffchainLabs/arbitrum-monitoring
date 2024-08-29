@@ -1,5 +1,3 @@
-import * as fs from 'fs'
-import * as path from 'path'
 import {
   PublicClient,
   createPublicClient,
@@ -15,15 +13,14 @@ import {
   sleep,
 } from '../utils'
 import { nodeCreatedEventAbi } from './abi'
-import {
-  getBlockTimeForChain,
-  getChainFromId,
-  getDefaultBlockRange,
-} from './chains'
+import { getBlockTimeForChain, getChainFromId } from './chains'
 import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
 
 const CHUNK_SIZE = 800n
 const RETRIES = 3
+const VALIDATOR_AFK_BLOCKS = 45818
+const MAXIMUM_SEARCH_DAYS = 7
+const SAFETY_BUFFER_DAYS = 4
 
 const options = yargs(process.argv.slice(2))
   .options({
@@ -61,6 +58,25 @@ async function getValidatorWhitelistDisabled(
   })
 
   return contract.read.validatorWhitelistDisabled()
+}
+
+function calculateSearchWindow(
+  childChainInfo: ChainInfo,
+  parentChain: ReturnType<typeof getChainFromId>
+): { days: number; blocks: number } {
+  const blockTime = getBlockTimeForChain(parentChain)
+  const blocksToSearch =
+    childChainInfo.confirmPeriodBlocks * VALIDATOR_AFK_BLOCKS
+  const timespan = blockTime * blocksToSearch
+
+  let days = timespan / (60 * 60 * 24)
+
+  days = Math.max(days - SAFETY_BUFFER_DAYS, 0)
+
+  return {
+    days: Math.min(Math.ceil(days), MAXIMUM_SEARCH_DAYS),
+    blocks: blocksToSearch,
+  }
 }
 
 type ChunkProcessFunction<T> = (
@@ -106,8 +122,10 @@ const getBlockRange = async (
   childChainInfo: ChainInfo
 ) => {
   const latestBlockNumber = await client.getBlockNumber()
-  const blockRange = getDefaultBlockRange(
-    getChainFromId(childChainInfo.parentChainId)
+  const parentChain = getChainFromId(childChainInfo.parentChainId)
+  const { blocks: blockRange } = calculateSearchWindow(
+    childChainInfo,
+    parentChain
   )
 
   const fromBlock = await client.getBlock({

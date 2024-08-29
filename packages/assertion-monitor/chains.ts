@@ -10,8 +10,6 @@ import {
   baseSepolia,
 } from 'viem/chains'
 
-export const DEFAULT_TIME_SPAN_SECONDS = 60 * 60 * 24 * 7 // 1 week
-
 export const supportedParentChains = [
   mainnet,
   arbitrum,
@@ -47,8 +45,4 @@ export const getBlockTimeForChain = (chain: Chain): number => {
     default:
       return 1
   }
-}
-
-export const getDefaultBlockRange = (chain: Chain): bigint => {
-  return BigInt(DEFAULT_TIME_SPAN_SECONDS / getBlockTimeForChain(chain))
 }
