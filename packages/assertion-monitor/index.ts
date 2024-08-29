@@ -65,17 +65,26 @@ function calculateSearchWindow(
   parentChain: ReturnType<typeof getChainFromId>
 ): { days: number; blocks: number } {
   const blockTime = getBlockTimeForChain(parentChain)
-  const blocksToSearch =
+  const initialBlocksToSearch =
     childChainInfo.confirmPeriodBlocks * VALIDATOR_AFK_BLOCKS
-  const timespan = blockTime * blocksToSearch
+  const timespan = blockTime * initialBlocksToSearch
 
-  let days = timespan / (60 * 60 * 24)
+  const blocksInDays = timespan / (60 * 60 * 24)
+  const blocksInDaysMinusSafety = Math.max(blocksInDays - SAFETY_BUFFER_DAYS, 0)
+  const daysAdjustedForMax = Math.min(
+    Math.ceil(blocksInDaysMinusSafety),
+    MAXIMUM_SEARCH_DAYS
+  )
 
-  days = Math.max(days - SAFETY_BUFFER_DAYS, 0)
+  // Calculate the maximum number of blocks for 7 days
+  const maxBlocksFor7Days = Math.floor((7 * 24 * 60 * 60) / blockTime)
+
+  // Adjust blocks to the maximum of 7 days
+  const adjustedBlocks = Math.min(initialBlocksToSearch, maxBlocksFor7Days)
 
   return {
-    days: Math.min(Math.ceil(days), MAXIMUM_SEARCH_DAYS),
-    blocks: blocksToSearch,
+    days: daysAdjustedForMax,
+    blocks: adjustedBlocks,
   }
 }
 
