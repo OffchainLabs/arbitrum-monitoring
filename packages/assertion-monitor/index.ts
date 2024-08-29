@@ -182,16 +182,6 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
 
   const logs = logsArray.flat()
 
-  const getDurationInDays = (fromBlock: bigint, toBlock: bigint) => {
-    const blockTime = getBlockTimeForChain(parentChain)
-    return (Number(toBlock - fromBlock) * blockTime) / 60 / 60 / 24
-  }
-  const durationInDays = getDurationInDays(fromBlock, toBlock)
-
-  const durationString = `in the last ${
-    durationInDays === 1 ? ' day' : durationInDays + ' days'
-  }`
-
   const childChain = defineChain({
     id: childChainInfo.chainId,
     name: childChainInfo.name,
@@ -229,6 +219,14 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
     client,
     childChainInfo.ethBridge.rollup
   )
+
+  const { days: durationInDays } = calculateSearchWindow(
+    childChainInfo,
+    parentChain
+  )
+  const durationString = `in the last ${
+    durationInDays === 1 ? ' day' : durationInDays + ' days'
+  }`
 
   if (!logs || logs.length === 0) {
     return {
