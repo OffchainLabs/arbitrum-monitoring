@@ -580,7 +580,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   })
 
   if (isChainAnyTrust) {
-    const alerts = await checkIfAnyTrustRevertedToOnChain({
+    const alerts = await checkIfAnyTrustRevertedToPostDataOnChain({
       parentChainClient,
       childChainInformation,
       lastSequencerInboxLog,
@@ -678,7 +678,7 @@ const main = async () => {
   }
 }
 
-const checkIfAnyTrustRevertedToOnChain = async ({
+const checkIfAnyTrustRevertedToPostDataOnChain = async ({
   parentChainClient,
   childChainInformation,
   lastSequencerInboxLog,
