@@ -77,10 +77,12 @@ function calculateSearchWindow(
   )
 
   // Calculate the maximum number of blocks for 7 days
-  const maxBlocksFor7Days = Math.floor((7 * 24 * 60 * 60) / blockTime)
+  const maxSearchableBlocks = Math.floor(
+    (MAXIMUM_SEARCH_DAYS * 24 * 60 * 60) / blockTime
+  )
 
   // Adjust blocks to the maximum of 7 days
-  const adjustedBlocks = Math.min(initialBlocksToSearch, maxBlocksFor7Days)
+  const adjustedBlocks = Math.min(initialBlocksToSearch, maxSearchableBlocks)
 
   return {
     days: daysAdjustedForMax,
