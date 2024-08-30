@@ -76,7 +76,7 @@ function calculateSearchWindow(
     MAXIMUM_SEARCH_DAYS
   )
 
-  // Calculate the maximum number of blocks for 7 days
+  // Calculate the maximum number of blocks for the maximum search days
   const maxSearchableBlocks = Math.floor(
     (MAXIMUM_SEARCH_DAYS * 24 * 60 * 60) / blockTime
   )
