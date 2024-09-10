@@ -31,6 +31,10 @@ export const supportedParentChains = [
   baseSepolia,
 ]
 
+export const supportedCoreChainIds: number[] = supportedParentChains.map(
+  chain => chain.id
+)
+
 // we don't want to use orbit/sdk to call isAnyTrust for core chain
 export const hardcodedAnyTrustCheckForCoreChainIds: { [id: number]: boolean } =
   {

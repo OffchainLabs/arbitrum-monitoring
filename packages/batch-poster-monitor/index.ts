@@ -9,8 +9,12 @@ import {
   http,
   parseAbi,
 } from 'viem'
+import { arbitrumNova } from 'viem/chains'
 import { AbiEvent } from 'abitype'
-import { getBatchPosters, isAnyTrust } from '@arbitrum/orbit-sdk'
+import {
+  getBatchPosters,
+  isAnyTrust as isAnyTrustOrbitChain,
+} from '@arbitrum/orbit-sdk'
 import {
   getChainFromId,
   getMaxBlockRange,
@@ -21,7 +25,7 @@ import {
   MIN_DAYS_OF_BALANCE_LEFT,
   MAX_LOGS_TO_PROCESS_FOR_BALANCE,
   BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK,
-  hardcodedAnyTrustCheckForCoreChainIds,
+  supportedCoreChainIds,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
@@ -427,6 +431,26 @@ const timeBoundsExpectedMessage = (batchPostingTimebounds: number) =>
     batchPostingTimebounds / 60 / 60
   } hours.`
 
+const isAnyTrust = async (
+  childChainInformation: ChainInfo,
+  parentChainClient: PublicClient
+) => {
+  const { chainId } = childChainInformation
+
+  const anyTrustCoreChainIds = [arbitrumNova.id] as number[] // core chains that we know are AnyTrust
+
+  // if chainId being passed is a core chainId
+  if (supportedCoreChainIds.includes(chainId)) {
+    // then return true if it's in anyTrust, else false
+    return anyTrustCoreChainIds.includes(chainId)
+  }
+
+  return isAnyTrustOrbitChain({
+    publicClient: parentChainClient as any,
+    rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
+  })
+}
+
 const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   const alertsForChildChain: string[] = []
 
@@ -565,12 +589,10 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   // Get the latest log
   const lastSequencerInboxLog = sequencerInboxLogs.pop()
 
-  const isChainAnyTrust =
-    hardcodedAnyTrustCheckForCoreChainIds[childChain.id] ??
-    (await isAnyTrust({
-      publicClient: parentChainClient as any,
-      rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
-    }))
+  const isChainAnyTrust = await isAnyTrust(
+    childChainInformation,
+    parentChainClient
+  )
 
   if (isChainAnyTrust) {
     const alerts = await checkIfAnyTrustRevertedToPostDataOnChain({
