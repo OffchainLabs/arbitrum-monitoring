@@ -31,6 +31,8 @@ export const supportedParentChains = [
   baseSepolia,
 ]
 
+export const ignoreAnyTrustCheckChainIds = [42161, 42170]
+
 export const getChainFromId = (chainId: number): Chain => {
   const chain = supportedParentChains.filter(chain => chain.id === chainId)
   return chain[0] ?? null
