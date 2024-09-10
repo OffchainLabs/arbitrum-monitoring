@@ -35,19 +35,6 @@ export const supportedCoreChainIds: number[] = supportedParentChains.map(
   chain => chain.id
 )
 
-// we don't want to use orbit/sdk to call isAnyTrust for core chain
-export const hardcodedAnyTrustCheckForCoreChainIds: { [id: number]: boolean } =
-  {
-    [mainnet.id]: false,
-    [arbitrum.id]: false,
-    [arbitrumNova.id]: true,
-    [base.id]: false,
-    [sepolia.id]: false,
-    [holesky.id]: false,
-    [arbitrumSepolia.id]: false,
-    [baseSepolia.id]: false,
-  }
-
 export const getChainFromId = (chainId: number): Chain => {
   const chain = supportedParentChains.filter(chain => chain.id === chainId)
   return chain[0] ?? null
