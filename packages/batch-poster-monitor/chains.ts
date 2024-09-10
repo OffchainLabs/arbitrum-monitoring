@@ -31,7 +31,9 @@ export const supportedParentChains = [
   baseSepolia,
 ]
 
-export const ignoreAnyTrustCheckChainIds = [42161, 42170]
+// ignore trust check for core chains
+export const ignoreAnyTrustCheckForChainIds: number[] =
+  supportedParentChains.map(chain => chain.id)
 
 export const getChainFromId = (chainId: number): Chain => {
   const chain = supportedParentChains.filter(chain => chain.id === chainId)

@@ -9,7 +9,6 @@ import {
   http,
   parseAbi,
 } from 'viem'
-import { arbitrum, arbitrumNova } from 'viem/chains'
 import { AbiEvent } from 'abitype'
 import { getBatchPosters, isAnyTrust } from '@arbitrum/orbit-sdk'
 import {
@@ -22,7 +21,7 @@ import {
   MIN_DAYS_OF_BALANCE_LEFT,
   MAX_LOGS_TO_PROCESS_FOR_BALANCE,
   BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK,
-  ignoreAnyTrustCheckChainIds,
+  ignoreAnyTrustCheckForChainIds,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
@@ -567,7 +566,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   const lastSequencerInboxLog = sequencerInboxLogs.pop()
 
   const isChainAnyTrust =
-    !ignoreAnyTrustCheckChainIds.includes(childChain.id) &&
+    !ignoreAnyTrustCheckForChainIds.includes(childChain.id) &&
     (await isAnyTrust({
       publicClient: parentChainClient as any,
       rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
