@@ -1,5 +1,3 @@
-import * as fs from 'fs'
-import * as path from 'path'
 import yargs from 'yargs'
 import {
   Log,
@@ -23,6 +21,7 @@ import {
   MIN_DAYS_OF_BALANCE_LEFT,
   MAX_LOGS_TO_PROCESS_FOR_BALANCE,
   BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK,
+  ignoreAnyTrustCheckForChainIds,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
@@ -566,10 +565,12 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   // Get the latest log
   const lastSequencerInboxLog = sequencerInboxLogs.pop()
 
-  const isChainAnyTrust = await isAnyTrust({
-    publicClient: parentChainClient as any,
-    rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
-  })
+  const isChainAnyTrust =
+    !ignoreAnyTrustCheckForChainIds.includes(childChain.id) &&
+    (await isAnyTrust({
+      publicClient: parentChainClient as any,
+      rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
+    }))
 
   if (isChainAnyTrust) {
     const alerts = await checkIfAnyTrustRevertedToPostDataOnChain({
@@ -650,7 +651,7 @@ const main = async () => {
     } catch (e) {
       const errorStr = `Batch Posting alert on [${childChain.name}]:\nError processing chain: ${e.message}`
       if (options.enableAlerting) {
-        reportBatchPosterErrorToSlack({
+        await reportBatchPosterErrorToSlack({
           message: errorStr,
         })
       }
