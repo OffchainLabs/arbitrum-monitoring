@@ -21,7 +21,7 @@ import {
   MIN_DAYS_OF_BALANCE_LEFT,
   MAX_LOGS_TO_PROCESS_FOR_BALANCE,
   BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK,
-  ignoreAnyTrustCheckForChainIds,
+  hardcodedAnyTrustCheckForCoreChainIds,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
@@ -566,7 +566,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   const lastSequencerInboxLog = sequencerInboxLogs.pop()
 
   const isChainAnyTrust =
-    !ignoreAnyTrustCheckForChainIds.includes(childChain.id) &&
+    hardcodedAnyTrustCheckForCoreChainIds[childChain.id] ??
     (await isAnyTrust({
       publicClient: parentChainClient as any,
       rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
