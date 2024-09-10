@@ -1,5 +1,3 @@
-import * as fs from 'fs'
-import * as path from 'path'
 import yargs from 'yargs'
 import {
   Log,
@@ -11,6 +9,7 @@ import {
   http,
   parseAbi,
 } from 'viem'
+import { arbitrum, arbitrumNova } from 'viem/chains'
 import { AbiEvent } from 'abitype'
 import { getBatchPosters, isAnyTrust } from '@arbitrum/orbit-sdk'
 import {
@@ -566,10 +565,13 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   // Get the latest log
   const lastSequencerInboxLog = sequencerInboxLogs.pop()
 
-  const isChainAnyTrust = await isAnyTrust({
-    publicClient: parentChainClient as any,
-    rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
-  })
+  const isChainAnyTrust =
+    childChain.id !== arbitrum.id &&
+    childChain.id !== arbitrumNova.id &&
+    (await isAnyTrust({
+      publicClient: parentChainClient as any,
+      rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
+    }))
 
   if (isChainAnyTrust) {
     const alerts = await checkIfAnyTrustRevertedToPostDataOnChain({
@@ -650,7 +652,7 @@ const main = async () => {
     } catch (e) {
       const errorStr = `Batch Posting alert on [${childChain.name}]:\nError processing chain: ${e.message}`
       if (options.enableAlerting) {
-        reportBatchPosterErrorToSlack({
+        await reportBatchPosterErrorToSlack({
           message: errorStr,
         })
       }
