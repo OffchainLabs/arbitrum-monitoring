@@ -14,7 +14,7 @@ import {
 // Defaults
 export const MAX_TIMEBOUNDS_SECONDS = 60 * 60 * 24 // 24 hours : we don't care about txs older than 24 hours
 export const BATCH_POSTING_TIMEBOUNDS_FALLBACK = 60 * 60 * 12 // fallback in case we can't derive the on-chain timebounds for batch posting
-export const BATCH_POSTING_TIMEBOUNDS_BUFFER = 60 * 60 * 9 // reduce buffer (secs) from the time bounds for proactive alerting
+export const BATCH_POSTING_TIMEBOUNDS_BUFFER = 60 * 60 * 7 // reduce buffer (secs) from the time bounds for proactive alerting
 export const MIN_DAYS_OF_BALANCE_LEFT = 3n // Number of days the batch-poster balance must last, else alert
 export const MAX_LOGS_TO_PROCESS_FOR_BALANCE = 50 // Number of logs to process for batch poster balance estimation, there can be 1000+ logs for high activity chains
 export const BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK = 0.1 // (ETH) Fallback if dynamic balance calculation doesn't go through
