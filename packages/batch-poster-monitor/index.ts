@@ -421,7 +421,7 @@ const getBatchPostingTimeBounds = async (
   // formula : min(50% of x , max(1h, x - buffer))
   // minimum of half of the batchPostingTimeBounds vs [1 hour vs batchPostingTimeBounds - buffer]
   return Math.min(
-    0.5 * batchPostingTimeBounds,
+    0.65 * batchPostingTimeBounds,
     Math.max(3600, batchPostingTimeBounds - BATCH_POSTING_TIMEBOUNDS_BUFFER)
   )
 }
