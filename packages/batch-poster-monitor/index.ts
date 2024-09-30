@@ -655,6 +655,8 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
 }
 
 const main = async () => {
+  throw 'Testing batch poster monitor'
+
   // log the chains being processed for better debugging in github actions
   console.log(
     '>>>>>> Processing chains: ',
