@@ -1,4 +1,5 @@
 import { WebClient } from '@slack/web-api'
+import { sanitizeSlackMessage } from './sanitizeSlackMessage'
 
 export const postSlackMessage = ({
   slackToken,
@@ -14,7 +15,7 @@ export const postSlackMessage = ({
   console.log(`>>> Posting message to Slack -> ${message}`)
 
   return web.chat.postMessage({
-    text: message,
+    text: sanitizeSlackMessage(message),
     channel: slackChannel,
     unfurl_links: false,
   })
