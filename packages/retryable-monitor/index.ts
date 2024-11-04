@@ -263,13 +263,46 @@ const processChildChain = async (
       await childChainProvider.getBlock(childChainTxReceipt.blockNumber)
     ).timestamp
 
+    /**
+     *  Get native token symbol - if nativeToken address is set, look up the symbol
+     */
+    let nativeTokenSymbol = 'ETH'
+    let nativeTokenDecimals = 18
+
+    if (
+      childChain.nativeToken &&
+      childChain.nativeToken !== '0x0000000000000000000000000000000000000000'
+    ) {
+      try {
+        const tokenContract = ERC20__factory.connect(
+          childChain.nativeToken,
+          parentChainProvider
+        )
+        const [symbol, decimals] = await Promise.all([
+          tokenContract.symbol(),
+          tokenContract.decimals(),
+        ])
+        nativeTokenSymbol = symbol
+        nativeTokenDecimals = decimals
+      } catch (e) {
+        console.warn(
+          `Failed to get native token info for ${childChain.name}:`,
+          e
+        )
+      }
+    }
+
     const childChainTicketReport = {
       id: retryableMessage.retryableCreationId,
       retryTxHash: retryableMessage.retryableCreationId,
       createdAtTimestamp: String(timestamp),
       createdAtBlockNumber: childChainTxReceipt.blockNumber,
       timeoutTimestamp: String(Number(timestamp) + SEVEN_DAYS_IN_SECONDS),
-      deposit: String(retryableMessage.messageData.l2CallValue), // eth amount
+      deposit: {
+        amount: String(retryableMessage.messageData.l2CallValue),
+        symbol: nativeTokenSymbol,
+        decimals: nativeTokenDecimals,
+      },
       status: ParentToChildMessageStatus[status],
       retryTo: childChainTxReceipt.to,
       retryData: retryableMessage.messageData.data,

@@ -88,9 +88,6 @@ export const reportFailedTicket = async ({
  *
  */
 
-let ethPriceCache: number
-let tokenPriceCache: { [key: string]: number } = {}
-
 const getTimeDifference = (timestampInSeconds: number) => {
   const now = new Date().getTime() / 1000
   const difference = timestampInSeconds - now
@@ -218,10 +215,12 @@ const formatL2ExecutionTX = (
   }>`
 }
 
-const formatL2Callvalue = async (ticket: ChildChainTicketReport) => {
-  const ethAmount = ethers.utils.formatEther(ticket.deposit)
-  const depositWorthInUsd = (+ethAmount * (await getEthPrice())).toFixed(2)
-  return `\n\t *Child chain callvalue:* ${ethAmount} ETH ($${depositWorthInUsd})`
+export const formatL2Callvalue = async (ticket: ChildChainTicketReport) => {
+  const amount = ethers.utils.formatUnits(
+    ticket.deposit.amount,
+    ticket.deposit.decimals || 18 // fallback to 18 decimals if not specified
+  )
+  return `\n\t *Child chain callvalue:* ${amount} ${ticket.deposit.symbol}`
 }
 
 const formatTokenDepositData = async (
@@ -237,13 +236,7 @@ const formatTokenDepositData = async (
     ? ethers.utils.formatUnits(deposit.tokenAmount, deposit.l1Token.decimals)
     : '-'
 
-  const tokenPriceInUSD = await getTokenPrice(deposit.l1Token.id)
-  if (tokenPriceInUSD !== undefined) {
-    const depositWorthInUSD = (+amount * tokenPriceInUSD).toFixed(2)
-    msg = `${msg} ${amount} ${deposit.l1Token.symbol} (\$${depositWorthInUSD}) (${deposit.l1Token.id})`
-  } else {
-    msg = `${msg} ${amount} ${deposit.l1Token.symbol} (${deposit.l1Token.id})`
-  }
+  msg = `${msg} ${amount} ${deposit.l1Token.symbol} (${deposit.l1Token.id})`
 
   return msg
 }
@@ -255,9 +248,9 @@ const formatDestination = async (
   let msg = `\n\t *Destination:* `
   const { CHILD_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(childChain)
 
-  return `${msg}<${CHILD_CHAIN_ADDRESS_PREFIX + ticket.retryTo}|${
-    ticket.retryTo
-  }>`
+  return ticket.retryTo
+    ? `${msg}<${CHILD_CHAIN_ADDRESS_PREFIX + ticket.retryTo}|${ticket.retryTo}>`
+    : `${msg}Contract Creation`
 }
 
 const formatGasData = async (
@@ -316,34 +309,6 @@ const formatExpiration = (ticket: ChildChainTicketReport) => {
   }
 
   return msg
-}
-
-const getEthPrice = async () => {
-  if (ethPriceCache !== undefined) {
-    return ethPriceCache
-  }
-
-  const url =
-    'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd'
-  const response = await axios.get(url)
-  ethPriceCache = +response.data['ethereum'].usd
-  return ethPriceCache
-}
-
-const getTokenPrice = async (tokenAddress: string) => {
-  if (tokenPriceCache[tokenAddress] !== undefined) {
-    return tokenPriceCache[tokenAddress]
-  }
-
-  const url = `https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=${tokenAddress}&vs_currencies=usd`
-
-  const response = await axios.get(url)
-  if (response.data[tokenAddress] == undefined) {
-    return undefined
-  }
-
-  tokenPriceCache[tokenAddress] = +response.data[tokenAddress].usd
-  return tokenPriceCache[tokenAddress]
 }
 
 // Unix timestamp
