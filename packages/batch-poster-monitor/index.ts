@@ -706,33 +706,39 @@ const checkIfAnyTrustRevertedToPostDataOnChain = async ({
 }): Promise<string[]> => {
   const alerts = []
 
-  // Get the transaction that emitted `lastSequencerInboxLog`
-  const transaction = await parentChainClient.getTransaction({
-    hash: lastSequencerInboxLog?.transactionHash as `0x${string}`,
-  })
+  try {
+    // Get the transaction that emitted `lastSequencerInboxLog`
+    const transaction = await parentChainClient.getTransaction({
+      hash: lastSequencerInboxLog?.transactionHash as `0x${string}`,
+    })
 
-  const { args } = decodeFunctionData({
-    abi: sequencerInboxAbi,
-    data: transaction.input,
-  })
+    const { args } = decodeFunctionData({
+      abi: sequencerInboxAbi,
+      data: transaction.input,
+    })
 
-  // Extract the 'data' field
-  const batchData = args[1] as `0x${string}`
+    // Extract the 'data' field
+    const batchData = args[1] as `0x${string}`
 
-  // Check the first byte of the data
-  const firstByte = batchData.slice(0, 4)
+    // Check the first byte of the data
+    const firstByte = batchData.slice(0, 4)
 
-  if (firstByte === '0x00') {
+    if (firstByte === '0x00') {
+      alerts.push(
+        `AnyTrust chain [${childChainInformation.name}] has fallen back to posting calldata on-chain. This indicates a potential issue with the Data Availability Committee.`
+      )
+    } else if (firstByte === '0x88') {
+      console.log(
+        `Chain [${childChainInformation.name}] is using AnyTrust DACert as expected.`
+      )
+    } else {
+      console.log(
+        `Chain [${childChainInformation.name}] is using an unknown data format. First byte: ${firstByte}`
+      )
+    }
+  } catch (e) {
     alerts.push(
-      `AnyTrust chain [${childChainInformation.name}] has fallen back to posting calldata on-chain. This indicates a potential issue with the Data Availability Committee.`
-    )
-  } else if (firstByte === '0x88') {
-    console.log(
-      `Chain [${childChainInformation.name}] is using AnyTrust DACert as expected.`
-    )
-  } else {
-    console.log(
-      `Chain [${childChainInformation.name}] is using an unknown data format. First byte: ${firstByte}`
+      `Chain [${childChainInformation.name}]: Error checking if AnyTrust reverted to posting calldata on-chain: ${e.message}`
     )
   }
 
