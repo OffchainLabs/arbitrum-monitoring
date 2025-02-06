@@ -737,7 +737,7 @@ const checkIfAnyTrustRevertedToPostDataOnChain = async ({
       )
     }
   } catch (e) {
-    alerts.push(
+    console.log(
       `Chain [${childChainInformation.name}]: Error checking if AnyTrust reverted to posting calldata on-chain: ${e.message}`
     )
   }
