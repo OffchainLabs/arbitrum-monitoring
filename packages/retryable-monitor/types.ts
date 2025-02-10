@@ -20,9 +20,13 @@ export interface ChildChainTicketReport {
   createdAtTimestamp: string
   createdAtBlockNumber: number
   timeoutTimestamp: string
-  deposit: string
+  deposit: {
+    amount: string
+    symbol: string
+    decimals?: number
+  }
   status: string
-  retryTo: string
+  retryTo: string | null
   retryData: string
   gasFeeCap: number
   gasLimit: number
