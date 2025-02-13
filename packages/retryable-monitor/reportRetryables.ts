@@ -56,6 +56,10 @@ export const reportFailedTicket = async ({
     String(childChain.orbitRpcUrl)
   )
 
+  const parentChainProvider = new providers.JsonRpcProvider(
+    String(childChain.parentRpcUrl)
+  )
+
   // build message to report
   let reportStr =
     formatPrefix(t, childChain.name) +
@@ -64,7 +68,7 @@ export const reportFailedTicket = async ({
     formatL1TX(l1Report, childChain) +
     formatId(t, childChain) +
     formatL2ExecutionTX(t, childChain) +
-    (await formatL2Callvalue(t, childChain, childChainProvider)) +
+    (await formatL2Callvalue(t, childChain, parentChainProvider)) +
     (await formatTokenDepositData(tokenDepositData)) +
     (await formatGasData(t, childChainProvider)) +
     // (await formatCallData(t)) +
@@ -222,12 +226,12 @@ const formatL2ExecutionTX = (
 const formatL2Callvalue = async (
   ticket: ChildChainTicketReport,
   childChain: ChildNetwork,
-  childChainProvider: Provider
+  parentChainProvider: Provider
 ) => {
   if (childChain.nativeToken) {
     const erc20 = ERC20__factory.connect(
       childChain.nativeToken,
-      childChainProvider
+      parentChainProvider
     )
     const [symbol, decimals] = await Promise.all([
       erc20.symbol(),
