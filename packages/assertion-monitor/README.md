@@ -1,6 +1,10 @@
 # Assertion Monitor
 
-This tool is designed to check for chains that have not posted an assertion in the last seven days. Read more about assertions [here](https://docs.arbitrum.io/how-arbitrum-works/inside-arbitrum-nitro#arbitrum-rollup-protocol).
+This tool is designed to monitor assertions on Arbitrum chains. It checks for:
+1. Chains that have not posted any assertions in the last seven days
+2. Chains with low assertion confirmation rates (below 80%)
+
+Read more about assertions [here](https://docs.arbitrum.io/how-arbitrum-works/inside-arbitrum-nitro#arbitrum-rollup-protocol).
 
 ## Prerequisites
 
@@ -23,20 +27,24 @@ yarn install
 
 ### One-off Check
 
-To find assertion events and display their status for a specific block range, execute the following command:
+To monitor assertions and display their status for a specific block range, execute the following command:
 
 ```bash
 yarn dev [--configPath=<CONFIG_PATH>]
 ```
 
 - If `--configPath` is not provided, it defaults to `config.json`.
-- This command will identify all assertion events initiated or created from the parent chain to your Orbit chain within the specified block range.
+- This command will identify all assertion events (both creation and confirmation) from the parent chain to your Orbit chain within the specified block range.
 
 ### Error Generation and Reporting
 
 To enable reporting, use `--enableAlerting` flag.
 
-This will enable alerts if there have not been any assertions in the past week. Additionally, you might also want to log these errors to Slack, for which you will need to configure, in the `.env` file:
+This will enable alerts if:
+1. There have not been any assertions in the past week
+2. The assertion confirmation rate is below 80%
+
+Additionally, you might also want to log these errors to Slack, for which you will need to configure, in the `.env` file:
 
 - `NODE_ENV=CI`
 - `ASSERTION_MONITORING_SLACK_TOKEN=<your-slack-token>`

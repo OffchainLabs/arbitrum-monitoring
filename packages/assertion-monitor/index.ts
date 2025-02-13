@@ -12,7 +12,7 @@ import {
   getConfig,
   sleep,
 } from '../utils'
-import { nodeCreatedEventAbi } from './abi'
+import { assertionCreatedEventAbi, assertionConfirmedEventAbi } from './abi'
 import { getBlockTimeForChain, getChainFromId } from './chains'
 import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
 
@@ -146,7 +146,7 @@ const getBlockRange = async (
   return { fromBlock: fromBlock.number, toBlock: latestBlockNumber }
 }
 
-const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
+const monitorAssertions = async (childChainInfo: ChainInfo) => {
   const parentChain = getChainFromId(childChainInfo.parentChainId)
   const client = createPublicClient({
     chain: parentChain,
@@ -164,12 +164,26 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
 
     while (attempts < RETRIES) {
       try {
-        return client.getLogs({
-          address: childChainInfo.ethBridge.rollup as `0x${string}`,
-          event: nodeCreatedEventAbi,
-          fromBlock: chunkFromBlock,
-          toBlock: chunkToBlock,
-        })
+        // Get both AssertionCreated and AssertionConfirmed events
+        const [createdLogs, confirmedLogs] = await Promise.all([
+          client.getLogs({
+            address: childChainInfo.ethBridge.rollup as `0x${string}`,
+            event: assertionCreatedEventAbi,
+            fromBlock: chunkFromBlock,
+            toBlock: chunkToBlock,
+          }),
+          client.getLogs({
+            address: childChainInfo.ethBridge.rollup as `0x${string}`,
+            event: assertionConfirmedEventAbi,
+            fromBlock: chunkFromBlock,
+            toBlock: chunkToBlock,
+          }),
+        ])
+
+        return {
+          createdLogs,
+          confirmedLogs,
+        }
       } catch (error) {
         attempts++
         if (attempts >= RETRIES) {
@@ -180,7 +194,10 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
         await sleep(1000 * attempts)
       }
     }
-    return null
+    return {
+      createdLogs: [],
+      confirmedLogs: [],
+    }
   }
 
   const logsArray = await processChunkedRange(
@@ -191,10 +208,18 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
     getLogsForChunk
   )
 
-  const logs = logsArray.flat()
+  const allLogs = logsArray.reduce(
+    (acc, curr) => {
+      return {
+        createdLogs: [...acc.createdLogs, ...(curr?.createdLogs || [])],
+        confirmedLogs: [...acc.confirmedLogs, ...(curr?.confirmedLogs || [])],
+      }
+    },
+    { createdLogs: [], confirmedLogs: [] }
+  )
 
   const childChain = defineChain({
-    id: childChainInfo.chainId,
+    id: childChainInfo.chainID,
     name: childChainInfo.name,
     network: 'childChain',
     nativeCurrency: {
@@ -239,7 +264,7 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
     durationInDays === 1 ? ' day' : durationInDays + ' days'
   }`
 
-  if (!logs || logs.length === 0) {
+  if (allLogs.createdLogs.length === 0) {
     return {
       chainName: childChainInfo.name,
       alertMessage: `No assertion creation events found on ${
@@ -253,13 +278,36 @@ const monitorNodeCreatedEvents = async (childChainInfo: ChainInfo) => {
       }.`,
     }
   } else {
+    // Calculate confirmation rate
+    const confirmationRate =
+      (allLogs.confirmedLogs.length / allLogs.createdLogs.length) * 100
+
     console.log(
-      `Found ${logs.length} assertion creation event(s) on ${
-        childChainInfo.name
-      } ${durationString}. Validator whitelist is ${
+      `Found ${
+        allLogs.createdLogs.length
+      } assertion creation event(s) on ${childChainInfo.name} ${durationString}, with ${
+        allLogs.confirmedLogs.length
+      } confirmations (${confirmationRate.toFixed(
+        2
+      )}% confirmation rate). Validator whitelist is ${
         validatorWhitelistDisabled ? 'disabled' : 'enabled'
       }.`
     )
+
+    // Alert if confirmation rate is too low (e.g., below 80%)
+    if (confirmationRate < 80) {
+      return {
+        chainName: childChainInfo.name,
+        alertMessage: `Low assertion confirmation rate on ${
+          childChainInfo.name
+        }: ${confirmationRate.toFixed(2)}% (${
+          allLogs.confirmedLogs.length
+        } confirmations out of ${
+          allLogs.createdLogs.length
+        } assertions) ${durationString}.`,
+      }
+    }
+
     return null
   }
 }
@@ -270,11 +318,11 @@ const main = async () => {
 
     for (const chainInfo of config.childChains) {
       console.log(
-        `Checking for assertion creation events on ${chainInfo.name}...`
+        `Checking for assertion events on ${chainInfo.name}...`
       )
-      const result = await monitorNodeCreatedEvents(chainInfo)
+      const result = await monitorAssertions(chainInfo)
       if (result) {
-        console.log('No assertion creation events found on', chainInfo.name)
+        console.log('Alert generated for', chainInfo.name)
         alerts.push(result)
       }
     }
@@ -284,7 +332,7 @@ const main = async () => {
         .map(alert => `- ${alert.alertMessage}`)
         .join('\n')
 
-      const alertMessage = `Assertion Creation Alert Summary:\n${summaryMessage}`
+      const alertMessage = `Assertion Monitor Alert Summary:\n${summaryMessage}`
       console.error(alertMessage)
 
       if (options.enableAlerting) {

@@ -1,4 +1,4 @@
-export const nodeCreatedEventAbi = {
+export const legacyNodeCreatedEventAbi = {
   type: 'event',
   name: 'NodeCreated',
   inputs: [
@@ -94,6 +94,90 @@ export const nodeCreatedEventAbi = {
     {
       type: 'uint256',
       name: 'inboxMaxCount',
+      indexed: false,
+    },
+  ],
+} as const
+
+export const assertionCreatedEventAbi = {
+  type: 'event',
+  name: 'AssertionCreated',
+  inputs: [
+    {
+      type: 'uint256',
+      name: 'assertionId',
+      indexed: true,
+    },
+    {
+      type: 'bytes32',
+      name: 'parentAssertionHash',
+      indexed: true,
+    },
+    {
+      type: 'bytes32',
+      name: 'afterInboxBatchAcc',
+      indexed: false,
+    },
+    {
+      type: 'bytes32',
+      name: 'wasmModuleRoot',
+      indexed: false,
+    },
+    {
+      type: 'uint256',
+      name: 'inboxMaxCount',
+      indexed: false,
+    },
+    {
+      type: 'tuple',
+      name: 'assertionState',
+      components: [
+        {
+          type: 'tuple',
+          name: 'globalState',
+          components: [
+            {
+              type: 'bytes32[2]',
+              name: 'bytes32Vals',
+            },
+            {
+              type: 'uint64[2]',
+              name: 'u64Vals',
+            },
+          ],
+        },
+        {
+          type: 'uint8',
+          name: 'machineStatus',
+        },
+      ],
+      indexed: false,
+    },
+  ],
+} as const
+
+export const assertionConfirmedEventAbi = {
+  type: 'event',
+  name: 'AssertionConfirmed',
+  inputs: [
+    {
+      type: 'uint256',
+      name: 'assertionId',
+      indexed: true,
+    },
+    {
+      type: 'bytes32',
+      name: 'assertionHash',
+      indexed: true,
+    },
+    {
+      type: 'bytes32',
+      name: 'blockHash',
+      indexed: false,
+    },
+    {
+      type: 'bytes32',
+      name: 'sendRoot',
       indexed: false,
     },
   ],
