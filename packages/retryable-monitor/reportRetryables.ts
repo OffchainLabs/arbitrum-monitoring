@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { ParentToChildMessageStatus } from '@arbitrum/sdk'
+import { ERC20__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ERC20__factory'
 import { BigNumber, ethers, providers } from 'ethers'
 import { ArbGasInfo__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ArbGasInfo__factory'
 import {
@@ -63,7 +64,7 @@ export const reportFailedTicket = async ({
     formatL1TX(l1Report, childChain) +
     formatId(t, childChain) +
     formatL2ExecutionTX(t, childChain) +
-    (await formatL2Callvalue(t)) +
+    (await formatL2Callvalue(t, childChain, childChainProvider)) +
     (await formatTokenDepositData(tokenDepositData)) +
     (await formatGasData(t, childChainProvider)) +
     // (await formatCallData(t)) +
@@ -208,7 +209,7 @@ const formatL2ExecutionTX = (
   let msg = '\n\t *Child chain execution TX:* '
 
   if (ticket.retryTxHash == null) {
-    return msg + '-'
+    return msg + ': No auto-redeem attempt found'
   }
 
   const { CHILD_CHAIN_TX_PREFIX } = getExplorerUrlPrefixes(childChain)
@@ -218,10 +219,28 @@ const formatL2ExecutionTX = (
   }>`
 }
 
-const formatL2Callvalue = async (ticket: ChildChainTicketReport) => {
-  const ethAmount = ethers.utils.formatEther(ticket.deposit)
-  const depositWorthInUsd = (+ethAmount * (await getEthPrice())).toFixed(2)
-  return `\n\t *Child chain callvalue:* ${ethAmount} ETH ($${depositWorthInUsd})`
+const formatL2Callvalue = async (
+  ticket: ChildChainTicketReport,
+  childChain: ChildNetwork,
+  childChainProvider: Provider
+) => {
+  if (childChain.nativeToken) {
+    const erc20 = ERC20__factory.connect(
+      childChain.nativeToken,
+      childChainProvider
+    )
+    const [symbol, decimals] = await Promise.all([
+      erc20.symbol(),
+      erc20.decimals(),
+    ])
+
+    const nativeTokenAmount = ethers.utils.formatUnits(ticket.deposit, decimals)
+    return `\n\t *Child chain callvalue:* ${nativeTokenAmount} ${symbol} (Gas token: ${symbol})`
+  } else {
+    const ethAmount = ethers.utils.formatEther(ticket.deposit)
+    const depositWorthInUsd = (+ethAmount * (await getEthPrice())).toFixed(2)
+    return `\n\t *Child chain callvalue:* ${ethAmount} ETH ($${depositWorthInUsd})`
+  }
 }
 
 const formatTokenDepositData = async (

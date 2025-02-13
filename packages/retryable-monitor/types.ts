@@ -16,7 +16,7 @@ export interface ParentChainTicketReport {
 
 export interface ChildChainTicketReport {
   id: string
-  retryTxHash: string
+  retryTxHash: string | null
   createdAtTimestamp: string
   createdAtBlockNumber: number
   timeoutTimestamp: string
