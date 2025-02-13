@@ -265,8 +265,8 @@ const processChildChain = async (
 
     const childChainTicketReport = {
       id: retryableMessage.retryableCreationId,
-      retryTxHash:
-        (await retryableMessage.getAutoRedeemAttempt())?.transactionHash || '',
+      retryTxHash: (await retryableMessage.getAutoRedeemAttempt())
+        ?.transactionHash,
       createdAtTimestamp: String(timestamp),
       createdAtBlockNumber: childChainTxReceipt.blockNumber,
       timeoutTimestamp: String(Number(timestamp) + SEVEN_DAYS_IN_SECONDS),
