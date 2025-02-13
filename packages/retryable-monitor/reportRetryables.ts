@@ -208,7 +208,7 @@ const formatL2ExecutionTX = (
 ) => {
   let msg = '\n\t *Child chain execution TX:* '
 
-  if (ticket.retryTxHash == null) {
+  if (!ticket.retryTxHash) {
     return msg + ': No auto-redeem attempt found'
   }
 
