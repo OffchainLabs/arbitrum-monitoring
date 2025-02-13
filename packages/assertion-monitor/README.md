@@ -3,9 +3,8 @@
 This tool is designed to monitor assertions on Arbitrum chains. It checks for:
 1. No assertions created in the last 4 hours when there is chain activity
 2. No assertions confirmed within the chain's confirmation period
-3. Low assertion confirmation rates (below 80%)
 
-The monitor also detects whether each chain is using BOLD (Blockchain Organized Layer Design) and includes this information in its reports.
+The monitor also detects whether each chain is using BOLD (Bounded Liquidity Delay) and includes this information in its reports.
 
 Read more about assertions [here](https://docs.arbitrum.io/how-arbitrum-works/inside-arbitrum-nitro#arbitrum-rollup-protocol).
 
@@ -30,7 +29,7 @@ yarn install
 
 ### One-off Check
 
-To monitor assertions and display their status for a specific block range, execute the following command:
+To find assertion events and display their status for a specific block range, execute the following command:
 
 ```bash
 yarn dev [--configPath=<CONFIG_PATH>]
@@ -46,7 +45,6 @@ To enable reporting, use `--enableAlerting` flag.
 This will enable alerts for the following conditions:
 1. No assertions created in the last 4 hours when there is chain activity (determined by checking for transactions in blocks)
 2. No assertions confirmed within the chain's confirmation period (determined by `confirmPeriodBlocks`)
-3. Low assertion confirmation rate (below 80% of created assertions being confirmed)
 
 Additionally, you might also want to log these errors to Slack, for which you will need to configure, in the `.env` file:
 
