@@ -274,7 +274,15 @@ export const hasChainActivity = async (
   return false
 }
 
-export const monitorAssertions = async (childChainInfo: ChainInfo) => {
+export type BlockRange = {
+  fromBlock: bigint
+  toBlock: bigint
+}
+
+export const monitorAssertions = async (
+  childChainInfo: ChainInfo,
+  blockRange?: BlockRange
+) => {
   console.log(`\nMonitoring ${childChainInfo.name}...`)
 
   const parentChain = getChainFromId(childChainInfo.parentChainId)
@@ -286,7 +294,7 @@ export const monitorAssertions = async (childChainInfo: ChainInfo) => {
   const isBold = await isBoldEnabled(client, childChainInfo.ethBridge.rollup)
   console.log(`Chain type: ${isBold ? 'BOLD' : 'Classic'} rollup`)
 
-  const { fromBlock, toBlock } = await getBlockRange(client, childChainInfo)
+  const { fromBlock, toBlock } = blockRange || await getBlockRange(client, childChainInfo)
   console.log(
     `Scanning blocks ${fromBlock} to ${toBlock} (${toBlock - fromBlock} blocks)`
   )
