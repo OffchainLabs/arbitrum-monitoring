@@ -8,7 +8,9 @@
   "scripts": {
     "retryable-monitor": "yarn workspace retryable-monitor dev",
     "batch-poster-monitor": "yarn workspace batch-poster-monitor dev",
-    "assertion-monitor": "yarn workspace assertion-monitor dev"
+    "assertion-monitor": "yarn workspace assertion-monitor dev",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
@@ -21,7 +23,9 @@
     "prettier": "^2.3.2",
     "prettier-plugin-solidity": "^1.0.0-beta.17",
     "ts-node": "^10.8.1",
+    "tsx": "^4.19.2",
     "typescript": "^4.5",
+    "vitest": "^3.0.5",
     "yargs": "^17.5.1"
   }
 }

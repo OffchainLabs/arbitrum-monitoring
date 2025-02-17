@@ -1,7 +1,7 @@
 {
   "name": "assertion-monitor",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "dist/main.js",
   "dependencies": {
     "@arbitrum/sdk": "^4.0.0",
     "@types/node": "20.14.1",
@@ -9,17 +9,19 @@
     "abitype": "^1.0.5",
     "typescript": "^5.4.5",
     "utils": "*",
-    "viem": "1.20.0",
+    "viem": "^2.7.9",
     "yargs": "17.7.2"
   },
   "devDependencies": {
     "@types/node": "^20.14.1",
-    "ts-node": "^10.9.2"
+    "ts-node": "^10.9.2",
+    "vitest": "^3.0.5"
   },
   "scripts": {
     "lint": "eslint .",
     "build": "rm -rf ./dist && tsc",
     "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "dev": "yarn build && node ./dist/assertion-monitor/index.js"
+    "dev": "yarn build && node ./dist/assertion-monitor/index.js",
+    "test": "vitest"
   }
 }

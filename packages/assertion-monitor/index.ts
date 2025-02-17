@@ -4,9 +4,6 @@ import {
   defineChain,
   getContract,
   http,
-  keccak256,
-  stringToHex,
-  type GetLogsParameters,
 } from 'viem'
 import yargs from 'yargs'
 import {
@@ -15,7 +12,14 @@ import {
   getConfig,
   sleep,
 } from '../utils'
-import { boldABI, rollupABI } from './abi'
+import {
+  ASSERTION_CONFIRMED_EVENT,
+  ASSERTION_CREATED_EVENT,
+  NODE_CREATED_EVENT,
+  NODE_CONFIRMED_EVENT,
+  boldABI,
+  rollupABI,
+} from './abi'
 import { getBlockTimeForChain, getChainFromId } from './chains'
 import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
 
@@ -28,35 +32,27 @@ const MAXIMUM_SEARCH_DAYS = 7
 const SAFETY_BUFFER_DAYS = 4
 const ASSERTION_CREATION_ALERT_HOURS = 4 // Alert if no assertions in 4 hours with chain activity
 
-// Event signatures
-const ASSERTION_CREATED_SIG =
-  'AssertionCreated(bytes32,bytes32,tuple,bytes32,uint256,bytes32,uint256,address,uint64)'
-const NODE_CREATED_SIG =
-  'NodeCreated(uint64,bytes32,bytes32,bytes32,tuple,bytes32,bytes32,uint256)'
-const ASSERTION_CONFIRMED_SIG = 'AssertionConfirmed(bytes32,bytes32,bytes32)'
-const NODE_CONFIRMED_SIG = 'NodeConfirmed(uint64,bytes32,bytes32)'
+type AssertionLogs = {
+  createdLogs: any[]
+  confirmedLogs: any[]
+}
 
-// Event topic hashes
-const ASSERTION_CREATED_TOPIC = keccak256(stringToHex(ASSERTION_CREATED_SIG))
-const NODE_CREATED_TOPIC = keccak256(stringToHex(NODE_CREATED_SIG))
-const ASSERTION_CONFIRMED_TOPIC = keccak256(
-  stringToHex(ASSERTION_CONFIRMED_SIG)
-)
-const NODE_CONFIRMED_TOPIC = keccak256(stringToHex(NODE_CONFIRMED_SIG))
+export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
+  const options = yargs(process.argv.slice(2))
+    .options({
+      configPath: { type: 'string', default: configPath },
+      enableAlerting: { type: 'boolean', default: false },
+    })
+    .strict()
+    .parseSync()
 
-const options = yargs(process.argv.slice(2))
-  .options({
-    configPath: { type: 'string', default: DEFAULT_CONFIG_PATH },
-    enableAlerting: { type: 'boolean', default: false },
-  })
-  .strict()
-  .parseSync()
+  const config = getConfig(options)
 
-const config = getConfig(options)
+  if (!Array.isArray(config.childChains) || config.childChains.length === 0) {
+    throw new Error('Error: Chains not found in the config file.')
+  }
 
-if (!Array.isArray(config.childChains) || config.childChains.length === 0) {
-  console.error('Error: Chains not found in the config file.')
-  process.exit(1)
+  return { config, options }
 }
 
 async function getValidatorWhitelistDisabled(
@@ -66,7 +62,7 @@ async function getValidatorWhitelistDisabled(
   const contract = getContract({
     address: rollupAddress as `0x${string}`,
     abi: rollupABI,
-    publicClient: client,
+    client,
   })
 
   return contract.read.validatorWhitelistDisabled()
@@ -111,18 +107,16 @@ function calculateSearchWindow(
   }
 }
 
-type ChunkProcessFunction<T> = (
-  fromBlock: bigint,
-  toBlock: bigint,
-  client: PublicClient
-) => Promise<T>
-
 async function processChunkedRange<T>(
   fromBlock: bigint,
   toBlock: bigint,
   chunkSize: bigint,
   client: PublicClient,
-  processChunk: ChunkProcessFunction<T>
+  processChunk: (
+    fromBlock: bigint,
+    toBlock: bigint,
+    client: PublicClient
+  ) => Promise<T>
 ): Promise<T[]> {
   const results: T[] = []
 
@@ -144,13 +138,13 @@ async function processChunkedRange<T>(
     if (currentToBlock === toBlock) break
 
     currentFromBlock = currentToBlock + 1n
-    await sleep(CHUNK_PROCESSING_DELAY)
+    await sleep(1000) // 1 second delay between chunks
   }
 
   return results
 }
 
-const getBlockRange = async (
+export const getBlockRange = async (
   client: PublicClient,
   childChainInfo: ChainInfo
 ) => {
@@ -168,7 +162,7 @@ const getBlockRange = async (
   return { fromBlock: fromBlock.number, toBlock: latestBlockNumber }
 }
 
-const isBoldEnabled = async (
+export const isBoldEnabled = async (
   client: PublicClient,
   rollupAddress: string
 ): Promise<boolean> => {
@@ -176,7 +170,7 @@ const isBoldEnabled = async (
     const contract = getContract({
       address: rollupAddress as `0x${string}`,
       abi: boldABI,
-      publicClient: client,
+      client,
     })
 
     const genesisHash = await contract.read.genesisAssertionHash()
@@ -186,47 +180,86 @@ const isBoldEnabled = async (
   }
 }
 
-type AssertionLogs = {
-  createdLogs: any[]
-  confirmedLogs: any[]
-}
-
 const getLastProcessedBlock = async (
-  client: PublicClient,
-  logs: AssertionLogs
-): Promise<bigint | null> => {
+  childChainClient: PublicClient,
+  logs: AssertionLogs,
+  isBold: boolean
+): Promise<bigint | undefined> => {
   if (logs.createdLogs.length === 0) {
-    return null
+    return undefined
   }
 
   // Get the latest assertion
   const latestAssertion = logs.createdLogs[logs.createdLogs.length - 1]
-  const block = await client.getBlock({
-    blockNumber: latestAssertion.blockNumber,
-  })
 
-  return block.number
+  try {
+    let lastProcessedBlockHash: `0x${string}` | undefined
+
+    if (isBold) {
+      // For BOLD chains, the block info is in the assertion data
+      const assertionData = latestAssertion.args.assertion
+      if (
+        assertionData &&
+        assertionData.afterStateSnapshot &&
+        assertionData.afterStateSnapshot.globalState
+      ) {
+        lastProcessedBlockHash = assertionData.afterStateSnapshot.globalState.bytes32Vals[0]
+      }
+    } else {
+      // For Classic chains, the block info is in the beforeState
+      const assertionData = latestAssertion.args.assertion
+      if (
+        assertionData &&
+        assertionData.beforeState &&
+        assertionData.beforeState.globalState
+      ) {
+        lastProcessedBlockHash = assertionData.beforeState.globalState.bytes32Vals[0]
+      }
+    }
+
+    if (lastProcessedBlockHash) {
+      console.log(`Last processed block hash from assertion: ${lastProcessedBlockHash}`)
+
+      try {
+        const block = await childChainClient.getBlock({
+          blockHash: lastProcessedBlockHash,
+        })
+        console.log(`Last processed child chain block: ${block.number}`)
+        return block.number
+      } catch (error) {
+        console.error('Error getting block from hash:', error)
+      }
+    } else {
+      console.log('Assertion data structure is incomplete')
+    }
+  } catch (error) {
+    console.error('Error accessing assertion data structure:', error)
+    // Safely log assertion data without BigInt values
+    const safeLog = JSON.stringify(latestAssertion.args, (_, value) =>
+      typeof value === 'bigint' ? value.toString() : value
+    )
+    console.log('Raw assertion data:', safeLog)
+  }
+
+  // Fallback to using the assertion block number if we can't get the block from hash
+  return latestAssertion.blockNumber
 }
 
 /**
  * Checks if there is any transaction activity in the chain
  * between the specified block range.
  */
-const hasChainActivity = async (
+export const hasChainActivity = async (
   childChainClient: PublicClient,
-  lastProcessedBlock: bigint | null,
-  latestBlock: bigint
+  fromBlock: bigint,
+  toBlock: bigint
 ): Promise<boolean> => {
-  if (!lastProcessedBlock) return false
-
   const BATCH_SIZE = 100n
-  let currentBlock = lastProcessedBlock
+  let currentBlock = fromBlock
 
-  while (currentBlock <= latestBlock) {
+  while (currentBlock <= toBlock) {
     const endBlock =
-      currentBlock + BATCH_SIZE > latestBlock
-        ? latestBlock
-        : currentBlock + BATCH_SIZE
+      currentBlock + BATCH_SIZE > toBlock ? toBlock : currentBlock + BATCH_SIZE
 
     for (let blockNum = currentBlock; blockNum <= endBlock; blockNum++) {
       const block = await childChainClient.getBlock({ blockNumber: blockNum })
@@ -241,9 +274,9 @@ const hasChainActivity = async (
   return false
 }
 
-const monitorAssertions = async (childChainInfo: ChainInfo) => {
+export const monitorAssertions = async (childChainInfo: ChainInfo) => {
   console.log(`\nMonitoring ${childChainInfo.name}...`)
-  
+
   const parentChain = getChainFromId(childChainInfo.parentChainId)
   const client = createPublicClient({
     chain: parentChain,
@@ -251,30 +284,73 @@ const monitorAssertions = async (childChainInfo: ChainInfo) => {
   })
 
   const isBold = await isBoldEnabled(client, childChainInfo.ethBridge.rollup)
+  console.log(`Chain type: ${isBold ? 'BOLD' : 'Classic'} rollup`)
+
   const { fromBlock, toBlock } = await getBlockRange(client, childChainInfo)
-  
-  console.log(`Scanning blocks ${fromBlock} to ${toBlock} (${toBlock - fromBlock} blocks)`)
+  console.log(
+    `Scanning blocks ${fromBlock} to ${toBlock} (${toBlock - fromBlock} blocks)`
+  )
 
   const processChunk = async (
     chunkFromBlock: bigint,
     chunkToBlock: bigint,
     chunkClient: PublicClient
   ): Promise<AssertionLogs> => {
+    console.log(`Processing chunk: ${chunkFromBlock} to ${chunkToBlock}`)
     for (let attempt = 1; attempt <= RETRIES; attempt++) {
       try {
         const createdLogs = await chunkClient.getLogs({
           address: childChainInfo.ethBridge.rollup as `0x${string}`,
           fromBlock: chunkFromBlock,
           toBlock: chunkToBlock,
-          topics: [isBold ? ASSERTION_CREATED_TOPIC : NODE_CREATED_TOPIC],
-        } as GetLogsParameters)
+          event: isBold ? ASSERTION_CREATED_EVENT : NODE_CREATED_EVENT,
+        })
+        console.log(
+          `Found ${createdLogs.length} ${
+            isBold ? 'assertions' : 'nodes'
+          } created in chunk`
+        )
 
         const confirmedLogs = await chunkClient.getLogs({
           address: childChainInfo.ethBridge.rollup as `0x${string}`,
           fromBlock: chunkFromBlock,
           toBlock: chunkToBlock,
-          topics: [isBold ? ASSERTION_CONFIRMED_TOPIC : NODE_CONFIRMED_TOPIC],
-        } as GetLogsParameters)
+          event: isBold ? ASSERTION_CONFIRMED_EVENT : NODE_CONFIRMED_EVENT,
+        })
+        console.log(
+          `Found ${confirmedLogs.length} ${
+            isBold ? 'assertions' : 'nodes'
+          } confirmed in chunk`
+        )
+
+        if (confirmedLogs.length > 0) {
+          console.log('\nAnalyzing confirmed events:')
+          for (const log of confirmedLogs) {
+            try {
+              const eventData = isBold
+                ? {
+                    blockNumber: log.blockNumber,
+                    assertionHash: (log as any).args.assertionHash,
+                    blockHash: (log as any).args.blockHash,
+                    sendRoot: (log as any).args.sendRoot,
+                  }
+                : {
+                    blockNumber: log.blockNumber,
+                    nodeNum: (log as any).args.nodeNum,
+                    blockHash: (log as any).args.blockHash,
+                    sendRoot: (log as any).args.sendRoot,
+                  }
+              console.log('Confirmed event:', eventData)
+            } catch (error) {
+              console.log('Failed to decode confirmed event:', error)
+              console.log('Raw log data:', {
+                topics: log.topics,
+                data: log.data,
+                blockNumber: log.blockNumber,
+              })
+            }
+          }
+        }
 
         return {
           createdLogs,
@@ -286,6 +362,9 @@ const monitorAssertions = async (childChainInfo: ChainInfo) => {
           error
         )
         if (attempt === RETRIES) throw error
+        console.log(
+          `Retrying in ${RETRY_DELAY_BASE * Math.pow(2, attempt - 1)}ms...`
+        )
         await sleep(RETRY_DELAY_BASE * Math.pow(2, attempt - 1))
       }
     }
@@ -317,10 +396,32 @@ const monitorAssertions = async (childChainInfo: ChainInfo) => {
 
   if (allLogs.createdLogs.length > 0 || allLogs.confirmedLogs.length > 0) {
     console.log(
-      `Found ${allLogs.createdLogs.length} created and ${
-        allLogs.confirmedLogs.length
-      } confirmed ${isBold ? 'assertions' : 'nodes'}`
+      `Found ${allLogs.createdLogs.length} created and ${allLogs.confirmedLogs.length} confirmed assertions`
     )
+
+    // Show confirmation ratio
+    if (allLogs.createdLogs.length > 0) {
+      const ratio = (
+        (allLogs.confirmedLogs.length / allLogs.createdLogs.length) *
+        100
+      ).toFixed(2)
+      console.log(
+        `Confirmation ratio: ${ratio}% (${allLogs.confirmedLogs.length}/${allLogs.createdLogs.length})`      )
+    }
+
+    // Show latest confirmation details
+    if (allLogs.confirmedLogs.length > 0) {
+      const latestConfirmation =
+        allLogs.confirmedLogs[allLogs.confirmedLogs.length - 1]
+      console.log('\nLatest confirmation details:')
+      console.log('- Block:', latestConfirmation.blockNumber)
+      console.log(
+        '- Assertion Hash:',
+        (latestConfirmation as any).args.assertionHash
+      )
+      console.log('- Block Hash:', (latestConfirmation as any).args.blockHash)
+      console.log('- Send Root:', (latestConfirmation as any).args.sendRoot)
+    }
   }
 
   const childChain = defineChain({
@@ -373,23 +474,22 @@ const monitorAssertions = async (childChainInfo: ChainInfo) => {
   const alerts: string[] = []
 
   if (allLogs.createdLogs.length === 0) {
-    const lastProcessedBlock = await getLastProcessedBlock(
-      childChainClient,
-      allLogs
-    )
+    console.log('No creation events found, checking for chain activity...')
+    // Check for chain activity in the entire search window
     const hasActivity = await hasChainActivity(
       childChainClient,
-      lastProcessedBlock,
+      fromBlock,
       latestSafeBlockNumber
     )
+    console.log(`Chain activity detected: ${hasActivity}`)
 
     if (hasActivity) {
       alerts.push(
-        `No ${isBold ? 'assertions' : 'nodes'} created on ${
+        `No assertions created on ${
           childChainInfo.name
         } ${durationString} despite chain activity. Latest batch ${
           isLatestSafeBlockWithinRange ? 'was' : 'was not'
-        } posted within this duration, at ${timestampOfLatestSafeBlock} (L1 block ${
+        } posted within this duration, at ${timestampOfLatestSafeBlock} (block ${
           latestSafeBlock.number
         }). Validator whitelist is ${
           validatorWhitelistDisabled ? 'disabled' : 'enabled'
@@ -397,6 +497,7 @@ const monitorAssertions = async (childChainInfo: ChainInfo) => {
       )
     }
   } else {
+    console.log('Checking time since last event...')
     const latestAssertionBlock = await client.getBlock({
       blockNumber:
         allLogs.createdLogs[allLogs.createdLogs.length - 1].blockNumber,
@@ -404,19 +505,25 @@ const monitorAssertions = async (childChainInfo: ChainInfo) => {
     const hoursSinceLastAssertion =
       (BigInt(Math.floor(Date.now() / 1000)) - latestAssertionBlock.timestamp) /
       BigInt(3600)
+    console.log(`Hours since last assertion: ${hoursSinceLastAssertion}`)
 
     if (hoursSinceLastAssertion > BigInt(ASSERTION_CREATION_ALERT_HOURS)) {
+      console.log(
+        `Time since last event (${hoursSinceLastAssertion} hours) exceeds threshold (${ASSERTION_CREATION_ALERT_HOURS} hours), checking for activity...`
+      )
+      // Check for activity since the last assertion
       const hasActivity = await hasChainActivity(
         childChainClient,
         latestAssertionBlock.number,
         latestSafeBlockNumber
       )
+      console.log(`Chain activity detected: ${hasActivity}`)
 
       if (hasActivity) {
         alerts.push(
-          `No ${isBold ? 'assertions' : 'nodes'} created on ${
+          `No assertions created on ${
             childChainInfo.name
-          } in the last ${hoursSinceLastAssertion} hours despite chain activity. Last processed L1 block: ${
+          } in the last ${hoursSinceLastAssertion} hours despite chain activity. Last processed parent chain block: ${
             latestAssertionBlock.number
           }, Latest Safe block: ${latestSafeBlockNumber}, Gap: ${
             latestSafeBlockNumber - latestAssertionBlock.number
@@ -428,34 +535,50 @@ const monitorAssertions = async (childChainInfo: ChainInfo) => {
     }
 
     if (allLogs.confirmedLogs.length > 0) {
+      console.log('Checking confirmation status...')
       const latestConfirmationBlock = await client.getBlock({
         blockNumber:
           allLogs.confirmedLogs[allLogs.confirmedLogs.length - 1].blockNumber,
       })
-      const blocksSinceLastConfirmation =
-        latestSafeBlockNumber - latestConfirmationBlock.number
+      const latestParentBlock = await client.getBlockNumber()
 
+      // Get both the parent chain block number and the last processed child chain block
       const latestAssertionBlock =
         allLogs.createdLogs[allLogs.createdLogs.length - 1].blockNumber
+      const lastProcessedChildBlock = await getLastProcessedBlock(
+        childChainClient,
+        allLogs,
+        isBold
+      )
+
+      const blocksSinceLastConfirmation =
+        latestParentBlock - latestConfirmationBlock.number
+      console.log(
+        `Blocks since last confirmation: ${blocksSinceLastConfirmation} (confirm period: ${childChainInfo.confirmPeriodBlocks})`
+      )
 
       if (
         allLogs.createdLogs.length > allLogs.confirmedLogs.length &&
-        latestSafeBlockNumber - latestAssertionBlock >
+        latestParentBlock - latestAssertionBlock >
           BigInt(childChainInfo.confirmPeriodBlocks) &&
         blocksSinceLastConfirmation > BigInt(childChainInfo.confirmPeriodBlocks)
       ) {
-        alerts.push(
-          `No ${isBold ? 'assertion' : 'node'} confirmations on ${
-            childChainInfo.name
-          } for ${blocksSinceLastConfirmation} blocks (confirm period is ${
-            childChainInfo.confirmPeriodBlocks
-          } blocks). This is ${
-            blocksSinceLastConfirmation -
-            BigInt(childChainInfo.confirmPeriodBlocks)
-          } blocks over the limit. Validator whitelist is ${
-            validatorWhitelistDisabled ? 'disabled' : 'enabled'
-          }.`
-        )
+        console.log('Confirmation period exceeded, adding alert')
+        const alertMessage = `No assertion confirmations on ${
+          childChainInfo.name
+        } for ${blocksSinceLastConfirmation} blocks (confirm period is ${
+          childChainInfo.confirmPeriodBlocks
+        } blocks). This is ${
+          blocksSinceLastConfirmation -
+          BigInt(childChainInfo.confirmPeriodBlocks)
+        } blocks over the limit.${
+          lastProcessedChildBlock
+            ? ` Last processed child chain block: ${lastProcessedChildBlock}.`
+            : ''
+        } Validator whitelist is ${
+          validatorWhitelistDisabled ? 'disabled' : 'enabled'
+        }.`
+        alerts.push(alertMessage)
       }
     }
   }
@@ -472,8 +595,9 @@ const monitorAssertions = async (childChainInfo: ChainInfo) => {
   return null
 }
 
-const main = async () => {
+export const main = async () => {
   try {
+    const { config, options } = getMonitorConfig()
     const alerts: { chainName: string; alertMessage: string }[] = []
     console.log('Starting assertion monitoring...')
 
@@ -499,8 +623,10 @@ const main = async () => {
     } else {
       console.log('\nMonitoring complete - all chains healthy')
     }
-  } catch (e) {
-    const errorStr = `Error processing chain data for assertion monitoring: ${e.message}`
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorStr = `Error processing chain data for assertion monitoring: ${errorMessage}`
+    const { options } = getMonitorConfig()
     if (options.enableAlerting) {
       reportAssertionMonitorErrorToSlack({ message: errorStr })
     }
@@ -514,3 +640,4 @@ main()
     console.error(error)
     process.exit(1)
   })
+
