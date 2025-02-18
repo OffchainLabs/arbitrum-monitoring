@@ -15,13 +15,21 @@ import {
 import {
   ASSERTION_CONFIRMED_EVENT,
   ASSERTION_CREATED_EVENT,
-  NODE_CREATED_EVENT,
   NODE_CONFIRMED_EVENT,
+  NODE_CREATED_EVENT,
   boldABI,
   rollupABI,
 } from './abi'
+import {
+  generateAssertionDataErrorAlert,
+  generateNoAssertionsCreatedAlert,
+  generateNoConfirmationsAlert,
+  generateNoRecentAssertionsAlert,
+} from './alerts'
 import { getBlockTimeForChain, getChainFromId } from './chains'
 import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
+import { AssertionLogs } from './types'
+import { jsonStringifyWithBigInt, sortAndMergeAssertionLogs } from './utils'
 
 const CHUNK_SIZE = 800n
 const RETRIES = 5
@@ -30,24 +38,11 @@ const VALIDATOR_AFK_BLOCKS = 45818
 const MAXIMUM_SEARCH_DAYS = 7
 const SAFETY_BUFFER_DAYS = 4
 const ASSERTION_CREATION_ALERT_HOURS = 4 // Alert if no assertions in 4 hours with chain activity
-
-const jsonStringifyWithBigInt = (obj: any): string =>
-  JSON.stringify(
-    obj,
-    (_, value) => (typeof value === 'bigint' ? value.toString() : value),
-    2
-  )
-
-class AssertionDataError extends Error {
+export class AssertionDataError extends Error {
   constructor(message: string, public readonly rawData?: any) {
     super(message)
     this.name = 'AssertionDataError'
   }
-}
-
-type AssertionLogs = {
-  createdLogs: any[]
-  confirmedLogs: any[]
 }
 
 export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
@@ -151,7 +146,6 @@ async function processChunkedRange<T>(
     if (currentToBlock === toBlock) break
 
     currentFromBlock = currentToBlock + 1n
-    await sleep(1000) // 1 second delay between chunks
   }
 
   return results
@@ -407,33 +401,7 @@ export const monitorAssertions = async (
     processChunk
   )
 
-  const allLogs = logsArray.reduce(
-    (acc, curr) => {
-      if (!curr) return acc
-      return {
-        createdLogs: [...acc.createdLogs, ...(curr.createdLogs || [])].sort(
-          (a, b) => {
-            // First sort by block number
-            if (a.blockNumber !== b.blockNumber) {
-              return Number(a.blockNumber - b.blockNumber)
-            }
-            // Then by log index within the block
-            return Number(a.logIndex - b.logIndex)
-          }
-        ),
-        confirmedLogs: [
-          ...acc.confirmedLogs,
-          ...(curr.confirmedLogs || []),
-        ].sort((a, b) => {
-          if (a.blockNumber !== b.blockNumber) {
-            return Number(a.blockNumber - b.blockNumber)
-          }
-          return Number(a.logIndex - b.logIndex)
-        }),
-      }
-    },
-    { createdLogs: [], confirmedLogs: [] } as AssertionLogs
-  )
+  const allLogs = sortAndMergeAssertionLogs(logsArray)
 
   if (allLogs.createdLogs.length > 0 || allLogs.confirmedLogs.length > 0) {
     console.log(
@@ -516,15 +484,14 @@ export const monitorAssertions = async (
 
     if (hasActivity) {
       alerts.push(
-        `No assertions created on ${
-          childChainInfo.name
-        } ${durationString} despite chain activity. Latest batch ${
-          isLatestSafeBlockWithinRange ? 'was' : 'was not'
-        } posted within this duration, at ${timestampOfLatestSafeBlock} (block ${
-          latestSafeBlock.number
-        }). Validator whitelist is ${
-          validatorWhitelistDisabled ? 'disabled' : 'enabled'
-        }.`
+        generateNoAssertionsCreatedAlert(
+          childChainInfo,
+          durationString,
+          isLatestSafeBlockWithinRange,
+          timestampOfLatestSafeBlock,
+          latestSafeBlockNumber,
+          validatorWhitelistDisabled
+        )
       )
     }
   } else {
@@ -552,15 +519,13 @@ export const monitorAssertions = async (
 
       if (hasActivity) {
         alerts.push(
-          `No assertions created on ${
-            childChainInfo.name
-          } in the last ${hoursSinceLastAssertion} hours despite chain activity. Last processed parent chain block: ${
-            latestAssertionBlock.number
-          }, Latest Safe block: ${latestSafeBlockNumber}, Gap: ${
-            latestSafeBlockNumber - latestAssertionBlock.number
-          } blocks. Validator whitelist is ${
-            validatorWhitelistDisabled ? 'disabled' : 'enabled'
-          }.`
+          generateNoRecentAssertionsAlert(
+            childChainInfo,
+            hoursSinceLastAssertion,
+            latestAssertionBlock.number,
+            latestSafeBlockNumber,
+            validatorWhitelistDisabled
+          )
         )
       }
     }
@@ -582,21 +547,13 @@ export const monitorAssertions = async (
         isBold
       ).catch((error: unknown) => {
         if (error instanceof AssertionDataError) {
-          const errorMessage = `Assertion data error on ${
-            childChainInfo.name
-          }: ${error.message}${
-            error.rawData
-              ? `\nRaw data: ${jsonStringifyWithBigInt(error.rawData)}`
-              : ''
-          }`
+          const errorMessage = generateAssertionDataErrorAlert(
+            childChainInfo,
+            error,
+            options
+          )
           console.error(errorMessage)
           alerts.push(errorMessage)
-
-          if (options?.enableAlerting) {
-            reportAssertionMonitorErrorToSlack({
-              message: errorMessage,
-            })
-          }
         }
         return latestAssertionBlock
       })
@@ -614,21 +571,14 @@ export const monitorAssertions = async (
         blocksSinceLastConfirmation > BigInt(childChainInfo.confirmPeriodBlocks)
       ) {
         console.log('Confirmation period exceeded, adding alert')
-        const alertMessage = `No assertion confirmations on ${
-          childChainInfo.name
-        } for ${blocksSinceLastConfirmation} blocks (confirm period is ${
-          childChainInfo.confirmPeriodBlocks
-        } blocks). This is ${
-          blocksSinceLastConfirmation -
-          BigInt(childChainInfo.confirmPeriodBlocks)
-        } blocks over the limit.${
-          lastProcessedChildBlock
-            ? ` Last processed child chain block: ${lastProcessedChildBlock}.`
-            : ''
-        } Validator whitelist is ${
-          validatorWhitelistDisabled ? 'disabled' : 'enabled'
-        }.`
-        alerts.push(alertMessage)
+        alerts.push(
+          generateNoConfirmationsAlert(
+            childChainInfo,
+            blocksSinceLastConfirmation,
+            lastProcessedChildBlock,
+            validatorWhitelistDisabled
+          )
+        )
       }
     }
   }
