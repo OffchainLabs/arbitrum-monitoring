@@ -198,7 +198,6 @@ const getLastProcessedBlock = async (
   logs: AssertionLogs,
   isBold: boolean
 ): Promise<bigint> => {
-  console.log('getLastProcessedBlock')
   if (logs.createdLogs.length === 0) {
     throw new AssertionDataError('No assertion logs found')
   }
