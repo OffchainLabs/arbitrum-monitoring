@@ -1,14 +1,14 @@
-import { ChildNetwork as ChainInfo } from '../utils'
-import { hasChainActivity, getLastProcessedBlock } from './blockchain'
 import { PublicClient } from 'viem'
+import { ChildNetwork as ChainInfo } from '../utils'
 import {
+  generateAssertionDataErrorAlert,
+  generateConfirmationIssuesAlert,
   generateNoAssertionsCreatedAlert,
   generateNoRecentAssertionsAlert,
-  generateNoConfirmationsAlert,
-  generateAssertionDataErrorAlert,
 } from './alerts'
-import { AssertionLogs } from './types'
+import { getLastProcessedBlock, hasChainActivity } from './blockchain'
 import { AssertionDataError } from './errors'
+import { AssertionLogs } from './types'
 
 /**
  * Monitors chain activity and generates alerts when no assertions are found despite chain activity.
@@ -24,14 +24,10 @@ export async function checkChainActivityWhenNoAssertions(
   validatorWhitelistDisabled: boolean
 ): Promise<string[]> {
   console.log('No creation events found, checking for chain activity...')
-  
+
   const alerts: string[] = []
 
-  const hasActivity = await hasChainActivity(
-    childChainClient,
-    fromBlock,
-    latestSafeBlockNumber
-  )
+  const hasActivity = await hasChainActivity(childChainClient)
   console.log(`Chain activity detected: ${hasActivity}`)
 
   if (hasActivity) {
@@ -111,7 +107,7 @@ export async function checkForConfirmationIssues(
   childChainClient: PublicClient,
   parentChainClient: PublicClient,
   assertionLogs: AssertionLogs,
-  isBold: boolean,
+  isUsingBoldProtocol: boolean,
   validatorWhitelistDisabled: boolean,
   options?: { enableAlerting: boolean }
 ): Promise<string[]> {
@@ -135,7 +131,7 @@ export async function checkForConfirmationIssues(
   const lastProcessedChildBlock = await getLastProcessedBlock(
     childChainClient,
     assertionLogs,
-    isBold
+    isUsingBoldProtocol
   ).catch((error: unknown) => {
     if (error instanceof AssertionDataError) {
       const errorMessage = generateAssertionDataErrorAlert(
@@ -155,20 +151,37 @@ export async function checkForConfirmationIssues(
     `Blocks since last confirmation: ${blocksSinceLastConfirmation} (confirm period: ${childChainInfo.confirmPeriodBlocks})`
   )
 
-  if (
-    assertionLogs.createdLogs.length > assertionLogs.confirmedLogs.length &&
+  const hasUnconfirmedAssertions =
+    assertionLogs.createdLogs.length > assertionLogs.confirmedLogs.length
+  const assertionAgeExceedsConfirmPeriod =
     latestParentBlock - latestAssertionBlock >
-      BigInt(childChainInfo.confirmPeriodBlocks) &&
+    BigInt(childChainInfo.confirmPeriodBlocks)
+  const confirmationDelayExceedsPeriod =
     blocksSinceLastConfirmation > BigInt(childChainInfo.confirmPeriodBlocks)
+
+  if (
+    hasUnconfirmedAssertions ||
+    assertionAgeExceedsConfirmPeriod ||
+    confirmationDelayExceedsPeriod
   ) {
-    console.log('Confirmation period exceeded, adding alert')
+    console.log('Confirmation issue(s) detected:')
+    if (hasUnconfirmedAssertions)
+      console.log('- Unconfirmed assertions present')
+    if (assertionAgeExceedsConfirmPeriod)
+      console.log('- Assertion age exceeds confirm period')
+    if (confirmationDelayExceedsPeriod)
+      console.log('- Confirmation delay exceeds period')
+
     alerts.push(
-      generateNoConfirmationsAlert(
-        childChainInfo,
+      generateConfirmationIssuesAlert(childChainInfo, {
+        hasUnconfirmedAssertions,
+        assertionAgeExceedsConfirmPeriod,
+        confirmationDelayExceedsPeriod,
         blocksSinceLastConfirmation,
         lastProcessedChildBlock,
-        validatorWhitelistDisabled
-      )
+        validatorWhitelistDisabled,
+        confirmPeriodBlocks: childChainInfo.confirmPeriodBlocks,
+      })
     )
   }
 

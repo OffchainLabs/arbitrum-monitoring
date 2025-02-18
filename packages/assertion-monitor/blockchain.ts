@@ -203,32 +203,14 @@ export async function getLastProcessedBlock(
 }
 
 /**
- * Scans a block range to determine if there are any transactions, indicating chain activity.
+ * Checks if there is any recent chain activity by examining the latest block.
  * Used to verify if chain inactivity is causing missing assertions.
  */
 export async function hasChainActivity(
-  childChainClient: PublicClient,
-  fromBlock: bigint,
-  toBlock: bigint
+  childChainClient: PublicClient
 ): Promise<boolean> {
-  const BATCH_SIZE = 100n
-  let currentBlock = fromBlock
-
-  while (currentBlock <= toBlock) {
-    const endBlock =
-      currentBlock + BATCH_SIZE > toBlock ? toBlock : currentBlock + BATCH_SIZE
-
-    for (let blockNum = currentBlock; blockNum <= endBlock; blockNum++) {
-      const block = await childChainClient.getBlock({ blockNumber: blockNum })
-      if (block.transactions.length > 0) {
-        return true
-      }
-    }
-
-    currentBlock += BATCH_SIZE + 1n
-  }
-
-  return false
+  const latestBlock = await childChainClient.getBlock()
+  return latestBlock.transactions.length > 0
 }
 
 /**

@@ -36,23 +36,46 @@ export function generateNoRecentAssertionsAlert(
   }.`
 }
 
-export function generateNoConfirmationsAlert(
+export function generateConfirmationIssuesAlert(
   chainInfo: ChainInfo,
-  blocksSinceLastConfirmation: bigint,
-  lastProcessedChildBlock: bigint | undefined,
-  validatorWhitelistDisabled: boolean
+  {
+    hasUnconfirmedAssertions,
+    assertionAgeExceedsConfirmPeriod,
+    confirmationDelayExceedsPeriod,
+    blocksSinceLastConfirmation,
+    lastProcessedChildBlock,
+    validatorWhitelistDisabled,
+    confirmPeriodBlocks,
+  }: {
+    hasUnconfirmedAssertions: boolean,
+    assertionAgeExceedsConfirmPeriod: boolean,
+    confirmationDelayExceedsPeriod: boolean,
+    blocksSinceLastConfirmation: bigint,
+    lastProcessedChildBlock: bigint | undefined,
+    validatorWhitelistDisabled: boolean,
+    confirmPeriodBlocks: number,
+  }
 ): string {
-  return `No assertion confirmations on ${
-    chainInfo.name
-  } for ${blocksSinceLastConfirmation} blocks (confirm period is ${
-    chainInfo.confirmPeriodBlocks
-  } blocks). This is ${
-    blocksSinceLastConfirmation - BigInt(chainInfo.confirmPeriodBlocks)
-  } blocks over the limit.${
+  const issues: string[] = [];
+  
+  if (hasUnconfirmedAssertions) {
+    issues.push("There are assertions waiting to be confirmed");
+  }
+  
+  if (assertionAgeExceedsConfirmPeriod) {
+    issues.push(`The oldest unconfirmed assertion has exceeded the ${confirmPeriodBlocks} block confirmation period`);
+  }
+  
+  if (confirmationDelayExceedsPeriod) {
+    const confirmPeriodExceededBy = blocksSinceLastConfirmation - BigInt(confirmPeriodBlocks);
+    issues.push(`No confirmations for ${blocksSinceLastConfirmation} blocks (${confirmPeriodExceededBy} blocks over the ${confirmPeriodBlocks} block confirmation period)`);
+  }
+
+  return `Confirmation issue(s) detected on ${chainInfo.name}:\n- ${issues.join('\n- ')}${
     lastProcessedChildBlock
-      ? ` Last processed child chain block: ${lastProcessedChildBlock}.`
+      ? `\nLast processed child chain block: ${lastProcessedChildBlock}`
       : ''
-  } Validator whitelist is ${validatorWhitelistDisabled ? 'disabled' : 'enabled'}.`
+  }\nValidator whitelist is ${validatorWhitelistDisabled ? 'disabled' : 'enabled'}.`
 }
 
 export function generateAssertionDataErrorAlert(

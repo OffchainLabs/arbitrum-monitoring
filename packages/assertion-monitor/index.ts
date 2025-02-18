@@ -180,6 +180,7 @@ export const checkChainForAssertionIssues = async (
   const alerts: string[] = []
 
   const assertionCreatedLogsFound = sortedAssertionLogs.createdLogs.length > 0
+
   if (assertionCreatedLogsFound) {
     const staleAssertionAlerts = await checkForStaleAssertions(
       childChainInfo,
@@ -207,6 +208,7 @@ export const checkChainForAssertionIssues = async (
 
   const assertionConfirmedLogsFound =
     sortedAssertionLogs.confirmedLogs.length > 0
+
   if (assertionConfirmedLogsFound) {
     const confirmationAlerts = await checkForConfirmationIssues(
       childChainInfo,
