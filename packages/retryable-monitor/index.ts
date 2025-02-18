@@ -272,7 +272,7 @@ const processChildChain = async (
       timeoutTimestamp: String(Number(timestamp) + SEVEN_DAYS_IN_SECONDS),
       deposit: String(retryableMessage.messageData.l2CallValue), // eth amount
       status: ParentToChildMessageStatus[status],
-      retryTo: childChainTxReceipt.to,
+      retryTo: retryableMessage.messageData.destAddress,
       retryData: retryableMessage.messageData.data,
       gasFeeCap: (childChainTx.maxFeePerGas ?? BigNumber.from(0)).toNumber(),
       gasLimit: childChainTx.gasLimit.toNumber(),
