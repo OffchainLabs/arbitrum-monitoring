@@ -16,8 +16,6 @@
     "experimentalDecorators": true,
     "skipLibCheck": true,
     "sourceMap": true,
-    "types": ["node"],
-    "moduleResolution": "node",
-    "declarationMap": true
+    "types": ["node"]
   }
 }
