@@ -32,6 +32,11 @@ const MAXIMUM_SEARCH_DAYS = 7
 const SAFETY_BUFFER_DAYS = 4
 const ASSERTION_CREATION_ALERT_HOURS = 4 // Alert if no assertions in 4 hours with chain activity
 
+const jsonStringifyWithBigInt = (obj: any): string => 
+  JSON.stringify(obj, (_, value) => 
+    typeof value === 'bigint' ? value.toString() : value
+  , 2)
+
 class AssertionDataError extends Error {
   constructor(message: string, public readonly rawData?: any) {
     super(message)
@@ -245,9 +250,7 @@ const getLastProcessedBlock = async (
       throw error
     }
     // If it's some other error accessing the data structure, wrap it
-    const safeLog = JSON.stringify(latestAssertion.args, (_, value) =>
-      typeof value === 'bigint' ? value.toString() : value
-    )
+    const safeLog = jsonStringifyWithBigInt(latestAssertion.args)
     throw new AssertionDataError('Error accessing assertion data structure', {
       error,
       rawData: safeLog
@@ -573,7 +576,7 @@ export const monitorAssertions = async (
       ).catch((error: unknown) => {
         if (error instanceof AssertionDataError) {
           const errorMessage = `Assertion data error on ${childChainInfo.name}: ${error.message}${
-            error.rawData ? `\nRaw data: ${JSON.stringify(error.rawData, null, 2)}` : ''
+            error.rawData ? `\nRaw data: ${jsonStringifyWithBigInt(error.rawData)}` : ''
           }`
           console.error(errorMessage)
           alerts.push(errorMessage)
@@ -669,11 +672,4 @@ export const main = async () => {
     console.error(errorStr)
   }
 }
-
-main()
-  .then(() => process.exit(0))
-  .catch(error => {
-    console.error(error)
-    process.exit(1)
-  })
 
