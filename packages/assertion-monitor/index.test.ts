@@ -1,6 +1,6 @@
 import { createPublicClient, http, PublicClient } from 'viem'
 import { beforeEach, describe, expect, test } from 'vitest'
-import { hasChainActivity, isBoldEnabled } from './blockchain'
+import { hasChainActivity, isBoldEnabled, createChildChainClient } from './blockchain'
 import { getChainFromId } from './chains'
 import { checkChainForAssertionIssues, getBlockRange } from './index'
 import { BlockRange } from './types'
@@ -84,7 +84,8 @@ describe('Assertion Monitor - BOLD Chain', () => {
   })
 
   test('should detect chain activity in known block range', async () => {
-    const hasActivity = await hasChainActivity(client)
+    const childChainClient = createChildChainClient(boldChainInfo)
+    const hasActivity = await hasChainActivity(childChainClient, BOLD_FROM_BLOCK)
     console.log(`Chain activity detected: ${hasActivity}`)
     expect(typeof hasActivity).toBe('boolean')
   })
@@ -133,7 +134,7 @@ describe('Assertion Monitor - Classic Chain', () => {
   })
 
   test('should detect chain activity in known block range', async () => {
-    const hasActivity = await hasChainActivity(client)
+    const hasActivity = await hasChainActivity(client, CLASSIC_FROM_BLOCK)
     console.log(`Chain activity detected: ${hasActivity}`)
     expect(typeof hasActivity).toBe('boolean')
   })

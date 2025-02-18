@@ -27,7 +27,7 @@ export async function checkChainActivityWhenNoAssertions(
 
   const alerts: string[] = []
 
-  const hasActivity = await hasChainActivity(childChainClient)
+  const hasActivity = await hasChainActivity(childChainClient, fromBlock)
   console.log(`Chain activity detected: ${hasActivity}`)
 
   if (hasActivity) {
@@ -78,8 +78,7 @@ export async function checkForStaleAssertions(
     // Check for activity since the last assertion
     const hasActivity = await hasChainActivity(
       childChainClient,
-      latestAssertionBlock.number,
-      latestSafeBlockNumber
+      latestAssertionBlock.number
     )
     console.log(`Chain activity detected: ${hasActivity}`)
 
