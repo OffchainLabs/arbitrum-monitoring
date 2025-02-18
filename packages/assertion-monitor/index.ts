@@ -26,16 +26,17 @@ import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAler
 const CHUNK_SIZE = 800n
 const RETRIES = 5
 const RETRY_DELAY_BASE = 100
-const CHUNK_PROCESSING_DELAY = 100
 const VALIDATOR_AFK_BLOCKS = 45818
 const MAXIMUM_SEARCH_DAYS = 7
 const SAFETY_BUFFER_DAYS = 4
 const ASSERTION_CREATION_ALERT_HOURS = 4 // Alert if no assertions in 4 hours with chain activity
 
-const jsonStringifyWithBigInt = (obj: any): string => 
-  JSON.stringify(obj, (_, value) => 
-    typeof value === 'bigint' ? value.toString() : value
-  , 2)
+const jsonStringifyWithBigInt = (obj: any): string =>
+  JSON.stringify(
+    obj,
+    (_, value) => (typeof value === 'bigint' ? value.toString() : value),
+    2
+  )
 
 class AssertionDataError extends Error {
   constructor(message: string, public readonly rawData?: any) {
@@ -197,6 +198,7 @@ const getLastProcessedBlock = async (
   logs: AssertionLogs,
   isBold: boolean
 ): Promise<bigint> => {
+  console.log('getLastProcessedBlock')
   if (logs.createdLogs.length === 0) {
     throw new AssertionDataError('No assertion logs found')
   }
@@ -209,28 +211,28 @@ const getLastProcessedBlock = async (
 
     if (isBold) {
       // For BOLD chains, the block info is in the assertion data
+      // assertion[2] is afterState
+      // assertion[2][0] is afterState.globalState
+      // assertion[2][0].bytes32Vals[0] is the last blockhash processed
       const assertionData = latestAssertion.args.assertion
-      if (
-        !assertionData?.afterStateSnapshot?.globalState?.bytes32Vals?.[0]
-      ) {
+      if (!assertionData?.[2]?.[0]?.globalStateBytes32Vals?.[0]) {
         throw new AssertionDataError(
           'Incomplete BOLD assertion data structure',
           latestAssertion.args
         )
       }
-      lastProcessedBlockHash = assertionData.afterStateSnapshot.globalState.bytes32Vals[0]
+      lastProcessedBlockHash = assertionData[2][0].globalStateBytes32Vals[0]
     } else {
       // For Classic chains, the block info is in the beforeState
       const assertionData = latestAssertion.args.assertion
-      if (
-        !assertionData?.afterState?.globalState?.bytes32Vals?.[0]
-      ) {
+      if (!assertionData?.afterState?.globalState?.bytes32Vals?.[0]) {
         throw new AssertionDataError(
           'Incomplete Classic assertion data structure',
           latestAssertion.args
         )
       }
-      lastProcessedBlockHash = assertionData.afterState.globalState.bytes32Vals[0]
+      lastProcessedBlockHash =
+        assertionData.afterState.globalState.bytes32Vals[0]
     }
 
     try {
@@ -253,7 +255,7 @@ const getLastProcessedBlock = async (
     const safeLog = jsonStringifyWithBigInt(latestAssertion.args)
     throw new AssertionDataError('Error accessing assertion data structure', {
       error,
-      rawData: safeLog
+      rawData: safeLog,
     })
   }
 }
@@ -308,7 +310,8 @@ export const monitorAssertions = async (
   const isBold = await isBoldEnabled(client, childChainInfo.ethBridge.rollup)
   console.log(`Chain type: ${isBold ? 'BOLD' : 'Classic'} rollup`)
 
-  const { fromBlock, toBlock } = blockRange || await getBlockRange(client, childChainInfo)
+  const { fromBlock, toBlock } =
+    blockRange || (await getBlockRange(client, childChainInfo))
   console.log(
     `Scanning blocks ${fromBlock} to ${toBlock} (${toBlock - fromBlock} blocks)`
   )
@@ -409,15 +412,20 @@ export const monitorAssertions = async (
     (acc, curr) => {
       if (!curr) return acc
       return {
-        createdLogs: [...acc.createdLogs, ...(curr.createdLogs || [])].sort((a, b) => {
-          // First sort by block number
-          if (a.blockNumber !== b.blockNumber) {
-            return Number(a.blockNumber - b.blockNumber)
+        createdLogs: [...acc.createdLogs, ...(curr.createdLogs || [])].sort(
+          (a, b) => {
+            // First sort by block number
+            if (a.blockNumber !== b.blockNumber) {
+              return Number(a.blockNumber - b.blockNumber)
+            }
+            // Then by log index within the block
+            return Number(a.logIndex - b.logIndex)
           }
-          // Then by log index within the block
-          return Number(a.logIndex - b.logIndex)
-        }),
-        confirmedLogs: [...acc.confirmedLogs, ...(curr.confirmedLogs || [])].sort((a, b) => {
+        ),
+        confirmedLogs: [
+          ...acc.confirmedLogs,
+          ...(curr.confirmedLogs || []),
+        ].sort((a, b) => {
           if (a.blockNumber !== b.blockNumber) {
             return Number(a.blockNumber - b.blockNumber)
           }
@@ -575,15 +583,19 @@ export const monitorAssertions = async (
         isBold
       ).catch((error: unknown) => {
         if (error instanceof AssertionDataError) {
-          const errorMessage = `Assertion data error on ${childChainInfo.name}: ${error.message}${
-            error.rawData ? `\nRaw data: ${jsonStringifyWithBigInt(error.rawData)}` : ''
+          const errorMessage = `Assertion data error on ${
+            childChainInfo.name
+          }: ${error.message}${
+            error.rawData
+              ? `\nRaw data: ${jsonStringifyWithBigInt(error.rawData)}`
+              : ''
           }`
           console.error(errorMessage)
           alerts.push(errorMessage)
-          
+
           if (options?.enableAlerting) {
             reportAssertionMonitorErrorToSlack({
-              message: errorMessage
+              message: errorMessage,
             })
           }
         }
@@ -672,4 +684,3 @@ export const main = async () => {
     console.error(errorStr)
   }
 }
-

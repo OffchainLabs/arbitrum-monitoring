@@ -6,7 +6,6 @@
     "@arbitrum/sdk": "^4.0.0",
     "@types/node": "20.14.1",
     "@types/yargs": "17.0.32",
-    "abitype": "^1.0.5",
     "typescript": "^5.4.5",
     "utils": "*",
     "viem": "^2.7.9",
@@ -21,7 +20,7 @@
     "lint": "eslint .",
     "build": "rm -rf ./dist && tsc",
     "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "dev": "yarn build && node ./dist/assertion-monitor/index.js",
+    "dev": "yarn build && node ./dist/assertion-monitor/main.js",
     "test": "vitest"
   }
 }
