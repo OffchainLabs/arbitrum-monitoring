@@ -1,7 +1,8 @@
 import { describe, test, expect, beforeEach } from 'vitest'
-import { monitorAssertions, hasChainActivity, getBlockRange, isBoldEnabled, BlockRange } from './index'
+import { checkChainForAssertionIssues, getBlockRange, BlockRange } from './index'
 import { createPublicClient, http, PublicClient } from 'viem'
 import { getChainFromId } from './chains'
+import { hasChainActivity, isBoldEnabled } from './blockchain'
 
 // Known block range where we have events (Arbitrum Sepolia)
 const BOLD_FROM_BLOCK = 7627075n
@@ -91,9 +92,9 @@ describe('Assertion Monitor - BOLD Chain', () => {
       fromBlock: BOLD_FROM_BLOCK,
       toBlock: BOLD_TO_BLOCK
     }
-    const monitorResult = await monitorAssertions(boldChainInfo, blockRange)
+    const monitorResult = await checkChainForAssertionIssues(boldChainInfo, blockRange)
     expect(monitorResult === null || typeof monitorResult.alertMessage === 'string').toBe(true)
-  }, { timeout: 30000 }) // Increase timeout to 30 seconds
+  }, { timeout: 30000 }) 
 })
 
 describe('Assertion Monitor - Classic Chain', () => {
@@ -135,7 +136,7 @@ describe('Assertion Monitor - Classic Chain', () => {
       fromBlock: CLASSIC_FROM_BLOCK,
       toBlock: CLASSIC_TO_BLOCK
     }
-    const monitorResult = await monitorAssertions(classicChainInfo, blockRange)
+    const monitorResult = await checkChainForAssertionIssues(classicChainInfo, blockRange)
     expect(monitorResult === null || typeof monitorResult.alertMessage === 'string').toBe(true)
   }, { timeout: 100000 })
 }) 

@@ -1,7 +1,7 @@
 import { ChildNetwork as ChainInfo } from '../utils'
 import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
 import { jsonStringifyWithBigInt } from './utils'
-import { AssertionDataError } from './index'
+import { AssertionDataError } from './errors'
 
 export function generateNoAssertionsCreatedAlert(
   chainInfo: ChainInfo,
