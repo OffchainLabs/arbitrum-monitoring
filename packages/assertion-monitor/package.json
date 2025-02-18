@@ -4,7 +4,6 @@
   "main": "dist/main.js",
   "dependencies": {
     "@arbitrum/sdk": "^4.0.0",
-    "@types/node": "20.14.1",
     "@types/yargs": "17.0.32",
     "typescript": "^5.4.5",
     "utils": "*",
