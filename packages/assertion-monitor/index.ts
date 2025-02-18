@@ -32,6 +32,13 @@ const MAXIMUM_SEARCH_DAYS = 7
 const SAFETY_BUFFER_DAYS = 4
 const ASSERTION_CREATION_ALERT_HOURS = 4 // Alert if no assertions in 4 hours with chain activity
 
+class AssertionDataError extends Error {
+  constructor(message: string, public readonly rawData?: any) {
+    super(message)
+    this.name = 'AssertionDataError'
+  }
+}
+
 type AssertionLogs = {
   createdLogs: any[]
   confirmedLogs: any[]
@@ -184,9 +191,9 @@ const getLastProcessedBlock = async (
   childChainClient: PublicClient,
   logs: AssertionLogs,
   isBold: boolean
-): Promise<bigint | undefined> => {
+): Promise<bigint> => {
   if (logs.createdLogs.length === 0) {
-    return undefined
+    throw new AssertionDataError('No assertion logs found')
   }
 
   // Get the latest assertion
@@ -199,50 +206,53 @@ const getLastProcessedBlock = async (
       // For BOLD chains, the block info is in the assertion data
       const assertionData = latestAssertion.args.assertion
       if (
-        assertionData &&
-        assertionData.afterStateSnapshot &&
-        assertionData.afterStateSnapshot.globalState
+        !assertionData?.afterStateSnapshot?.globalState?.bytes32Vals?.[0]
       ) {
-        lastProcessedBlockHash = assertionData.afterStateSnapshot.globalState.bytes32Vals[0]
+        throw new AssertionDataError(
+          'Incomplete BOLD assertion data structure',
+          latestAssertion.args
+        )
       }
+      lastProcessedBlockHash = assertionData.afterStateSnapshot.globalState.bytes32Vals[0]
     } else {
       // For Classic chains, the block info is in the beforeState
       const assertionData = latestAssertion.args.assertion
       if (
-        assertionData &&
-        assertionData.beforeState &&
-        assertionData.beforeState.globalState
+        !assertionData?.afterState?.globalState?.bytes32Vals?.[0]
       ) {
-        lastProcessedBlockHash = assertionData.beforeState.globalState.bytes32Vals[0]
+        throw new AssertionDataError(
+          'Incomplete Classic assertion data structure',
+          latestAssertion.args
+        )
       }
+      lastProcessedBlockHash = assertionData.afterState.globalState.bytes32Vals[0]
     }
 
-    if (lastProcessedBlockHash) {
-      console.log(`Last processed block hash from assertion: ${lastProcessedBlockHash}`)
-
-      try {
-        const block = await childChainClient.getBlock({
-          blockHash: lastProcessedBlockHash,
-        })
-        console.log(`Last processed child chain block: ${block.number}`)
-        return block.number
-      } catch (error) {
-        console.error('Error getting block from hash:', error)
-      }
-    } else {
-      console.log('Assertion data structure is incomplete')
+    try {
+      const block = await childChainClient.getBlock({
+        blockHash: lastProcessedBlockHash,
+      })
+      console.log(`Last processed child chain block: ${block.number}`)
+      return block.number
+    } catch (error) {
+      throw new AssertionDataError(
+        `Failed to get block from hash ${lastProcessedBlockHash}`,
+        { error, blockHash: lastProcessedBlockHash }
+      )
     }
   } catch (error) {
-    console.error('Error accessing assertion data structure:', error)
-    // Safely log assertion data without BigInt values
+    if (error instanceof AssertionDataError) {
+      throw error
+    }
+    // If it's some other error accessing the data structure, wrap it
     const safeLog = JSON.stringify(latestAssertion.args, (_, value) =>
       typeof value === 'bigint' ? value.toString() : value
     )
-    console.log('Raw assertion data:', safeLog)
+    throw new AssertionDataError('Error accessing assertion data structure', {
+      error,
+      rawData: safeLog
+    })
   }
-
-  // Fallback to using the assertion block number if we can't get the block from hash
-  return latestAssertion.blockNumber
 }
 
 /**
@@ -281,7 +291,8 @@ export type BlockRange = {
 
 export const monitorAssertions = async (
   childChainInfo: ChainInfo,
-  blockRange?: BlockRange
+  blockRange?: BlockRange,
+  options?: { enableAlerting: boolean }
 ) => {
   console.log(`\nMonitoring ${childChainInfo.name}...`)
 
@@ -395,8 +406,20 @@ export const monitorAssertions = async (
     (acc, curr) => {
       if (!curr) return acc
       return {
-        createdLogs: [...acc.createdLogs, ...(curr.createdLogs || [])],
-        confirmedLogs: [...acc.confirmedLogs, ...(curr.confirmedLogs || [])],
+        createdLogs: [...acc.createdLogs, ...(curr.createdLogs || [])].sort((a, b) => {
+          // First sort by block number
+          if (a.blockNumber !== b.blockNumber) {
+            return Number(a.blockNumber - b.blockNumber)
+          }
+          // Then by log index within the block
+          return Number(a.logIndex - b.logIndex)
+        }),
+        confirmedLogs: [...acc.confirmedLogs, ...(curr.confirmedLogs || [])].sort((a, b) => {
+          if (a.blockNumber !== b.blockNumber) {
+            return Number(a.blockNumber - b.blockNumber)
+          }
+          return Number(a.logIndex - b.logIndex)
+        }),
       }
     },
     { createdLogs: [], confirmedLogs: [] } as AssertionLogs
@@ -406,16 +429,6 @@ export const monitorAssertions = async (
     console.log(
       `Found ${allLogs.createdLogs.length} created and ${allLogs.confirmedLogs.length} confirmed assertions`
     )
-
-    // Show confirmation ratio
-    if (allLogs.createdLogs.length > 0) {
-      const ratio = (
-        (allLogs.confirmedLogs.length / allLogs.createdLogs.length) *
-        100
-      ).toFixed(2)
-      console.log(
-        `Confirmation ratio: ${ratio}% (${allLogs.confirmedLogs.length}/${allLogs.createdLogs.length})`      )
-    }
 
     // Show latest confirmation details
     if (allLogs.confirmedLogs.length > 0) {
@@ -557,7 +570,22 @@ export const monitorAssertions = async (
         childChainClient,
         allLogs,
         isBold
-      )
+      ).catch((error: unknown) => {
+        if (error instanceof AssertionDataError) {
+          const errorMessage = `Assertion data error on ${childChainInfo.name}: ${error.message}${
+            error.rawData ? `\nRaw data: ${JSON.stringify(error.rawData, null, 2)}` : ''
+          }`
+          console.error(errorMessage)
+          alerts.push(errorMessage)
+          
+          if (options?.enableAlerting) {
+            reportAssertionMonitorErrorToSlack({
+              message: errorMessage
+            })
+          }
+        }
+        return latestAssertionBlock
+      })
 
       const blocksSinceLastConfirmation =
         latestParentBlock - latestConfirmationBlock.number
