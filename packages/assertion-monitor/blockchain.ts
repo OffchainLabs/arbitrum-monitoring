@@ -4,9 +4,8 @@ import {
   defineChain,
   getContract,
   http,
-  Chain,
 } from 'viem'
-import { ChildNetwork as ChainInfo } from '../utils'
+import { ChildNetwork as ChainInfo, sleep } from '../utils'
 import {
   ASSERTION_CONFIRMED_EVENT,
   ASSERTION_CREATED_EVENT,
@@ -15,14 +14,23 @@ import {
   boldABI,
   rollupABI,
 } from './abi'
-import { AssertionLogs } from './types'
-import { sleep } from '../utils'
 import { AssertionDataError } from './errors'
+import { AssertionLogs } from './types'
 import { extractBoldBlockHash, extractClassicBlockHash } from './utils'
 
+/** Maximum number of retries for fetching logs */
 const RETRIES = 5
+
+/** Base delay in milliseconds between retries */
 const RETRY_DELAY_BASE = 100
 
+/** Number of blocks to process in each chunk when fetching logs to avoid RPC timeouts */
+const CHUNK_SIZE = 800n
+
+/**
+ * Queries the rollup contract to determine if the validator whitelist feature is disabled.
+ * Controls which validators can post assertions in non-permissionless mode.
+ */
 export async function getValidatorWhitelistDisabled(
   client: PublicClient,
   rollupAddress: string
@@ -36,6 +44,10 @@ export async function getValidatorWhitelistDisabled(
   return contract.read.validatorWhitelistDisabled()
 }
 
+/**
+ * Fetches and processes assertion/node creation and confirmation logs for a specific block range.
+ * Handles both BOLD assertions and Classic node creation events with their respective confirmations.
+ */
 export async function processChunk(
   chunkFromBlock: bigint,
   chunkToBlock: bigint,
@@ -122,10 +134,13 @@ export async function processChunk(
   }
 }
 
+/**
+ * Processes a large block range by breaking it into smaller chunks to handle RPC limitations.
+ * Essential for monitoring long periods of assertion/node history efficiently.
+ */
 export async function processChunkedRange(
   fromBlock: bigint,
   toBlock: bigint,
-  chunkSize: bigint,
   client: PublicClient,
   rollupAddress: string,
   isBold: boolean
@@ -140,8 +155,8 @@ export async function processChunkedRange(
 
   while (currentFromBlock <= toBlock) {
     const currentToBlock =
-      currentFromBlock + chunkSize - 1n < toBlock
-        ? currentFromBlock + chunkSize - 1n
+      currentFromBlock + CHUNK_SIZE - 1n < toBlock
+        ? currentFromBlock + CHUNK_SIZE - 1n
         : toBlock
 
     const result = await processChunk(
@@ -161,6 +176,10 @@ export async function processChunkedRange(
   return results
 }
 
+/**
+ * Retrieves the latest block number that has been processed by the assertion chain.
+ * Uses block hash from assertion data to track L2/L3 state progression.
+ */
 export async function getLastProcessedBlock(
   childChainClient: PublicClient,
   logs: AssertionLogs,
@@ -183,6 +202,10 @@ export async function getLastProcessedBlock(
   return block.number
 }
 
+/**
+ * Scans a block range to determine if there are any transactions, indicating chain activity.
+ * Used to verify if chain inactivity is causing missing assertions.
+ */
 export async function hasChainActivity(
   childChainClient: PublicClient,
   fromBlock: bigint,
@@ -208,6 +231,10 @@ export async function hasChainActivity(
   return false
 }
 
+/**
+ * Determines if the rollup contract is using BOLD mode by checking for a genesis assertion hash.
+ * BOLD mode uses a different assertion format and validation process than Classic mode.
+ */
 export async function isBoldEnabled(
   client: PublicClient,
   rollupAddress: string
@@ -226,6 +253,10 @@ export async function isBoldEnabled(
   }
 }
 
+/**
+ * Configures and creates a viem PublicClient instance for interacting with the child chain.
+ * Used to monitor L2/L3 chain state and transaction activity.
+ */
 export function createChildChainClient(
   childChainInfo: ChainInfo
 ): PublicClient {
@@ -251,15 +282,5 @@ export function createChildChainClient(
   return createPublicClient({
     chain: childChain,
     transport: http(childChainInfo.orbitRpcUrl),
-  })
-}
-
-export function createParentChainClient(
-  parentChain: Chain,
-  rpcUrl: string
-): PublicClient {
-  return createPublicClient({
-    chain: parentChain,
-    transport: http(rpcUrl),
   })
 }

@@ -1,4 +1,4 @@
-import { PublicClient } from 'viem'
+import { PublicClient, createPublicClient, http } from 'viem'
 import yargs from 'yargs'
 import {
   ChildNetwork as ChainInfo,
@@ -7,7 +7,6 @@ import {
 } from '../utils'
 import {
   createChildChainClient,
-  createParentChainClient,
   processChunkedRange as fetchAssertionLogsForBlockRangeInChunks,
   getValidatorWhitelistDisabled,
   isBoldEnabled,
@@ -23,12 +22,19 @@ import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAler
 import { BlockRange } from './types'
 import { sortAndMergeAssertionLogs } from './utils'
 
-const CHUNK_SIZE = 800n
+/** Maximum number of blocks a validator can be inactive before alerts are triggered */
 const VALIDATOR_AFK_BLOCKS = 45818
-const MAXIMUM_SEARCH_DAYS = 7
-const SAFETY_BUFFER_DAYS = 4
-const ASSERTION_CREATION_ALERT_HOURS = 4 // Alert if no assertions in 4 hours with chain activity
 
+/** Maximum number of days to look back when scanning for assertions */
+const MAXIMUM_SEARCH_DAYS = 7
+
+/** Buffer period in days to avoid scanning too close to the current block */
+const SAFETY_BUFFER_DAYS = 4
+
+/** Number of hours without assertions before triggering alerts when chain has activity */
+const ASSERTION_CREATION_ALERT_HOURS = 4
+
+/**  Retrieves and validates the monitor configuration from the config file. */
 export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
   const options = yargs(process.argv.slice(2))
     .options({
@@ -47,6 +53,7 @@ export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
   return { config, options }
 }
 
+/** Calculates the appropriate block window for monitoring assertions based on chain characteristics. */
 function calculateSearchWindow(
   childChainInfo: ChainInfo,
   parentChain: ReturnType<typeof getChainFromId>
@@ -86,6 +93,10 @@ function calculateSearchWindow(
   }
 }
 
+/**
+ * Determines the block range to scan for assertions based on chain configuration.
+ * Uses chain-specific parameters to calculate an appropriate range that covers potential confirmation delays.
+ */
 export const getBlockRange = async (
   client: PublicClient,
   childChainInfo: ChainInfo
@@ -104,6 +115,9 @@ export const getBlockRange = async (
   return { fromBlock: fromBlock.number, toBlock: latestBlockNumber }
 }
 
+/**
+ * Main monitoring function for a single chain's assertion health.
+ */
 export const checkChainForAssertionIssues = async (
   childChainInfo: ChainInfo,
   blockRange?: BlockRange,
@@ -112,10 +126,10 @@ export const checkChainForAssertionIssues = async (
   console.log(`\nMonitoring ${childChainInfo.name}...`)
 
   const parentChain = getChainFromId(childChainInfo.parentChainId)
-  const client = createParentChainClient(
-    parentChain,
-    childChainInfo.parentRpcUrl
-  )
+  const client = createPublicClient({
+    chain: parentChain,
+    transport: http(childChainInfo.parentRpcUrl),
+  })
 
   const isBold = await isBoldEnabled(client, childChainInfo.ethBridge.rollup)
   console.log(`Chain type: ${isBold ? 'BOLD' : 'Classic'} rollup`)
@@ -129,7 +143,6 @@ export const checkChainForAssertionIssues = async (
   const rawAssertionLogs = await fetchAssertionLogsForBlockRangeInChunks(
     fromBlock,
     toBlock,
-    CHUNK_SIZE,
     client,
     childChainInfo.ethBridge.rollup,
     isBold
@@ -219,6 +232,10 @@ export const checkChainForAssertionIssues = async (
   return null
 }
 
+/**
+ * Entry point for the assertion monitoring system.
+ * Reports issues to Slack when alerting is enabled.
+ */
 export const main = async () => {
   try {
     const { config, options } = getMonitorConfig()

@@ -10,6 +10,9 @@ import {
 import { AssertionLogs } from './types'
 import { AssertionDataError } from './errors'
 
+/**
+ * Monitors chain activity and generates alerts when no assertions are found despite chain activity.
+ */
 export async function checkChainActivityWhenNoAssertions(
   childChainInfo: ChainInfo,
   childChainClient: PublicClient,
@@ -21,6 +24,7 @@ export async function checkChainActivityWhenNoAssertions(
   validatorWhitelistDisabled: boolean
 ): Promise<string[]> {
   console.log('No creation events found, checking for chain activity...')
+  
   const alerts: string[] = []
 
   const hasActivity = await hasChainActivity(
@@ -46,11 +50,14 @@ export async function checkChainActivityWhenNoAssertions(
   return alerts
 }
 
+/**
+ * Monitors assertion staleness by checking time since last assertion and chain activity.
+ */
 export async function checkForStaleAssertions(
   childChainInfo: ChainInfo,
   childChainClient: PublicClient,
   parentChainClient: PublicClient,
-  sortedAssertionLogs: AssertionLogs,
+  assertionLogs: AssertionLogs,
   latestSafeBlockNumber: bigint,
   validatorWhitelistDisabled: boolean,
   assertionCreationAlertHours: number
@@ -60,7 +67,7 @@ export async function checkForStaleAssertions(
 
   const latestAssertionBlock = await parentChainClient.getBlock({
     blockNumber:
-      sortedAssertionLogs.createdLogs[sortedAssertionLogs.createdLogs.length - 1]
+      assertionLogs.createdLogs[assertionLogs.createdLogs.length - 1]
         .blockNumber,
   })
   const hoursSinceLastAssertion =
@@ -96,38 +103,38 @@ export async function checkForStaleAssertions(
   return alerts
 }
 
+/**
+ * Monitors assertion confirmation delays and generates alerts when confirmations exceed the expected period.
+ */
 export async function checkForConfirmationIssues(
   childChainInfo: ChainInfo,
   childChainClient: PublicClient,
   parentChainClient: PublicClient,
-  sortedAssertionLogs: AssertionLogs,
+  assertionLogs: AssertionLogs,
   isBold: boolean,
   validatorWhitelistDisabled: boolean,
   options?: { enableAlerting: boolean }
 ): Promise<string[]> {
   const alerts: string[] = []
 
-  if (sortedAssertionLogs.confirmedLogs.length === 0) {
+  if (assertionLogs.confirmedLogs.length === 0) {
     return alerts
   }
 
   console.log('Checking confirmation status...')
   const latestConfirmationBlock = await parentChainClient.getBlock({
     blockNumber:
-      sortedAssertionLogs.confirmedLogs[
-        sortedAssertionLogs.confirmedLogs.length - 1
-      ].blockNumber,
+      assertionLogs.confirmedLogs[assertionLogs.confirmedLogs.length - 1]
+        .blockNumber,
   })
   const latestParentBlock = await parentChainClient.getBlockNumber()
 
   // Get both the parent chain block number and the last processed child chain block
   const latestAssertionBlock =
-    sortedAssertionLogs.createdLogs[
-      sortedAssertionLogs.createdLogs.length - 1
-    ].blockNumber
+    assertionLogs.createdLogs[assertionLogs.createdLogs.length - 1].blockNumber
   const lastProcessedChildBlock = await getLastProcessedBlock(
     childChainClient,
-    sortedAssertionLogs,
+    assertionLogs,
     isBold
   ).catch((error: unknown) => {
     if (error instanceof AssertionDataError) {
@@ -149,8 +156,7 @@ export async function checkForConfirmationIssues(
   )
 
   if (
-    sortedAssertionLogs.createdLogs.length >
-      sortedAssertionLogs.confirmedLogs.length &&
+    assertionLogs.createdLogs.length > assertionLogs.confirmedLogs.length &&
     latestParentBlock - latestAssertionBlock >
       BigInt(childChainInfo.confirmPeriodBlocks) &&
     blocksSinceLastConfirmation > BigInt(childChainInfo.confirmPeriodBlocks)
@@ -167,4 +173,4 @@ export async function checkForConfirmationIssues(
   }
 
   return alerts
-} 
+}
