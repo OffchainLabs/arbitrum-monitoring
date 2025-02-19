@@ -196,7 +196,6 @@ export const checkChainForAssertionIssues = async (
     const missingAssertionAlerts = await checkChainActivityWhenNoAssertions(
       childChainInfo,
       childChainClient,
-      fromBlock,
       latestSafeBlockNumber,
       durationString,
       isLatestSafeBlockWithinRange,

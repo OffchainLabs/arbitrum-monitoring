@@ -16,7 +16,6 @@ import { AssertionLogs } from './types'
 export async function checkChainActivityWhenNoAssertions(
   childChainInfo: ChainInfo,
   childChainClient: PublicClient,
-  fromBlock: bigint,
   latestSafeBlockNumber: bigint,
   durationString: string,
   isLatestSafeBlockWithinRange: boolean,
@@ -27,7 +26,7 @@ export async function checkChainActivityWhenNoAssertions(
 
   const alerts: string[] = []
 
-  const hasActivity = await hasChainActivity(childChainClient, fromBlock)
+  const hasActivity = await hasChainActivity(childChainClient, undefined)
   console.log(`Chain activity detected: ${hasActivity}`)
 
   if (hasActivity) {

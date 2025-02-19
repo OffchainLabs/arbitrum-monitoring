@@ -246,6 +246,15 @@ export async function hasChainActivity(
   // Chain is considered active if there are either new blocks or safe blocks after the last confirmed block
   const isActive = hasNewBlocks || hasSafeBlocks
 
+  console.log('Chain activity check:', {
+    latestBlock,
+    latestSafeBlock: latestSafeBlock.number,
+    lastConfirmedBlock,
+    hasNewBlocks,
+    hasSafeBlocks,
+    isActive
+  })
+
   return isActive
 }
 

@@ -1,9 +1,15 @@
 import { createPublicClient, http, PublicClient } from 'viem'
 import { beforeEach, describe, expect, test } from 'vitest'
-import { hasChainActivity, isBoldEnabled, createChildChainClient } from '../blockchain'
+import {
+  createChildChainClient,
+  hasChainActivity,
+  isBoldEnabled,
+  processChunkedRange,
+} from '../blockchain'
 import { getChainFromId } from '../chains'
 import { checkChainForAssertionIssues, getBlockRange } from '../index'
-import { BlockRange } from '../types'
+import { AssertionLogs, BlockRange } from '../types'
+import { sortAndMergeAssertionLogs } from '../utils'
 import { boldChainInfo, classicChainInfo } from './testConfigs'
 
 // Known block range where we have events (Arbitrum Sepolia)
@@ -14,16 +20,28 @@ const BOLD_TO_BLOCK = 7637075n
 const CLASSIC_FROM_BLOCK = 124632400n
 const CLASSIC_TO_BLOCK = 124667079n
 
-
 describe('Assertion Monitor - BOLD Chain', () => {
   let client: PublicClient
+  let childChainClient: PublicClient
+  let assertionLogs: AssertionLogs
 
-  beforeEach(() => {
+  beforeEach(async () => {
     const parentChain = getChainFromId(boldChainInfo.parentChainId)
     client = createPublicClient({
       chain: parentChain,
       transport: http(boldChainInfo.parentRpcUrl),
     })
+    childChainClient = createChildChainClient(boldChainInfo)
+
+    // Get assertion logs for the known block range
+    const rawLogs = await processChunkedRange(
+      BOLD_FROM_BLOCK,
+      BOLD_TO_BLOCK,
+      client,
+      boldChainInfo.ethBridge.rollup,
+      true
+    )
+    assertionLogs = sortAndMergeAssertionLogs(rawLogs)
   })
 
   test('should correctly identify as BOLD chain', async () => {
@@ -46,41 +64,49 @@ describe('Assertion Monitor - BOLD Chain', () => {
   })
 
   test('should detect chain activity in known block range', async () => {
-    const childChainClient = createChildChainClient(boldChainInfo)
-    const hasActivity = await hasChainActivity(childChainClient, BOLD_FROM_BLOCK)
+    const hasActivity = await hasChainActivity(childChainClient, assertionLogs)
     console.log(`Chain activity detected: ${hasActivity}`)
     expect(typeof hasActivity).toBe('boolean')
   })
 
-  test(
-    'should monitor assertions over known block range',
-    async () => {
-      const blockRange: BlockRange = {
-        fromBlock: BOLD_FROM_BLOCK,
-        toBlock: BOLD_TO_BLOCK,
-      }
-      const monitorResult = await checkChainForAssertionIssues(
-        boldChainInfo,
-        blockRange
-      )
-      expect(
-        monitorResult === null || typeof monitorResult.alertMessage === 'string'
-      ).toBe(true)
-    },
-    { timeout: 30000 }
-  )
+  test('should monitor assertions over known block range', async () => {
+    const blockRange: BlockRange = {
+      fromBlock: BOLD_FROM_BLOCK,
+      toBlock: BOLD_TO_BLOCK,
+    }
+    const monitorResult = await checkChainForAssertionIssues(
+      boldChainInfo,
+      blockRange
+    )
+    expect(
+      monitorResult === null || typeof monitorResult.alertMessage === 'string'
+    ).toBe(true)
+  }, 30000)
 })
 
 describe('Assertion Monitor - Classic Chain', () => {
   let client: PublicClient
+  let childChainClient: PublicClient
+  let assertionLogs: AssertionLogs
 
-  beforeEach(() => {
+  beforeEach(async () => {
     const parentChain = getChainFromId(classicChainInfo.parentChainId)
     client = createPublicClient({
       chain: parentChain,
       transport: http(classicChainInfo.parentRpcUrl),
     })
-  })
+    childChainClient = createChildChainClient(classicChainInfo)
+
+    // Get assertion logs for the known block range
+    const rawLogs = await processChunkedRange(
+      CLASSIC_FROM_BLOCK,
+      CLASSIC_TO_BLOCK,
+      client,
+      classicChainInfo.ethBridge.rollup,
+      false
+    )
+    assertionLogs = sortAndMergeAssertionLogs(rawLogs)
+  }, 1000000)
 
   test('should correctly identify as Classic chain', async () => {
     const isBold = await isBoldEnabled(
@@ -96,26 +122,22 @@ describe('Assertion Monitor - Classic Chain', () => {
   })
 
   test('should detect chain activity in known block range', async () => {
-    const hasActivity = await hasChainActivity(client, CLASSIC_FROM_BLOCK)
+    const hasActivity = await hasChainActivity(childChainClient, assertionLogs)
     console.log(`Chain activity detected: ${hasActivity}`)
     expect(typeof hasActivity).toBe('boolean')
   })
 
-  test(
-    'should monitor assertions over known block range',
-    async () => {
-      const blockRange: BlockRange = {
-        fromBlock: CLASSIC_FROM_BLOCK,
-        toBlock: CLASSIC_TO_BLOCK,
-      }
-      const monitorResult = await checkChainForAssertionIssues(
-        classicChainInfo,
-        blockRange
-      )
-      expect(
-        monitorResult === null || typeof monitorResult.alertMessage === 'string'
-      ).toBe(true)
-    },
-    { timeout: 100000 }
-  )
+  test('should monitor assertions over known block range', async () => {
+    const blockRange: BlockRange = {
+      fromBlock: CLASSIC_FROM_BLOCK,
+      toBlock: CLASSIC_TO_BLOCK,
+    }
+    const monitorResult = await checkChainForAssertionIssues(
+      classicChainInfo,
+      blockRange
+    )
+    expect(
+      monitorResult === null || typeof monitorResult.alertMessage === 'string'
+    ).toBe(true)
+  }, 100000)
 })
