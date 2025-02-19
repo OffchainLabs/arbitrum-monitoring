@@ -75,10 +75,16 @@ export async function checkForStaleAssertions(
     console.log(
       `Time since last event (${hoursSinceLastAssertion} hours) exceeds threshold (${assertionCreationAlertHours} hours), checking for activity...`
     )
-    // Check for activity since the last assertion
+    
+    // Get the last confirmed block from the assertion logs
+    const lastConfirmedBlock = assertionLogs.confirmedLogs.length > 0
+      ? assertionLogs.confirmedLogs[assertionLogs.confirmedLogs.length - 1].blockNumber
+      : latestAssertionBlock.number
+    
+    // Check for activity since the last confirmed block
     const hasActivity = await hasChainActivity(
       childChainClient,
-      latestAssertionBlock.number
+      lastConfirmedBlock
     )
     console.log(`Chain activity detected: ${hasActivity}`)
 

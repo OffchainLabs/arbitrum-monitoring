@@ -64,11 +64,13 @@ export async function processChunk(
         toBlock: chunkToBlock,
         event: isBold ? ASSERTION_CREATED_EVENT : NODE_CREATED_EVENT,
       })
-      console.log(
-        `Found ${createdLogs.length} ${
-          isBold ? 'assertions' : 'nodes'
-        } created in chunk`
-      )
+      if (createdLogs.length > 0) {
+        console.log(
+          `Found ${createdLogs.length} ${
+            isBold ? 'assertions' : 'nodes'
+          } created in chunk`
+        )
+      }
 
       const confirmedLogs = await client.getLogs({
         address: rollupAddress as `0x${string}`,
@@ -76,14 +78,13 @@ export async function processChunk(
         toBlock: chunkToBlock,
         event: isBold ? ASSERTION_CONFIRMED_EVENT : NODE_CONFIRMED_EVENT,
       })
-      console.log(
-        `Found ${confirmedLogs.length} ${
-          isBold ? 'assertions' : 'nodes'
-        } confirmed in chunk`
-      )
-
       if (confirmedLogs.length > 0) {
-        console.log('\nAnalyzing confirmed events:')
+        console.log(
+          `Found ${confirmedLogs.length} ${
+            isBold ? 'assertions' : 'nodes'
+          } confirmed in chunk`
+        )
+
         for (const log of confirmedLogs) {
           try {
             const eventData = isBold
@@ -99,7 +100,6 @@ export async function processChunk(
                   blockHash: (log as any).args.blockHash,
                   sendRoot: (log as any).args.sendRoot,
                 }
-            console.log('Confirmed event:', eventData)
           } catch (error) {
             console.log('Failed to decode confirmed event:', error)
             console.log('Raw log data:', {
@@ -203,15 +203,50 @@ export async function getLastProcessedBlock(
 }
 
 /**
+ * Gets the latest confirmed block number from assertion logs.
+ * Returns undefined if no confirmed logs are found.
+ */
+export function getLastConfirmedBlock(logs: AssertionLogs | undefined): bigint | undefined {
+  if (!logs?.confirmedLogs?.length) {
+    return undefined
+  }
+  return logs.confirmedLogs[logs.confirmedLogs.length - 1].blockNumber
+}
+
+/**
  * Checks if there is any recent chain activity by comparing block numbers.
- * If new blocks are being produced, it indicates the chain is active.
+ * If new blocks are being produced after the last confirmed block, it indicates the chain is active.
  */
 export async function hasChainActivity(
   childChainClient: PublicClient,
-  fromBlock: bigint
+  logs: AssertionLogs | undefined
 ): Promise<boolean> {
   const latestBlock = await childChainClient.getBlockNumber()
-  return latestBlock > fromBlock
+  const latestSafeBlock = await childChainClient.getBlock({ blockTag: 'safe' })
+  const lastConfirmedBlock = getLastConfirmedBlock(logs)
+
+  // If we have no confirmed blocks, check if there's any chain activity at all
+  if (!lastConfirmedBlock) {
+    // Chain is considered active if safe blocks are being produced
+    const isActive = latestSafeBlock.number > 0n
+    console.log('No confirmed blocks found, checking general chain activity:', {
+      latestBlock,
+      latestSafeBlock: latestSafeBlock.number,
+      isActive
+    })
+    return isActive
+  }
+
+  // Check if there are new blocks after the last confirmed block
+  const hasNewBlocks = latestBlock > lastConfirmedBlock
+
+  // Check if there are safe blocks after the last confirmed block
+  const hasSafeBlocks = latestSafeBlock.number > lastConfirmedBlock
+
+  // Chain is considered active if there are either new blocks or safe blocks after the last confirmed block
+  const isActive = hasNewBlocks || hasSafeBlocks
+
+  return isActive
 }
 
 /**
