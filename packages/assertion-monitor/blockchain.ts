@@ -4,6 +4,9 @@ import {
   defineChain,
   getContract,
   http,
+  type Log,
+  AbiEvent,
+  type Block,
 } from 'viem'
 import { ChildNetwork as ChainInfo, sleep } from '../utils'
 import {
@@ -15,14 +18,8 @@ import {
   rollupABI,
 } from './abi'
 import { AssertionDataError } from './errors'
-import { AssertionLogs } from './types'
+import { AssertionLogs, CreationEvent, ConfirmationEvent } from './types'
 import { extractBoldBlockHash, extractClassicBlockHash } from './utils'
-
-/** Maximum number of retries for fetching logs */
-const RETRIES = 5
-
-/** Base delay in milliseconds between retries */
-const RETRY_DELAY_BASE = 100
 
 /** Number of blocks to process in each chunk when fetching logs to avoid RPC timeouts */
 const CHUNK_SIZE = 800n
@@ -45,138 +42,6 @@ export async function getValidatorWhitelistDisabled(
 }
 
 /**
- * Fetches and processes assertion/node creation and confirmation logs for a specific block range.
- * Handles both BOLD assertions and Classic node creation events with their respective confirmations.
- */
-export async function processChunk(
-  chunkFromBlock: bigint,
-  chunkToBlock: bigint,
-  client: PublicClient,
-  rollupAddress: string,
-  isBold: boolean
-): Promise<AssertionLogs> {
-  console.log(`Processing chunk: ${chunkFromBlock} to ${chunkToBlock}`)
-  for (let attempt = 1; attempt <= RETRIES; attempt++) {
-    try {
-      const createdLogs = await client.getLogs({
-        address: rollupAddress as `0x${string}`,
-        fromBlock: chunkFromBlock,
-        toBlock: chunkToBlock,
-        event: isBold ? ASSERTION_CREATED_EVENT : NODE_CREATED_EVENT,
-      })
-      if (createdLogs.length > 0) {
-        console.log(
-          `Found ${createdLogs.length} ${
-            isBold ? 'assertions' : 'nodes'
-          } created in chunk`
-        )
-      }
-
-      const confirmedLogs = await client.getLogs({
-        address: rollupAddress as `0x${string}`,
-        fromBlock: chunkFromBlock,
-        toBlock: chunkToBlock,
-        event: isBold ? ASSERTION_CONFIRMED_EVENT : NODE_CONFIRMED_EVENT,
-      })
-      if (confirmedLogs.length > 0) {
-        console.log(
-          `Found ${confirmedLogs.length} ${
-            isBold ? 'assertions' : 'nodes'
-          } confirmed in chunk`
-        )
-
-        for (const log of confirmedLogs) {
-          try {
-            const eventData = isBold
-              ? {
-                  blockNumber: log.blockNumber,
-                  assertionHash: (log as any).args.assertionHash,
-                  blockHash: (log as any).args.blockHash,
-                  sendRoot: (log as any).args.sendRoot,
-                }
-              : {
-                  blockNumber: log.blockNumber,
-                  nodeNum: (log as any).args.nodeNum,
-                  blockHash: (log as any).args.blockHash,
-                  sendRoot: (log as any).args.sendRoot,
-                }
-          } catch (error) {
-            console.log('Failed to decode confirmed event:', error)
-            console.log('Raw log data:', {
-              topics: log.topics,
-              data: log.data,
-              blockNumber: log.blockNumber,
-            })
-          }
-        }
-      }
-
-      return {
-        createdLogs,
-        confirmedLogs,
-      }
-    } catch (error) {
-      console.error(
-        `Error fetching logs (attempt ${attempt}/${RETRIES}):`,
-        error
-      )
-      if (attempt === RETRIES) throw error
-      console.log(
-        `Retrying in ${RETRY_DELAY_BASE * Math.pow(2, attempt - 1)}ms...`
-      )
-      await sleep(RETRY_DELAY_BASE * Math.pow(2, attempt - 1))
-    }
-  }
-
-  return {
-    createdLogs: [],
-    confirmedLogs: [],
-  }
-}
-
-/**
- * Processes a large block range by breaking it into smaller chunks to handle RPC limitations.
- * Essential for monitoring long periods of assertion/node history efficiently.
- */
-export async function processChunkedRange(
-  fromBlock: bigint,
-  toBlock: bigint,
-  client: PublicClient,
-  rollupAddress: string,
-  isBold: boolean
-): Promise<AssertionLogs[]> {
-  const results: AssertionLogs[] = []
-
-  if (fromBlock === toBlock) {
-    return results
-  }
-
-  let currentFromBlock = fromBlock
-
-  while (currentFromBlock <= toBlock) {
-    const currentToBlock =
-      currentFromBlock + CHUNK_SIZE - 1n < toBlock
-        ? currentFromBlock + CHUNK_SIZE - 1n
-        : toBlock
-
-    const result = await processChunk(
-      currentFromBlock,
-      currentToBlock,
-      client,
-      rollupAddress,
-      isBold
-    )
-    results.push(result)
-
-    if (currentToBlock === toBlock) break
-
-    currentFromBlock = currentToBlock + 1n
-  }
-
-  return results
-}
-
-/**
  * Retrieves the latest block number that has been processed by the assertion chain.
  * Uses block hash from assertion data to track L2/L3 state progression.
  */
@@ -189,7 +54,9 @@ export async function getLastProcessedBlock(
     throw new AssertionDataError('No assertion logs found')
   }
 
-  const latestAssertion = logs.createdLogs[logs.createdLogs.length - 1]
+  const latestAssertion = logs.createdLogs[
+    logs.createdLogs.length - 1
+  ] as CreationEvent
   const assertionData = latestAssertion.args.assertion
   const lastProcessedBlockHash = isBold
     ? extractBoldBlockHash(assertionData)
@@ -203,14 +70,32 @@ export async function getLastProcessedBlock(
 }
 
 /**
- * Gets the latest confirmed block number from assertion logs.
- * Returns undefined if no confirmed logs are found.
+ * Gets the latest confirmed block number from assertion logs by finding the corresponding child block.
+ * Returns undefined if no confirmed logs are found or if the corresponding block cannot be found.
  */
-export function getLastConfirmedBlock(logs: AssertionLogs | undefined): bigint | undefined {
-  if (!logs?.confirmedLogs?.length) {
+export async function getLastConfirmedBlock(
+  childChainClient: PublicClient,
+  confirmationEvent: ConfirmationEvent | null
+): Promise<Block | undefined> {
+  try {
+    let childLastConfirmedBlock
+    if (confirmationEvent) {
+      const lastConfirmedBlockhash = confirmationEvent.args.blockHash
+      childLastConfirmedBlock = await childChainClient.getBlock({
+        blockHash: lastConfirmedBlockhash,
+      })
+    }
+    if (childLastConfirmedBlock) {
+      console.log('Found confirmed child block:', childLastConfirmedBlock?.number)
+      return childLastConfirmedBlock
+    } else {
+      console.log('No confirmed child block found')
+      return undefined
+    }
+  } catch (error) {
+    console.error('Failed to get confirmed block from child chain:', error)
     return undefined
   }
-  return logs.confirmedLogs[logs.confirmedLogs.length - 1].blockNumber
 }
 
 /**
@@ -219,42 +104,18 @@ export function getLastConfirmedBlock(logs: AssertionLogs | undefined): bigint |
  */
 export async function hasChainActivity(
   childChainClient: PublicClient,
-  logs: AssertionLogs | undefined
+  fromBlock: bigint
 ): Promise<boolean> {
   const latestBlock = await childChainClient.getBlockNumber()
   const latestSafeBlock = await childChainClient.getBlock({ blockTag: 'safe' })
-  const lastConfirmedBlock = getLastConfirmedBlock(logs)
 
-  // If we have no confirmed blocks, check if there's any chain activity at all
-  if (!lastConfirmedBlock) {
-    // Chain is considered active if safe blocks are being produced
-    const isActive = latestSafeBlock.number > 0n
-    console.log('No confirmed blocks found, checking general chain activity:', {
-      latestBlock,
-      latestSafeBlock: latestSafeBlock.number,
-      isActive
-    })
-    return isActive
-  }
-
-  // Check if there are new blocks after the last confirmed block
-  const hasNewBlocks = latestBlock > lastConfirmedBlock
-
-  // Check if there are safe blocks after the last confirmed block
-  const hasSafeBlocks = latestSafeBlock.number > lastConfirmedBlock
-
-  // Chain is considered active if there are either new blocks or safe blocks after the last confirmed block
-  const isActive = hasNewBlocks || hasSafeBlocks
-
-  console.log('Chain activity check:', {
+  const isActive = latestSafeBlock.number > fromBlock
+  console.log('Checking chain activity from block:', {
     latestBlock,
     latestSafeBlock: latestSafeBlock.number,
-    lastConfirmedBlock,
-    hasNewBlocks,
-    hasSafeBlocks,
-    isActive
+    fromBlock,
+    isActive,
   })
-
   return isActive
 }
 
@@ -310,4 +171,131 @@ export function createChildChainClient(
     chain: childChain,
     transport: http(childChainInfo.orbitRpcUrl),
   })
+}
+
+/**
+ * Generic function to fetch the most recent event of a specific type within a block range.
+ * Uses exponential backoff and retries to ensure robustness.
+ */
+export async function fetchMostRecentEvent<
+  T extends Log<bigint, number, false, AbiEvent, true>
+>(
+  fromBlock: bigint,
+  toBlock: bigint,
+  client: PublicClient,
+  rollupAddress: string,
+  event: AbiEvent,
+  chunkSize: bigint = CHUNK_SIZE,
+  eventName?: string
+): Promise<T | null> {
+  let currentToBlock = toBlock
+
+  while (currentToBlock >= fromBlock) {
+    const currentFromBlock =
+      currentToBlock - chunkSize + 1n > fromBlock
+        ? currentToBlock - chunkSize + 1n
+        : fromBlock
+
+    try {
+      const logs = await client.getLogs({
+        address: rollupAddress as `0x${string}`,
+        fromBlock: currentFromBlock,
+        toBlock: currentToBlock,
+        event,
+      })
+
+      if (logs.length > 0) {
+        const eventType = eventName || event.name || 'event'
+        console.log(
+          `Found ${eventType} in block range ${currentFromBlock} to ${currentToBlock}`
+        )
+        // Return the most recent event (last in the array)
+        return logs[logs.length - 1] as T
+      }
+
+      // If we've searched all blocks, stop
+      if (currentFromBlock === fromBlock) break
+
+      // Move to the next chunk
+      currentToBlock = currentFromBlock - 1n
+
+      // Add a small delay between chunks to avoid rate limiting
+      await sleep(100)
+    } catch (error) {
+      console.error(
+        `Error in fetchMostRecentEvent for ${eventName || event.name}:`,
+        error
+      )
+      // If we get an error, try a smaller chunk size
+      if (chunkSize > 100n) {
+        console.log(`Retrying with smaller chunk size: ${chunkSize / 2n}`)
+        return fetchMostRecentEvent(
+          currentFromBlock,
+          currentToBlock,
+          client,
+          rollupAddress,
+          event,
+          chunkSize / 2n,
+          eventName
+        )
+      }
+      throw error
+    }
+  }
+
+  return null
+}
+
+/**
+ * Fetches the most recent creation event (assertion or node) within a block range.
+ * Uses exponential backoff and retries to ensure robustness.
+ */
+export async function fetchMostRecentCreationEvent<T extends CreationEvent>(
+  fromBlock: bigint,
+  toBlock: bigint,
+  client: PublicClient,
+  rollupAddress: string,
+  isBold: boolean,
+  chunkSize: bigint = CHUNK_SIZE
+): Promise<T | null> {
+  const event = isBold ? ASSERTION_CREATED_EVENT : NODE_CREATED_EVENT
+  const eventName = isBold ? 'creation event' : 'node creation event'
+
+  return fetchMostRecentEvent<T>(
+    fromBlock,
+    toBlock,
+    client,
+    rollupAddress,
+    event,
+    chunkSize,
+    eventName
+  )
+}
+
+/**
+ * Fetches the most recent confirmation event (assertion or node) within a block range.
+ * Uses exponential backoff and retries to ensure robustness.
+ */
+export async function fetchMostRecentConfirmationEvent<
+  T extends ConfirmationEvent
+>(
+  fromBlock: bigint,
+  toBlock: bigint,
+  client: PublicClient,
+  rollupAddress: string,
+  isBold: boolean,
+  chunkSize: bigint = CHUNK_SIZE
+): Promise<T | null> {
+  const event = isBold ? ASSERTION_CONFIRMED_EVENT : NODE_CONFIRMED_EVENT
+  const eventName = isBold ? 'confirmation event' : 'node confirmation event'
+
+  return fetchMostRecentEvent<T>(
+    fromBlock,
+    toBlock,
+    client,
+    rollupAddress,
+    event,
+    chunkSize,
+    eventName
+  )
 }

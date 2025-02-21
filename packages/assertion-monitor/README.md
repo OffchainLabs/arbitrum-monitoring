@@ -1,10 +1,40 @@
 # Assertion Monitor
 
-This tool is designed to monitor assertions on Arbitrum chains. It checks for:
-1. No assertions created in the last 4 hours when there is chain activity
-2. No assertions confirmed within the chain's confirmation period
+This tool is designed to monitor assertions on Arbitrum chains. It performs comprehensive monitoring of both BOLD (Bounded Liquidity Delay) and Classic rollup chains, with the following checks:
 
-The monitor also detects whether each chain is using BOLD (Bounded Liquidity Delay) and includes this information in its reports.
+## Chain Activity Monitoring
+1. Tracks chain activity by monitoring block progression
+2. Verifies the latest confirmed block number from the child chain
+3. Detects periods of inactivity or stalled chain progress
+
+## Assertion Creation Monitoring
+1. No assertions created in the last 4 hours when there is chain activity
+2. Tracks creation events and validates their frequency
+3. Alerts when chain activity exists without new assertions
+
+## Assertion Confirmation Monitoring
+1. No assertions confirmed within the chain's confirmation period
+2. Tracks unconfirmed assertions and their age
+3. Monitors confirmation delays against the chain's configured period
+4. Validates the time between creation and confirmation events
+
+## Alert Types
+The monitor generates alerts for the following conditions:
+
+1. Creation Issues:
+   - No assertion creation events in the last 7 days
+   - Chain activity detected but no new assertions created in the last 4 hours
+
+2. Confirmation Issues:
+   - Parent chain confirmation issues - assertions not confirming
+   - Unconfirmed assertions present
+   - Assertion age exceeds confirmation period
+   - Confirmation delay exceeds the configured period
+
+3. Chain State Issues:
+   - Chain stalled or inactive
+   - Block synchronization issues
+   - Validator whitelist status changes
 
 Read more about assertions [here](https://docs.arbitrum.io/how-arbitrum-works/inside-arbitrum-nitro#arbitrum-rollup-protocol).
 
@@ -42,9 +72,7 @@ yarn dev [--configPath=<CONFIG_PATH>]
 
 To enable reporting, use `--enableAlerting` flag.
 
-This will enable alerts for the following conditions:
-1. No assertions created in the last 4 hours when there is chain activity (determined by checking for transactions in blocks)
-2. No assertions confirmed within the chain's confirmation period (determined by `confirmPeriodBlocks`)
+This will enable alerts for all the conditions listed above in the Alert Types section.
 
 Additionally, you might also want to log these errors to Slack, for which you will need to configure, in the `.env` file:
 
@@ -53,3 +81,17 @@ Additionally, you might also want to log these errors to Slack, for which you wi
 - `ASSERTION_MONITORING_SLACK_CHANNEL=<your-slack-channel-key>`
 
 Check [Slack integration documentation](https://api.slack.com/quickstart) for more information about getting these auth tokens.
+
+## Chain Support
+
+The monitor automatically detects and adapts to different chain types:
+
+1. BOLD (Bounded Liquidity Delay) Chains:
+   - Uses BOLD-specific assertion formats and validation
+   - Tracks BOLD-specific confirmation processes
+   - Monitors BOLD genesis assertion hash
+
+2. Classic Rollup Chains:
+   - Uses Classic node creation and confirmation events
+   - Monitors Classic-specific block validation
+   - Tracks node confirmation processes

@@ -2,18 +2,23 @@ import { createPublicClient, http } from 'viem'
 import { describe, expect, test } from 'vitest'
 import {
   createChildChainClient,
-  getLastProcessedBlock,
-  getLastConfirmedBlock,
+  fetchMostRecentConfirmationEvent,
+  fetchMostRecentCreationEvent,
   hasChainActivity,
-  processChunkedRange,
 } from '../blockchain'
 import { getChainFromId } from '../chains'
 import {
-  checkForConfirmationIssues,
-  checkForStaleAssertions,
+  analyzeConfirmationEvents,
+  analyzeCreationEvents,
+  checkConfirmationDelays,
 } from '../monitoring'
-import { sortAndMergeAssertionLogs } from '../utils'
+import type { ChainState, ConfirmationEvent, CreationEvent } from '../types'
+import { extractBoldBlockHash } from '../utils'
 import { boldChainInfo } from './testConfigs'
+
+// Known block range where we have events (Arbitrum Sepolia)
+const BOLD_FROM_BLOCK = 7627075n
+const BOLD_TO_BLOCK = 7637075n
 
 describe('Chain Activity Monitoring', () => {
   const childChainClient = createChildChainClient(boldChainInfo)
@@ -25,104 +30,106 @@ describe('Chain Activity Monitoring', () => {
 
   test('should track chain activity and process assertions', async () => {
     // Get current chain state
-    const latestBlock = await childChainClient.getBlockNumber()
-    const latestSafeBlock = await childChainClient.getBlock({
-      blockTag: 'safe',
-    })
-
-    // Look back only 10k blocks for faster test execution
-    const fromBlock = latestBlock - 10000n
+    const [latestBlock, latestSafeBlock] = await Promise.all([
+      parentChainClient.getBlockNumber(),
+      childChainClient.getBlock({ blockTag: 'safe' }),
+    ])
 
     console.log('Analyzing chain activity between blocks:', {
-      fromBlock,
-      latestBlock,
-      range: latestBlock - fromBlock,
+      fromBlock: BOLD_FROM_BLOCK,
+      toBlock: BOLD_TO_BLOCK,
+      range: BOLD_TO_BLOCK - BOLD_FROM_BLOCK,
     })
 
-    // Get assertion data including confirmations
-    const rawAssertionLogs = await processChunkedRange(
-      fromBlock,
-      latestBlock,
-      parentChainClient,
-      boldChainInfo.ethBridge.rollup,
-      true // BOLD mode
-    )
+    // Get most recent creation and confirmation events
+    const [recentCreation, recentConfirmation] = await Promise.all([
+      fetchMostRecentCreationEvent<CreationEvent>(
+        BOLD_FROM_BLOCK,
+        BOLD_TO_BLOCK,
+        parentChainClient,
+        boldChainInfo.ethBridge.rollup,
+        true
+      ),
+      fetchMostRecentConfirmationEvent<ConfirmationEvent>(
+        BOLD_FROM_BLOCK,
+        BOLD_TO_BLOCK,
+        parentChainClient,
+        boldChainInfo.ethBridge.rollup,
+        true
+      ),
+    ])
 
-    const sortedLogs = sortAndMergeAssertionLogs(rawAssertionLogs)
-    console.log('Assertion logs found:', {
-      created: sortedLogs.createdLogs.length,
-      confirmed: sortedLogs.confirmedLogs.length,
+    console.log('Most recent events found:', {
+      hasCreation: !!recentCreation,
+      hasConfirmation: !!recentConfirmation,
+      creationBlock: recentCreation?.blockNumber,
+      confirmationBlock: recentConfirmation?.blockNumber,
     })
+
+    // Get the last confirmed block if we have a creation event
+    let lastConfirmedBlock
+    if (recentCreation) {
+      const assertionData = recentCreation.args.assertion
+      const lastConfirmedBlockHash = extractBoldBlockHash(assertionData)
+      lastConfirmedBlock = await childChainClient.getBlock({
+        blockHash: lastConfirmedBlockHash,
+      })
+    }
+
+    const chainState: ChainState = {
+      parentLatestBlockNumber: latestBlock,
+      childLatestSafeBlock: latestSafeBlock,
+      childLastConfirmedBlock: lastConfirmedBlock
+    }
 
     // Test chain activity detection
     const hasActivityResult = await hasChainActivity(
       childChainClient,
-      sortedLogs
+      recentConfirmation?.blockNumber || BOLD_FROM_BLOCK
     )
     // Chain should be active if we have safe blocks, even without assertions
     expect(hasActivityResult).toBe(true)
 
-    let lastProcessedBlock: bigint | undefined
-    let lastConfirmedBlock: bigint | undefined
+    // Analyze creation events
+    const creationAlerts = await analyzeCreationEvents(
+      recentCreation,
+      chainState,
+      boldChainInfo
+    )
+    expect(Array.isArray(creationAlerts)).toBe(true)
 
-    // If we have assertions, verify block progression
-    if (sortedLogs.createdLogs.length > 0) {
-      lastProcessedBlock = await getLastProcessedBlock(
-        childChainClient,
-        sortedLogs,
-        true
-      )
-      expect(lastProcessedBlock).toBeLessThanOrEqual(latestSafeBlock.number)
-      expect(lastProcessedBlock).toBeGreaterThan(0n)
+    // Analyze confirmation events
+    const confirmationAlerts = await analyzeConfirmationEvents(
+      recentConfirmation,
+      recentCreation,
+      chainState,
+      boldChainInfo
+    )
+    expect(Array.isArray(confirmationAlerts)).toBe(true)
 
-      lastConfirmedBlock = getLastConfirmedBlock(sortedLogs)
-      if (lastConfirmedBlock) {
-        expect(lastConfirmedBlock).toBeLessThanOrEqual(latestBlock)
-        expect(lastProcessedBlock).toBeGreaterThanOrEqual(lastConfirmedBlock)
-
-        // Check confirmation delay
-        const confirmationDelay = latestBlock - lastConfirmedBlock
-        console.log('Confirmation metrics:', {
-          confirmPeriodBlocks: boldChainInfo.confirmPeriodBlocks,
-          currentDelay: confirmationDelay,
-          isWithinPeriod: confirmationDelay <= BigInt(boldChainInfo.confirmPeriodBlocks),
-        })
-      }
-
-      // Test stale assertion detection only if we have created logs
-      const staleResult = await checkForStaleAssertions(
-        boldChainInfo,
-        childChainClient,
-        parentChainClient,
-        sortedLogs,
-        latestSafeBlock.number,
-        true,
-        4 // 4 hour threshold
-      )
-      expect(Array.isArray(staleResult)).toBe(true)
-    }
-
-    // Test confirmation issues detection only if we have confirmed logs
-    if (sortedLogs.confirmedLogs.length > 0) {
-      const confirmationResult = await checkForConfirmationIssues(
-        boldChainInfo,
-        childChainClient,
-        parentChainClient,
-        sortedLogs,
-        true,
-        true,
-        { enableAlerting: false }
-      )
-      expect(Array.isArray(confirmationResult)).toBe(true)
-    }
+    // Check confirmation delays
+    const confirmationDelayAlerts = await checkConfirmationDelays(
+      boldChainInfo,
+      chainState,
+      recentCreation,
+      recentConfirmation,
+      false
+    )
+    expect(Array.isArray(confirmationDelayAlerts)).toBe(true)
 
     // Log results for analysis
     console.log('Monitoring results:', {
       hasActivity: hasActivityResult,
-      lastProcessedBlock,
-      lastConfirmedBlock,
-      createdLogs: sortedLogs.createdLogs.length,
-      confirmedLogs: sortedLogs.confirmedLogs.length,
+      creationAlerts: creationAlerts.length,
+      confirmationAlerts: confirmationAlerts.length,
+      confirmationDelayAlerts: confirmationDelayAlerts.length,
+      hasCreation: !!recentCreation,
+      hasConfirmation: !!recentConfirmation,
+      chainState: {
+        latestBlock,
+        latestSafeBlock: latestSafeBlock.number,
+        lastConfirmedBlock: lastConfirmedBlock?.number ?? 0n,
+      },
     })
   }, 30000)
 })

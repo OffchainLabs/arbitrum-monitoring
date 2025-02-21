@@ -4,12 +4,12 @@ import {
   createChildChainClient,
   hasChainActivity,
   isBoldEnabled,
-  processChunkedRange,
+  fetchMostRecentCreationEvent,
+  fetchMostRecentConfirmationEvent,
 } from '../blockchain'
 import { getChainFromId } from '../chains'
 import { checkChainForAssertionIssues, getBlockRange } from '../index'
-import { AssertionLogs, BlockRange } from '../types'
-import { sortAndMergeAssertionLogs } from '../utils'
+import { BlockRange, CreationEvent, ConfirmationEvent } from '../types'
 import { boldChainInfo, classicChainInfo } from './testConfigs'
 
 // Known block range where we have events (Arbitrum Sepolia)
@@ -23,7 +23,8 @@ const CLASSIC_TO_BLOCK = 124667079n
 describe('Assertion Monitor - BOLD Chain', () => {
   let client: PublicClient
   let childChainClient: PublicClient
-  let assertionLogs: AssertionLogs
+  let recentCreation: CreationEvent | null = null
+  let recentConfirmation: ConfirmationEvent | null = null
 
   beforeEach(async () => {
     const parentChain = getChainFromId(boldChainInfo.parentChainId)
@@ -33,22 +34,32 @@ describe('Assertion Monitor - BOLD Chain', () => {
     })
     childChainClient = createChildChainClient(boldChainInfo)
 
-    // Get assertion logs for the known block range
-    const rawLogs = await processChunkedRange(
-      BOLD_FROM_BLOCK,
-      BOLD_TO_BLOCK,
-      client,
-      boldChainInfo.ethBridge.rollup,
-      true
-    )
-    assertionLogs = sortAndMergeAssertionLogs(rawLogs)
+    // Get most recent events for the known block range
+    const [creation, confirmation] = await Promise.all([
+      fetchMostRecentCreationEvent<CreationEvent>(
+        BOLD_FROM_BLOCK,
+        BOLD_TO_BLOCK,
+        client,
+        boldChainInfo.ethBridge.rollup,
+        true
+      ),
+      fetchMostRecentConfirmationEvent<ConfirmationEvent>(
+        BOLD_FROM_BLOCK,
+        BOLD_TO_BLOCK,
+        client,
+        boldChainInfo.ethBridge.rollup,
+        true
+      )
+    ])
+    recentCreation = creation
+    recentConfirmation = confirmation
   })
 
   test('should correctly identify as BOLD chain', async () => {
     const isBold = await isBoldEnabled(client, boldChainInfo.ethBridge.rollup)
     console.log(`Chain type detection: ${isBold ? 'BOLD' : 'Classic'} rollup`)
     expect(isBold).toBe(true)
-  })
+  }, 10000)
 
   test('should get valid block range', async () => {
     const { fromBlock, toBlock } = await getBlockRange(client, boldChainInfo)
@@ -64,7 +75,10 @@ describe('Assertion Monitor - BOLD Chain', () => {
   })
 
   test('should detect chain activity in known block range', async () => {
-    const hasActivity = await hasChainActivity(childChainClient, assertionLogs)
+    const hasActivity = await hasChainActivity(
+      childChainClient,
+      recentConfirmation?.blockNumber || BOLD_FROM_BLOCK
+    )
     console.log(`Chain activity detected: ${hasActivity}`)
     expect(typeof hasActivity).toBe('boolean')
   })
@@ -87,7 +101,8 @@ describe('Assertion Monitor - BOLD Chain', () => {
 describe('Assertion Monitor - Classic Chain', () => {
   let client: PublicClient
   let childChainClient: PublicClient
-  let assertionLogs: AssertionLogs
+  let recentCreation: CreationEvent | null = null
+  let recentConfirmation: ConfirmationEvent | null = null
 
   beforeEach(async () => {
     const parentChain = getChainFromId(classicChainInfo.parentChainId)
@@ -97,16 +112,26 @@ describe('Assertion Monitor - Classic Chain', () => {
     })
     childChainClient = createChildChainClient(classicChainInfo)
 
-    // Get assertion logs for the known block range
-    const rawLogs = await processChunkedRange(
-      CLASSIC_FROM_BLOCK,
-      CLASSIC_TO_BLOCK,
-      client,
-      classicChainInfo.ethBridge.rollup,
-      false
-    )
-    assertionLogs = sortAndMergeAssertionLogs(rawLogs)
-  }, 1000000)
+    // Get most recent events for the known block range
+    const [creation, confirmation] = await Promise.all([
+      fetchMostRecentCreationEvent<CreationEvent>(
+        CLASSIC_FROM_BLOCK,
+        CLASSIC_TO_BLOCK,
+        client,
+        classicChainInfo.ethBridge.rollup,
+        false
+      ),
+      fetchMostRecentConfirmationEvent<ConfirmationEvent>(
+        CLASSIC_FROM_BLOCK,
+        CLASSIC_TO_BLOCK,
+        client,
+        classicChainInfo.ethBridge.rollup,
+        false
+      )
+    ])
+    recentCreation = creation
+    recentConfirmation = confirmation
+  }, 100000)
 
   test('should correctly identify as Classic chain', async () => {
     const isBold = await isBoldEnabled(
@@ -122,7 +147,10 @@ describe('Assertion Monitor - Classic Chain', () => {
   })
 
   test('should detect chain activity in known block range', async () => {
-    const hasActivity = await hasChainActivity(childChainClient, assertionLogs)
+    const hasActivity = await hasChainActivity(
+      childChainClient,
+      recentConfirmation?.blockNumber || CLASSIC_FROM_BLOCK
+    )
     console.log(`Chain activity detected: ${hasActivity}`)
     expect(typeof hasActivity).toBe('boolean')
   })

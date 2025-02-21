@@ -7,20 +7,25 @@ import {
 } from '../utils'
 import {
   createChildChainClient,
-  processChunkedRange as fetchAssertionLogsForBlockRangeInChunks,
-  getValidatorWhitelistDisabled,
+  fetchMostRecentConfirmationEvent,
+  fetchMostRecentCreationEvent,
+  getLastConfirmedBlock,
   isBoldEnabled,
+  getValidatorWhitelistDisabled,
 } from './blockchain'
 import { getBlockTimeForChain, getChainFromId } from './chains'
-import { logAssertionSummary } from './logs'
 import {
-  checkChainActivityWhenNoAssertions,
-  checkForConfirmationIssues,
-  checkForStaleAssertions,
+  analyzeConfirmationEvents,
+  analyzeCreationEvents,
+  checkConfirmationDelays,
 } from './monitoring'
 import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
-import { BlockRange } from './types'
-import { sortAndMergeAssertionLogs } from './utils'
+import {
+  BlockRange,
+  ChainState,
+  ConfirmationEvent,
+  CreationEvent,
+} from './types'
 
 /** Maximum number of blocks a validator can be inactive before alerts are triggered */
 const VALIDATOR_AFK_BLOCKS = 45818
@@ -30,9 +35,6 @@ const MAXIMUM_SEARCH_DAYS = 7
 
 /** Buffer period in days to avoid scanning too close to the current block */
 const SAFETY_BUFFER_DAYS = 4
-
-/** Number of hours without assertions before triggering alerts when chain has activity */
-const ASSERTION_CREATION_ALERT_HOURS = 4
 
 /**  Retrieves and validates the monitor configuration from the config file. */
 export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
@@ -117,6 +119,7 @@ export const getBlockRange = async (
 
 /**
  * Main monitoring function for a single chain's assertion health.
+ * Follows a specific flow to analyze chain activity and assertion health.
  */
 export const checkChainForAssertionIssues = async (
   childChainInfo: ChainInfo,
@@ -140,92 +143,80 @@ export const checkChainForAssertionIssues = async (
     `Scanning blocks ${fromBlock} to ${toBlock} (${toBlock - fromBlock} blocks)`
   )
 
-  const rawAssertionLogs = await fetchAssertionLogsForBlockRangeInChunks(
-    fromBlock,
-    toBlock,
-    client,
-    childChainInfo.ethBridge.rollup,
-    isBold
-  )
-
-  const sortedAssertionLogs = sortAndMergeAssertionLogs(rawAssertionLogs)
-
-  logAssertionSummary(sortedAssertionLogs)
-
   const childChainClient = createChildChainClient(childChainInfo)
+  const [parentLatestBlockNumber, childLatestSafeBlock] = await Promise.all([
+    client.getBlockNumber(),
+    childChainClient.getBlock({ blockTag: 'safe' }),
+  ])
 
-  const latestSafeBlock = await childChainClient.getBlock({
-    blockTag: 'safe',
-  })
-  const latestSafeBlockNumber = latestSafeBlock.number
-  const timestampOfLatestSafeBlock =
-    new Date(Number(latestSafeBlock.timestamp) * 1000).toLocaleString() + ' UTC'
+  const [recentCreation, recentConfirmation] = await Promise.all([
+    fetchMostRecentCreationEvent<CreationEvent>(
+      fromBlock,
+      toBlock,
+      client,
+      childChainInfo.ethBridge.rollup,
+      isBold
+    ),
+    fetchMostRecentConfirmationEvent<ConfirmationEvent>(
+      fromBlock,
+      toBlock,
+      client,
+      childChainInfo.ethBridge.rollup,
+      isBold
+    ),
+  ])
 
-  const isLatestSafeBlockWithinRange =
-    latestSafeBlockNumber < toBlock && latestSafeBlockNumber > fromBlock
-
-  const validatorWhitelistDisabled = await getValidatorWhitelistDisabled(
-    client,
-    childChainInfo.ethBridge.rollup
+  const childLastConfirmedBlock = await getLastConfirmedBlock(
+    childChainClient,
+    recentConfirmation
   )
 
-  const { days: durationInDays } = calculateSearchWindow(
-    childChainInfo,
-    parentChain
-  )
-  const durationString = `in the last ${
-    durationInDays === 1 ? ' day' : durationInDays + ' days'
-  }`
-
-  const alerts: string[] = []
-
-  const assertionCreatedLogsFound = sortedAssertionLogs.createdLogs.length > 0
-
-  if (assertionCreatedLogsFound) {
-    const staleAssertionAlerts = await checkForStaleAssertions(
-      childChainInfo,
-      childChainClient,
-      client,
-      sortedAssertionLogs,
-      latestSafeBlockNumber,
-      validatorWhitelistDisabled,
-      ASSERTION_CREATION_ALERT_HOURS
-    )
-    alerts.push(...staleAssertionAlerts)
-  } else {
-    const missingAssertionAlerts = await checkChainActivityWhenNoAssertions(
-      childChainInfo,
-      childChainClient,
-      latestSafeBlockNumber,
-      durationString,
-      isLatestSafeBlockWithinRange,
-      timestampOfLatestSafeBlock,
-      validatorWhitelistDisabled
-    )
-    alerts.push(...missingAssertionAlerts)
+  const chainState: ChainState = {
+    parentLatestBlockNumber,
+    childLatestSafeBlock,
+    childLastConfirmedBlock,
   }
 
-  const assertionConfirmedLogsFound =
-    sortedAssertionLogs.confirmedLogs.length > 0
-
-  if (assertionConfirmedLogsFound) {
-    const confirmationAlerts = await checkForConfirmationIssues(
-      childChainInfo,
-      childChainClient,
+  if (options?.enableAlerting) {
+    // Get validator whitelist status
+    const validatorWhitelistDisabled = await getValidatorWhitelistDisabled(
       client,
-      sortedAssertionLogs,
-      isBold,
-      validatorWhitelistDisabled,
-      options
+      childChainInfo.ethBridge.rollup
     )
-    alerts.push(...confirmationAlerts)
-  }
 
-  if (alerts.length > 0) {
-    console.log(`Generated ${alerts.length} alerts for ${childChainInfo.name}`)
-    return {
-      chainName: childChainInfo.name,
-      alertMessage: alerts.join('\n'),
+    // Analyze creation and confirmation events
+    const [creationAlerts, confirmationAlerts, confirmationDelayAlerts] =
+      await Promise.all([
+        analyzeCreationEvents(recentCreation, chainState, childChainInfo),
+        analyzeConfirmationEvents(
+          recentConfirmation,
+          recentCreation,
+          chainState,
+          childChainInfo
+        ),
+        checkConfirmationDelays(
+          childChainInfo,
+          chainState,
+          recentCreation,
+          recentConfirmation,
+          validatorWhitelistDisabled
+        ),
+      ])
+
+    const alerts = [
+      ...creationAlerts,
+      ...confirmationAlerts,
+      ...confirmationDelayAlerts,
+    ]
+
+    if (alerts.length > 0) {
+      console.log(
+        `Generated ${alerts.length} alerts for ${childChainInfo.name}`
+      )
+      return {
+        chainName: childChainInfo.name,
+        alertMessage: alerts.join('\n'),
+      }
     }
   }
 
