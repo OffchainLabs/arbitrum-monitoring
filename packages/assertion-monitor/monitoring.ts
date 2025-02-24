@@ -35,17 +35,23 @@ function isEventRecent(
  * Analyzes creation events to determine if there are any issues with assertion creation
  */
 export async function analyzeCreationEvents(
-  recentCreation: CreationEvent | null,
   chainState: ChainState,
   chainInfo: ChainInfo
 ): Promise<string[]> {
   const alerts: string[] = []
 
-  // Check if there are created assertions in the last X hours (shorter period)
-  if (recentCreation && chainState.childLastConfirmedBlock) {
+  // Check for creation events in the full 7-day range
+  if (!chainState.latestCreationBlock) {
+    // No creation events in last 7 days
+    alerts.push(generateNoCreationEventsAlert(chainInfo, MAXIMUM_SEARCH_DAYS))
+    return alerts
+  }
+
+  // Check if there are created assertions in the last X hours
+  if (chainState.latestCreationBlock && chainState.childLatestBlock) {
     const isRecent = isEventRecent(
-      chainState.childLastConfirmedBlock.timestamp,
-      chainState.childLatestSafeBlock.timestamp,
+      chainState.latestCreationBlock.timestamp,
+      chainState.childLatestBlock.timestamp,
       RECENT_CREATION_CHECK_HOURS
     )
 
@@ -56,30 +62,21 @@ export async function analyzeCreationEvents(
     }
   }
 
-  // Check for creation events in the full 7-day range
-  if (!recentCreation) {
-    // No creation events in last 7 days
-    alerts.push(generateNoCreationEventsAlert(chainInfo, MAXIMUM_SEARCH_DAYS))
-    return alerts
-  }
-
   // Check if there's new activity since last confirmed block
   if (
-    chainState.childLastConfirmedBlock &&
-    chainState.childLatestSafeBlock.number &&
-    chainState.childLastConfirmedBlock.number &&
-    chainState.childLatestSafeBlock.number >
-      chainState.childLastConfirmedBlock.number
+    chainState.latestConfirmedBlock &&
+    chainState.childLatestBlock.number &&
+    chainState.latestConfirmedBlock.number &&
+    chainState.childLatestBlock.number > chainState.latestConfirmedBlock.number
   ) {
     // Activity exists without new assertions
-    alerts.push(
-      generateChainActivityWithoutAssertionsAlert(
-        chainInfo,
-        RECENT_CREATION_CHECK_HOURS,
-        chainState.childLastConfirmedBlock.number,
-        chainState.childLatestSafeBlock.number
-      )
+    const activityAlerts = generateChainActivityWithoutAssertionsAlert(
+      chainInfo,
+      RECENT_CREATION_CHECK_HOURS,
+      chainState.latestConfirmedBlock.number,
+      chainState.childLatestBlock.number
     )
+    alerts.push(activityAlerts)
   } else {
     // No new activity
     console.log('No new activity detected on chain')
@@ -89,34 +86,30 @@ export async function analyzeCreationEvents(
 }
 
 /**
- * Analyzes confirmation events to determine if there are any issues with assertion confirmation
+ * Analyzes confirmation events to determine if there are any issues with assertion confirmation.
  */
 export async function analyzeConfirmationEvents(
-  recentConfirmation: ConfirmationEvent | null,
-  recentCreation: CreationEvent | null,
   chainState: ChainState,
   chainInfo: ChainInfo
 ): Promise<string[]> {
   const alerts: string[] = []
 
-  // Check confirmed assertions
-  if (recentConfirmation) {
-    // System operational
-    console.log('Recent confirmation events found, system operational')
-    return alerts
-  }
-
   // Compare with created events
-  if (!recentCreation) {
+  if (chainState.latestConfirmedBlock && !chainState.latestCreationBlock) {
     console.log('No activity on chain - system idle')
     return alerts
   }
 
-  // Check if created events are recent
-  if (chainState.childLastConfirmedBlock) {
+  /**
+   * We check recent creation events here because:
+   * - If there are no creations, no confirmations are expected (chain is idle)
+   * - If there are creations but no confirmations, we have a confirmation issue
+   * - This prevents false alerts when the chain has no activity
+   */
+  if (chainState.latestConfirmedBlock) {
     const isCreationRecent = isEventRecent(
-      chainState.childLastConfirmedBlock.timestamp,
-      chainState.childLatestSafeBlock.timestamp,
+      chainState.latestConfirmedBlock.timestamp,
+      chainState.childLatestBlock.timestamp,
       RECENT_EVENT_HOURS
     )
 
@@ -125,7 +118,7 @@ export async function analyzeConfirmationEvents(
       alerts.push(
         generateParentConfirmationIssuesAlert(
           chainInfo,
-          recentCreation.blockNumber
+          chainState.childLatestBlock.number!
         )
       )
     } else {
@@ -134,6 +127,13 @@ export async function analyzeConfirmationEvents(
         'Recent activity resumption on chain - no immediate confirmation issues'
       )
     }
+  }
+
+  // Check confirmed assertions
+  if (chainState.latestConfirmedBlock) {
+    // System operational
+    console.log('Recent confirmation events found, system operational')
+    return alerts
   }
 
   return alerts
@@ -145,47 +145,35 @@ export async function analyzeConfirmationEvents(
 export async function checkConfirmationDelays(
   childChainInfo: ChainInfo,
   chainState: ChainState,
-  recentCreation: CreationEvent | null,
-  recentConfirmation: ConfirmationEvent | null,
   validatorWhitelistDisabled: boolean
 ): Promise<string[]> {
   const alerts: string[] = []
 
-  if (!recentConfirmation || !recentCreation) {
+  if (
+    !chainState.latestConfirmedBlock ||
+    !chainState.latestCreationBlock ||
+    !chainState.latestConfirmedBlock.number ||
+    !chainState.latestCreationBlock.number
+  ) {
     return alerts
   }
 
   const blocksSinceLastConfirmation =
-    chainState.parentLatestBlockNumber - recentConfirmation.blockNumber
+    chainState.childLatestBlock.number! -
+      chainState.latestConfirmedBlock.number!
 
   console.log(
     `Blocks since last confirmation: ${blocksSinceLastConfirmation} (confirm period: ${childChainInfo.confirmPeriodBlocks})`
   )
 
-  const hasUnconfirmedAssertions =
-    recentCreation.blockNumber > recentConfirmation.blockNumber
-  const assertionAgeExceedsConfirmPeriod =
-    chainState.parentLatestBlockNumber - recentCreation.blockNumber >
-    BigInt(childChainInfo.confirmPeriodBlocks)
   const confirmationDelayExceedsPeriod =
     blocksSinceLastConfirmation > BigInt(childChainInfo.confirmPeriodBlocks)
 
-  if (
-    hasUnconfirmedAssertions ||
-    assertionAgeExceedsConfirmPeriod ||
-    confirmationDelayExceedsPeriod
-  ) {
-    console.log('Confirmation delay issue(s) detected:')
-    if (hasUnconfirmedAssertions)
-      console.log('- Unconfirmed assertions present')
-    if (assertionAgeExceedsConfirmPeriod)
-      console.log('- Assertion age exceeds confirm period')
-    if (confirmationDelayExceedsPeriod)
-      console.log('- Confirmation delay exceeds period')
+  if (confirmationDelayExceedsPeriod || blocksSinceLastConfirmation <= 0n) {
+    console.log('Confirmation delay exceeds period')
 
     alerts.push(
       generateConfirmationIssuesAlert(childChainInfo, chainState, {
-        hasUnconfirmedAssertions,
         validatorWhitelistDisabled,
         confirmPeriodBlocks: childChainInfo.confirmPeriodBlocks,
       })

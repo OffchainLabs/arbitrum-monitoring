@@ -39,7 +39,8 @@ export type ConfirmationEvent = Log<bigint, number, false, typeof ASSERTION_CONF
 
 /** Chain state information needed for monitoring */
 export interface ChainState {
-  parentLatestBlockNumber: bigint
-  childLatestSafeBlock: Block
-  childLastConfirmedBlock?: Block
+  parentLatestBlock: Block
+  childLatestBlock: Block
+  latestCreationBlock?: Block
+  latestConfirmedBlock?: Block
 }

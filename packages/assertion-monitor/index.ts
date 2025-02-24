@@ -9,9 +9,11 @@ import {
   createChildChainClient,
   fetchMostRecentConfirmationEvent,
   fetchMostRecentCreationEvent,
-  getLastConfirmedBlock,
+  getLatestConfirmedBlock,
+  getLatestCreationBlock,
   isBoldEnabled,
   getValidatorWhitelistDisabled,
+  fetchChainState,
 } from './blockchain'
 import { getBlockTimeForChain, getChainFromId } from './chains'
 import {
@@ -129,79 +131,58 @@ export const checkChainForAssertionIssues = async (
   console.log(`\nMonitoring ${childChainInfo.name}...`)
 
   const parentChain = getChainFromId(childChainInfo.parentChainId)
-  const client = createPublicClient({
+  const parentClient = createPublicClient({
     chain: parentChain,
     transport: http(childChainInfo.parentRpcUrl),
   })
 
-  const isBold = await isBoldEnabled(client, childChainInfo.ethBridge.rollup)
+  const isBold = await isBoldEnabled(
+    parentClient,
+    childChainInfo.ethBridge.rollup
+  )
   console.log(`Chain type: ${isBold ? 'BOLD' : 'Classic'} rollup`)
 
   const { fromBlock, toBlock } =
-    blockRange || (await getBlockRange(client, childChainInfo))
+    blockRange || (await getBlockRange(parentClient, childChainInfo))
   console.log(
     `Scanning blocks ${fromBlock} to ${toBlock} (${toBlock - fromBlock} blocks)`
   )
 
   const childChainClient = createChildChainClient(childChainInfo)
-  const [parentLatestBlockNumber, childLatestSafeBlock] = await Promise.all([
-    client.getBlockNumber(),
-    childChainClient.getBlock({ blockTag: 'safe' }),
-  ])
 
-  const [recentCreation, recentConfirmation] = await Promise.all([
-    fetchMostRecentCreationEvent<CreationEvent>(
-      fromBlock,
-      toBlock,
-      client,
-      childChainInfo.ethBridge.rollup,
-      isBold
-    ),
-    fetchMostRecentConfirmationEvent<ConfirmationEvent>(
-      fromBlock,
-      toBlock,
-      client,
-      childChainInfo.ethBridge.rollup,
-      isBold
-    ),
-  ])
-
-  const childLastConfirmedBlock = await getLastConfirmedBlock(
+  const chainState = await fetchChainState({
     childChainClient,
-    recentConfirmation
-  )
-
-  const chainState: ChainState = {
-    parentLatestBlockNumber,
-    childLatestSafeBlock,
-    childLastConfirmedBlock,
-  }
+    parentClient,
+    childChainInfo,
+    isBold,
+    fromBlock,
+    toBlock,
+  })
 
   if (options?.enableAlerting) {
     // Get validator whitelist status
     const validatorWhitelistDisabled = await getValidatorWhitelistDisabled(
-      client,
+      parentClient,
       childChainInfo.ethBridge.rollup
     )
 
     // Analyze creation and confirmation events
-    const [creationAlerts, confirmationAlerts, confirmationDelayAlerts] =
-      await Promise.all([
-        analyzeCreationEvents(recentCreation, chainState, childChainInfo),
-        analyzeConfirmationEvents(
-          recentConfirmation,
-          recentCreation,
-          chainState,
-          childChainInfo
-        ),
-        checkConfirmationDelays(
-          childChainInfo,
-          chainState,
-          recentCreation,
-          recentConfirmation,
-          validatorWhitelistDisabled
-        ),
-      ])
+
+    const creationAlerts = await analyzeCreationEvents(
+      chainState,
+      childChainInfo
+    )
+
+    const confirmationAlerts = await analyzeConfirmationEvents(
+      chainState,
+      childChainInfo
+    )
+
+    const confirmationDelayAlerts = await checkConfirmationDelays(
+      childChainInfo,
+      chainState,
+      validatorWhitelistDisabled
+    )
 
     const alerts = [
       ...creationAlerts,

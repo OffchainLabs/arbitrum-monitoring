@@ -84,18 +84,12 @@ describe('Assertion Monitor - BOLD Chain', () => {
   })
 
   test('should monitor assertions over known block range', async () => {
-    const blockRange: BlockRange = {
+    const result = await checkChainForAssertionIssues(boldChainInfo, {
       fromBlock: BOLD_FROM_BLOCK,
       toBlock: BOLD_TO_BLOCK,
-    }
-    const monitorResult = await checkChainForAssertionIssues(
-      boldChainInfo,
-      blockRange
-    )
-    expect(
-      monitorResult === null || typeof monitorResult.alertMessage === 'string'
-    ).toBe(true)
-  }, 30000)
+    })
+    expect(result).toBeNull()
+  }, 10000)
 })
 
 describe('Assertion Monitor - Classic Chain', () => {
@@ -156,16 +150,10 @@ describe('Assertion Monitor - Classic Chain', () => {
   })
 
   test('should monitor assertions over known block range', async () => {
-    const blockRange: BlockRange = {
+    const result = await checkChainForAssertionIssues(classicChainInfo, {
       fromBlock: CLASSIC_FROM_BLOCK,
       toBlock: CLASSIC_TO_BLOCK,
-    }
-    const monitorResult = await checkChainForAssertionIssues(
-      classicChainInfo,
-      blockRange
-    )
-    expect(
-      monitorResult === null || typeof monitorResult.alertMessage === 'string'
-    ).toBe(true)
-  }, 100000)
+    })
+    expect(result).toBeNull()
+  }, 10000)
 })

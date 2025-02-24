@@ -30,9 +30,9 @@ describe('Chain Activity Monitoring', () => {
 
   test('should track chain activity and process assertions', async () => {
     // Get current chain state
-    const [latestBlock, latestSafeBlock] = await Promise.all([
-      parentChainClient.getBlockNumber(),
-      childChainClient.getBlock({ blockTag: 'safe' }),
+    const [parentLatestBlock, childLatestBlock] = await Promise.all([
+      parentChainClient.getBlock({ blockTag: 'latest' }),
+      childChainClient.getBlock({ blockTag: 'latest' }),
     ])
 
     console.log('Analyzing chain activity between blocks:', {
@@ -77,9 +77,14 @@ describe('Chain Activity Monitoring', () => {
     }
 
     const chainState: ChainState = {
-      parentLatestBlockNumber: latestBlock,
-      childLatestSafeBlock: latestSafeBlock,
-      childLastConfirmedBlock: lastConfirmedBlock
+      parentLatestBlock,
+      childLatestBlock,
+      latestConfirmedBlock: lastConfirmedBlock,
+      latestCreationBlock: recentCreation
+        ? await childChainClient.getBlock({
+            blockNumber: recentCreation.blockNumber,
+          })
+        : undefined,
     }
 
     // Test chain activity detection
@@ -92,7 +97,6 @@ describe('Chain Activity Monitoring', () => {
 
     // Analyze creation events
     const creationAlerts = await analyzeCreationEvents(
-      recentCreation,
       chainState,
       boldChainInfo
     )
@@ -100,8 +104,6 @@ describe('Chain Activity Monitoring', () => {
 
     // Analyze confirmation events
     const confirmationAlerts = await analyzeConfirmationEvents(
-      recentConfirmation,
-      recentCreation,
       chainState,
       boldChainInfo
     )
@@ -111,8 +113,7 @@ describe('Chain Activity Monitoring', () => {
     const confirmationDelayAlerts = await checkConfirmationDelays(
       boldChainInfo,
       chainState,
-      recentCreation,
-      recentConfirmation,
+
       false
     )
     expect(Array.isArray(confirmationDelayAlerts)).toBe(true)
@@ -126,8 +127,8 @@ describe('Chain Activity Monitoring', () => {
       hasCreation: !!recentCreation,
       hasConfirmation: !!recentConfirmation,
       chainState: {
-        latestBlock,
-        latestSafeBlock: latestSafeBlock.number,
+        latestBlock: parentLatestBlock.number,
+        latestSafeBlock: childLatestBlock.number,
         lastConfirmedBlock: lastConfirmedBlock?.number ?? 0n,
       },
     })

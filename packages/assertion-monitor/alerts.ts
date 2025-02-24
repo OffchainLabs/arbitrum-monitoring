@@ -4,59 +4,34 @@ import { jsonStringifyWithBigInt } from './utils'
 import { AssertionDataError } from './errors'
 import { Block } from 'viem'
 import { ChainState } from './types'
+
 /**
- * Generates an alert for confirmation-related issues
+ * Generates an alert when there are confirmation issues on the parent chain
  */
 export function generateConfirmationIssuesAlert(
   chainInfo: ChainInfo,
   chainState: ChainState,
-  {
-    hasUnconfirmedAssertions,
-    validatorWhitelistDisabled,
-    confirmPeriodBlocks,
-  }: {
-    hasUnconfirmedAssertions: boolean
+  options: {
     validatorWhitelistDisabled: boolean
     confirmPeriodBlocks: number
   }
 ): string {
-  const issues: string[] = []
-
-  if (hasUnconfirmedAssertions) {
-    issues.push('There are assertions waiting to be confirmed')
-  }
-
   const blocksSinceLastConfirmation =
-    chainState.parentLatestBlockNumber -
-    chainState.childLastConfirmedBlock?.number!
-  const assertionAgeExceedsConfirmPeriod =
-    blocksSinceLastConfirmation > BigInt(confirmPeriodBlocks)
+    chainState.parentLatestBlock?.number ?? 0n
+
   const confirmationDelayExceedsPeriod =
-    blocksSinceLastConfirmation > BigInt(confirmPeriodBlocks)
+    blocksSinceLastConfirmation > BigInt(options.confirmPeriodBlocks)
 
-  if (assertionAgeExceedsConfirmPeriod) {
-    issues.push(
-      `The oldest unconfirmed assertion has exceeded the ${confirmPeriodBlocks} block confirmation period`
-    )
-  }
-
+  const issues: string[] = []
   if (confirmationDelayExceedsPeriod) {
-    const confirmPeriodExceededBy =
-      blocksSinceLastConfirmation - BigInt(confirmPeriodBlocks)
-    issues.push(
-      `No confirmations for ${blocksSinceLastConfirmation} blocks (${confirmPeriodExceededBy} blocks over the ${confirmPeriodBlocks} block confirmation period)`
-    )
+    issues.push('There are assertions waiting to be confirmed')
+    issues.push(`${options.confirmPeriodBlocks} block confirmation period exceeded (${blocksSinceLastConfirmation} blocks since last confirmation)`)
   }
 
-  return `Confirmation issue(s) detected on ${chainInfo.name}:\n- ${issues.join(
-    '\n- '
-  )}${
-    chainState.childLastConfirmedBlock
-      ? `\nLast processed child chain block: ${chainState.childLastConfirmedBlock.number}`
-      : ''
-  }\nValidator whitelist is ${
-    validatorWhitelistDisabled ? 'disabled' : 'enabled'
-  }.`
+  return `Confirmation issue(s) detected on ${chainInfo.name}:
+${issues.length > 0 ? `\n- ${issues.join('\n- ')}\n` : '\n'}
+Last processed child chain block: ${chainState.latestConfirmedBlock?.number ?? 'unknown'}
+Validator whitelist is ${options.validatorWhitelistDisabled ? 'disabled' : 'enabled'}.`
 }
 
 /**
@@ -85,16 +60,13 @@ export function generateChainActivityWithoutAssertionsAlert(
 }
 
 /**
- * Generates an alert for confirmation issues on the parent chain
+ * Generates an alert when there are confirmation issues on the parent chain
  */
 export function generateParentConfirmationIssuesAlert(
   chainInfo: ChainInfo,
-  creationBlock: bigint
+  lastCreationBlock: bigint
 ): string {
-  return (
-    `Parent chain confirmation issues on ${chainInfo.name} - assertions not confirming. ` +
-    `Last creation at block ${creationBlock}, no confirmations found.`
-  )
+  return `Parent chain confirmation issues detected on ${chainInfo.name}. Last creation block: ${lastCreationBlock}`
 }
 
 /**

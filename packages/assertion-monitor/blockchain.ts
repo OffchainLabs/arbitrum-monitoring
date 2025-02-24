@@ -18,7 +18,12 @@ import {
   rollupABI,
 } from './abi'
 import { AssertionDataError } from './errors'
-import { AssertionLogs, CreationEvent, ConfirmationEvent } from './types'
+import {
+  AssertionLogs,
+  CreationEvent,
+  ConfirmationEvent,
+  ChainState,
+} from './types'
 import { extractBoldBlockHash, extractClassicBlockHash } from './utils'
 
 /** Number of blocks to process in each chunk when fetching logs to avoid RPC timeouts */
@@ -45,19 +50,16 @@ export async function getValidatorWhitelistDisabled(
  * Retrieves the latest block number that has been processed by the assertion chain.
  * Uses block hash from assertion data to track L2/L3 state progression.
  */
-export async function getLastProcessedBlock(
+export async function getLatestCreationBlock(
   childChainClient: PublicClient,
-  logs: AssertionLogs,
+  latestCreationLog: CreationEvent | null,
   isBold: boolean
-): Promise<bigint> {
-  if (logs.createdLogs.length === 0) {
+): Promise<Block | undefined> {
+  if (!latestCreationLog) {
     throw new AssertionDataError('No assertion logs found')
   }
 
-  const latestAssertion = logs.createdLogs[
-    logs.createdLogs.length - 1
-  ] as CreationEvent
-  const assertionData = latestAssertion.args.assertion
+  const assertionData = latestCreationLog.args.assertion
   const lastProcessedBlockHash = isBold
     ? extractBoldBlockHash(assertionData)
     : extractClassicBlockHash(assertionData)
@@ -66,14 +68,14 @@ export async function getLastProcessedBlock(
     blockHash: lastProcessedBlockHash,
   })
   console.log(`Last processed child chain block: ${block.number}`)
-  return block.number
+  return block
 }
 
 /**
  * Gets the latest confirmed block number from assertion logs by finding the corresponding child block.
  * Returns undefined if no confirmed logs are found or if the corresponding block cannot be found.
  */
-export async function getLastConfirmedBlock(
+export async function getLatestConfirmedBlock(
   childChainClient: PublicClient,
   confirmationEvent: ConfirmationEvent | null
 ): Promise<Block | undefined> {
@@ -86,7 +88,10 @@ export async function getLastConfirmedBlock(
       })
     }
     if (childLastConfirmedBlock) {
-      console.log('Found confirmed child block:', childLastConfirmedBlock?.number)
+      console.log(
+        'Found confirmed child block:',
+        childLastConfirmedBlock?.number
+      )
       return childLastConfirmedBlock
     } else {
       console.log('No confirmed child block found')
@@ -106,12 +111,9 @@ export async function hasChainActivity(
   childChainClient: PublicClient,
   fromBlock: bigint
 ): Promise<boolean> {
-  const latestBlock = await childChainClient.getBlockNumber()
   const latestSafeBlock = await childChainClient.getBlock({ blockTag: 'safe' })
-
   const isActive = latestSafeBlock.number > fromBlock
   console.log('Checking chain activity from block:', {
-    latestBlock,
     latestSafeBlock: latestSafeBlock.number,
     fromBlock,
     isActive,
@@ -298,4 +300,71 @@ export async function fetchMostRecentConfirmationEvent<
     chunkSize,
     eventName
   )
+}
+
+/**
+ * Fetches the latest blocks and events to build the `ChainState` object
+ */
+export const fetchChainState = async ({
+  childChainClient,
+  parentClient,
+  childChainInfo,
+  isBold,
+  fromBlock,
+  toBlock,
+}: {
+  childChainClient: PublicClient
+  parentClient: PublicClient
+  childChainInfo: ChainInfo
+  isBold: boolean
+  fromBlock: bigint
+  toBlock: bigint
+}): Promise<ChainState> => {
+  const parentLatestBlock = await parentClient.getBlock({ blockTag: 'latest' })
+  const childLatestBlock = await childChainClient.getBlock({
+    blockTag: 'latest',
+  })
+
+  const recentCreation = await fetchMostRecentCreationEvent(
+    fromBlock,
+    toBlock,
+    parentClient,
+    childChainInfo.ethBridge.rollup,
+    isBold
+  )
+
+  const recentConfirmation = await fetchMostRecentConfirmationEvent(
+    fromBlock,
+    toBlock,
+    parentClient,
+    childChainInfo.ethBridge.rollup,
+    isBold
+  )
+
+  const latestConfirmedBlock = await getLatestConfirmedBlock(
+    childChainClient,
+    recentConfirmation
+  )
+
+  const latestCreationBlock = await getLatestCreationBlock(
+    childChainClient,
+    recentCreation,
+    isBold
+  )
+
+  const chainState: ChainState = {
+    parentLatestBlock,
+    childLatestBlock,
+    latestCreationBlock,
+    latestConfirmedBlock,
+  }
+
+  console.log('Built chain state blocks:', {
+    parentLatestBlock: parentLatestBlock.number,
+    childLatestBlock: childLatestBlock.number,
+    latestCreationBlock: latestCreationBlock?.number,
+    latestConfirmedBlock: latestConfirmedBlock?.number,
+  })
+
+  return chainState
 }
