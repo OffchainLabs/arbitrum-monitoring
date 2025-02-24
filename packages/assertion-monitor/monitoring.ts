@@ -5,7 +5,7 @@ import {
   generateNoCreationEventsAlert,
   generateParentConfirmationIssuesAlert,
 } from './alerts'
-import type { ChainState, ConfirmationEvent, CreationEvent } from './types'
+import type { ChainState } from './types'
 
 /** Maximum number of days to look back when scanning for assertions */
 const MAXIMUM_SEARCH_DAYS = 7
@@ -87,6 +87,16 @@ export async function analyzeCreationEvents(
 
 /**
  * Analyzes confirmation events to determine if there are any issues with assertion confirmation.
+ * Checks for confirmations in the past MAXIMUM_SEARCH_DAYS days and compares with creation events
+ * to determine if there are confirmation issues.
+ *
+ * The logic handles several cases:
+ * - If there are no creations, no confirmations are expected (chain is idle)
+ * - If there are creations but no confirmations, we have a confirmation issue
+ * - If there are old confirmations but new creations, we check:
+ *   a) If confirmations are significantly delayed (alert needed)
+ *   b) If chain just resumed activity (normal delay, no alert needed)
+ * - This prevents false alerts when the chain has no activity or just resumed
  */
 export async function analyzeConfirmationEvents(
   chainState: ChainState,
@@ -94,46 +104,83 @@ export async function analyzeConfirmationEvents(
 ): Promise<string[]> {
   const alerts: string[] = []
 
-  // Compare with created events
-  if (chainState.latestConfirmedBlock && !chainState.latestCreationBlock) {
-    console.log('No activity on chain - system idle')
+  // First check if we have any confirmations in the full search period
+  if (!chainState.latestConfirmedBlock) {
+    // No confirmations in the search period - compare with creation events
+    if (!chainState.latestCreationBlock) {
+      // No creations either - chain is completely idle
+      console.log(
+        `No activity on chain in the last ${MAXIMUM_SEARCH_DAYS} days - system idle`
+      )
+      return alerts
+    }
+
+    // We have creations but no confirmations in the search period - this is an issue
+    console.log(
+      'Found creation events but no confirmations in search period - indicating confirmation issues'
+    )
+    alerts.push(
+      generateParentConfirmationIssuesAlert(
+        chainInfo,
+        chainState.childLatestBlock.number!
+      )
+    )
     return alerts
   }
 
-  /**
-   * We check recent creation events here because:
-   * - If there are no creations, no confirmations are expected (chain is idle)
-   * - If there are creations but no confirmations, we have a confirmation issue
-   * - This prevents false alerts when the chain has no activity
-   */
-  if (chainState.latestConfirmedBlock) {
+  // We have confirmations - check if they're recent
+  const isConfirmationRecent = isEventRecent(
+    chainState.latestConfirmedBlock.timestamp,
+    chainState.childLatestBlock.timestamp,
+    RECENT_EVENT_HOURS
+  )
+
+  if (isConfirmationRecent) {
+    // Recent confirmations found - system is operational
+    console.log('Recent confirmation events found, system operational')
+    return alerts
+  }
+
+  // No recent confirmations - check if we have recent creations that should have been confirmed
+  if (chainState.latestCreationBlock) {
     const isCreationRecent = isEventRecent(
-      chainState.latestConfirmedBlock.timestamp,
+      chainState.latestCreationBlock.timestamp,
       chainState.childLatestBlock.timestamp,
       RECENT_EVENT_HOURS
     )
 
-    if (!isCreationRecent) {
-      // Confirmation issues
-      alerts.push(
-        generateParentConfirmationIssuesAlert(
-          chainInfo,
-          chainState.childLatestBlock.number!
-        )
-      )
-    } else {
-      // Recent activity resumption
-      console.log(
-        'Recent activity resumption on chain - no immediate confirmation issues'
-      )
-    }
-  }
+    if (isCreationRecent) {
+      // Recent creations exist but no recent confirmations
+      // Check if the delay is beyond normal confirmation period
+      const blocksSinceLastConfirmation =
+        chainState.childLatestBlock.number! -
+        chainState.latestConfirmedBlock.number!
+      const confirmationDelayExceedsPeriod =
+        blocksSinceLastConfirmation > BigInt(chainInfo.confirmPeriodBlocks)
 
-  // Check confirmed assertions
-  if (chainState.latestConfirmedBlock) {
-    // System operational
-    console.log('Recent confirmation events found, system operational')
-    return alerts
+      if (confirmationDelayExceedsPeriod) {
+        console.log(
+          'Significant confirmation delay detected - ' +
+            `${blocksSinceLastConfirmation} blocks since last confirmation ` +
+            `(confirm period: ${chainInfo.confirmPeriodBlocks})`
+        )
+        alerts.push(
+          generateParentConfirmationIssuesAlert(
+            chainInfo,
+            chainState.childLatestBlock.number!
+          )
+        )
+      } else {
+        // Normal delay within confirmation period - likely chain resuming activity
+        console.log(
+          'Recent creation events found with normal confirmation delay - ' +
+            'chain may be resuming activity after idle period'
+        )
+      }
+    } else {
+      // No recent activity at all - chain is currently idle
+      console.log('No recent activity detected - chain currently idle')
+    }
   }
 
   return alerts
@@ -160,7 +207,7 @@ export async function checkConfirmationDelays(
 
   const blocksSinceLastConfirmation =
     chainState.childLatestBlock.number! -
-      chainState.latestConfirmedBlock.number!
+    chainState.latestConfirmedBlock.number!
 
   console.log(
     `Blocks since last confirmation: ${blocksSinceLastConfirmation} (confirm period: ${childChainInfo.confirmPeriodBlocks})`

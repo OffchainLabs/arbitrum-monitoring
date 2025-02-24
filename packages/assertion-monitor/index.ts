@@ -7,13 +7,9 @@ import {
 } from '../utils'
 import {
   createChildChainClient,
-  fetchMostRecentConfirmationEvent,
-  fetchMostRecentCreationEvent,
-  getLatestConfirmedBlock,
-  getLatestCreationBlock,
-  isBoldEnabled,
-  getValidatorWhitelistDisabled,
   fetchChainState,
+  getValidatorWhitelistDisabled,
+  isBoldEnabled,
 } from './blockchain'
 import { getBlockTimeForChain, getChainFromId } from './chains'
 import {
@@ -22,12 +18,7 @@ import {
   checkConfirmationDelays,
 } from './monitoring'
 import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
-import {
-  BlockRange,
-  ChainState,
-  ConfirmationEvent,
-  CreationEvent,
-} from './types'
+import { BlockRange } from './types'
 
 /** Maximum number of blocks a validator can be inactive before alerts are triggered */
 const VALIDATOR_AFK_BLOCKS = 45818

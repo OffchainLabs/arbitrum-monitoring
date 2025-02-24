@@ -1,20 +1,20 @@
-import { createPublicClient, http, PublicClient, Block } from 'viem'
+import { createPublicClient, http, PublicClient } from 'viem'
 import { beforeEach, describe, expect, test } from 'vitest'
 import {
   createChildChainClient,
-  fetchMostRecentCreationEvent,
   fetchMostRecentConfirmationEvent,
-  getLatestCreationBlock,
+  fetchMostRecentCreationEvent,
   getLatestConfirmedBlock,
+  getLatestCreationBlock,
 } from '../blockchain'
 import { getChainFromId } from '../chains'
 import {
-  analyzeCreationEvents,
   analyzeConfirmationEvents,
+  analyzeCreationEvents,
   checkConfirmationDelays,
 } from '../monitoring'
+import type { ChainState, ConfirmationEvent, CreationEvent } from '../types'
 import { boldChainInfo } from './testConfigs'
-import type { ChainState, CreationEvent, ConfirmationEvent } from '../types'
 
 // Known block range where we have events (Arbitrum Sepolia)
 const BOLD_FROM_BLOCK = 7627075n
@@ -113,11 +113,12 @@ describe('Alert Generation', () => {
       // Modify chain state to simulate old creation without confirmation
       const modifiedState: ChainState = {
         ...chainState,
-        latestConfirmedBlock: {
+        latestCreationBlock: {
           ...chainState.childLatestBlock,
           number: chainState.childLatestBlock.number! - 10000n,
           timestamp: chainState.childLatestBlock.timestamp - 86400n * 5n, // 5 days old
         },
+        latestConfirmedBlock: undefined,
       }
 
       const alerts = await analyzeConfirmationEvents(
