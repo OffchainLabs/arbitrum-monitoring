@@ -51,7 +51,10 @@ export type ConfirmationEvent = Log<
 
 /** Chain state information needed for monitoring */
 export interface ChainState {
-  latestChildBlock: Block
-  latestChildBlockCreated?: Block
-  latestChildBlockConfirmed?: Block
+  childCurrentBlock: Block
+  childLatestCreatedBlock?: Block
+  childLatestConfirmedBlock?: Block
+  parentCurrentBlock?: Block
+  parentBlockAtCreation?: Block 
+  parentBlockAtConfirmation?: Block
 }

@@ -295,7 +295,11 @@ export const fetchChainState = async ({
   fromBlock: bigint
   toBlock: bigint
 }): Promise<ChainState> => {
-  const latestChildBlock = await childChainClient.getBlock({
+  const childCurrentBlock = await childChainClient.getBlock({
+    blockTag: 'latest',
+  })
+
+  const parentCurrentBlock = await parentClient.getBlock({
     blockTag: 'latest',
   })
 
@@ -315,27 +319,48 @@ export const fetchChainState = async ({
     isBold
   )
 
-  const latestChildBlockConfirmed = await getLatestConfirmedBlock(
+  const childLatestConfirmedBlock = await getLatestConfirmedBlock(
     childChainClient,
     recentConfirmation
   )
 
-  const latestChildBlockCreated = await getLatestCreationBlock(
+  const childLatestCreatedBlock = await getLatestCreationBlock(
     childChainClient,
     recentCreation,
     isBold
   )
 
+  // Get parent blocks at creation and confirmation
+  let parentBlockAtCreation;
+  if (recentCreation) {
+    parentBlockAtCreation = await parentClient.getBlock({
+      blockNumber: recentCreation.blockNumber
+    });
+  }
+
+  let parentBlockAtConfirmation;
+  if (recentConfirmation) {
+    parentBlockAtConfirmation = await parentClient.getBlock({
+      blockNumber: recentConfirmation.blockNumber
+    });
+  }
+
   const chainState: ChainState = {
-    latestChildBlock,
-    latestChildBlockCreated,
-    latestChildBlockConfirmed,
+    childCurrentBlock,
+    childLatestCreatedBlock,
+    childLatestConfirmedBlock,
+    parentCurrentBlock,
+    parentBlockAtCreation,
+    parentBlockAtConfirmation
   }
 
   console.log('Built chain state blocks:', {
-    latestChildBlock: latestChildBlock.number,
-    latestChildBlockCreated: latestChildBlockCreated?.number,
-    latestChildBlockConfirmed: latestChildBlockConfirmed?.number,
+    childCurrentBlock: childCurrentBlock.number,
+    childLatestCreatedBlock: childLatestCreatedBlock?.number,
+    childLatestConfirmedBlock: childLatestConfirmedBlock?.number,
+    parentCurrentBlock: parentCurrentBlock.number,
+    parentBlockAtCreation: parentBlockAtCreation?.number,
+    parentBlockAtConfirmation: parentBlockAtConfirmation?.number,
   })
 
   return chainState

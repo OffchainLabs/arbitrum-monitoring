@@ -180,10 +180,8 @@ export const main = async () => {
     }
 
     if (alerts.length > 0) {
-      const summaryMessage = alerts
-
-      const alertMessage = `Assertion Monitor Alert Summary:\n\n${summaryMessage}`
-      console.error(alertMessage)
+      const alertMessage = `Assertion Monitor Alert Summary:\n\n${alerts}`
+      console.log(alertMessage)
 
       if (options.enableAlerting) {
         console.log('Sending alerts to Slack...')
