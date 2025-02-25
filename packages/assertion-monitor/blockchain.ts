@@ -1,12 +1,12 @@
 import {
+  AbiEvent,
   PublicClient,
   createPublicClient,
   defineChain,
   getContract,
   http,
-  type Log,
-  AbiEvent,
   type Block,
+  type Log,
 } from 'viem'
 import { ChildNetwork as ChainInfo, sleep } from '../utils'
 import {
@@ -17,17 +17,10 @@ import {
   boldABI,
   rollupABI,
 } from './abi'
+import { CHUNK_SIZE } from './constants'
 import { AssertionDataError } from './errors'
-import {
-  AssertionLogs,
-  CreationEvent,
-  ConfirmationEvent,
-  ChainState,
-} from './types'
+import { ChainState, ConfirmationEvent, CreationEvent } from './types'
 import { extractBoldBlockHash, extractClassicBlockHash } from './utils'
-
-/** Number of blocks to process in each chunk when fetching logs to avoid RPC timeouts */
-const CHUNK_SIZE = 800n
 
 /**
  * Queries the rollup contract to determine if the validator whitelist feature is disabled.

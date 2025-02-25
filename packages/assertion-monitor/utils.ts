@@ -26,3 +26,15 @@ export function extractClassicBlockHash(assertionData: any): `0x${string}` {
   }
   return assertionData.afterState.globalState.bytes32Vals[0]
 }
+
+/**
+ * Checks if an event is within a specific time window in seconds
+ */
+export function isEventRecent(
+  eventTimestamp: bigint,
+  currentTimestamp: bigint,
+  secondsThreshold: number
+): boolean {
+  const timeSinceEvent = Number(currentTimestamp - eventTimestamp)
+  return timeSinceEvent <= secondsThreshold
+}

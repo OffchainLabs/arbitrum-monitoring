@@ -1,93 +1,15 @@
-import { ChildNetwork as ChainInfo } from '../utils'
-import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
-import { jsonStringifyWithBigInt } from './utils'
-import { AssertionDataError } from './errors'
-import { Block } from 'viem'
-import { ChainState } from './types'
+export const NO_CREATION_EVENTS_ALERT = `No assertion creation events found`
 
-/**
- * Generates an alert when there are confirmation issues on the parent chain
- */
-export function generateConfirmationIssuesAlert(
-  chainInfo: ChainInfo,
-  chainState: ChainState,
-  options: {
-    validatorWhitelistDisabled: boolean
-    confirmPeriodBlocks: number
-  }
-): string {
-  const blocksSinceLastConfirmation =
-    chainState.parentLatestBlock?.number ?? 0n
+export const CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT = `Chain activity detected but no assertions created recently`
 
-  const confirmationDelayExceedsPeriod =
-    blocksSinceLastConfirmation > BigInt(options.confirmPeriodBlocks)
+export const NO_CONFIRMATION_EVENTS_ALERT = `Parent chain confirmation issues detected`
 
-  const issues: string[] = []
-  if (confirmationDelayExceedsPeriod) {
-    issues.push('There are assertions waiting to be confirmed')
-    issues.push(`${options.confirmPeriodBlocks} block confirmation period exceeded (${blocksSinceLastConfirmation} blocks since last confirmation)`)
-  }
+export const CONFIRMATION_DELAY_ALERT = `Confirmation period exceeded`
 
-  return `Confirmation issue(s) detected on ${chainInfo.name}:
-${issues.length > 0 ? `\n- ${issues.join('\n- ')}\n` : '\n'}
-Last processed child chain block: ${chainState.latestConfirmedBlock?.number ?? 'unknown'}
-Validator whitelist is ${options.validatorWhitelistDisabled ? 'disabled' : 'enabled'}.`
-}
+export const CREATION_EVENT_STUCK_ALERT = `Assertion event stuck in challenge period`
 
-/**
- * Generates an alert when no creation events are found in the search window
- */
-export function generateNoCreationEventsAlert(
-  chainInfo: ChainInfo,
-  maxDays: number
-): string {
-  return `No assertion creation events found in the last ${maxDays} days on ${chainInfo.name} - chain may be stalled`
-}
+export const PARENT_CHAIN_AHEAD_ALERT = `Parent chain ahead of latest assertion event`
 
-/**
- * Generates an alert when there is chain activity but no new assertions
- */
-export function generateChainActivityWithoutAssertionsAlert(
-  chainInfo: ChainInfo,
-  recentHours: number,
-  lastProcessedBlock: bigint,
-  latestSafeBlock: bigint
-): string {
-  return (
-    `Chain activity detected but no assertions created in the last ${recentHours} hours on ${chainInfo.name}. ` +
-    `Last processed block: ${lastProcessedBlock}, Latest safe block: ${latestSafeBlock}`
-  )
-}
+export const NON_BOLD_NO_RECENT_CREATION_ALERT = `No recent node creation events detected for non-BOLD chain`
 
-/**
- * Generates an alert when there are confirmation issues on the parent chain
- */
-export function generateParentConfirmationIssuesAlert(
-  chainInfo: ChainInfo,
-  lastCreationBlock: bigint
-): string {
-  return `Parent chain confirmation issues detected on ${chainInfo.name}. Last creation block: ${lastCreationBlock}`
-}
-
-/**
- * Generates an alert for assertion data errors
- */
-export function generateAssertionDataErrorAlert(
-  chainInfo: ChainInfo,
-  error: AssertionDataError,
-  options?: { enableAlerting: boolean }
-): string {
-  const errorMessage = `Assertion data error on ${chainInfo.name}: ${
-    error.message
-  }${
-    error.rawData ? `\nRaw data: ${jsonStringifyWithBigInt(error.rawData)}` : ''
-  }`
-
-  if (options?.enableAlerting) {
-    reportAssertionMonitorErrorToSlack({
-      message: errorMessage,
-    })
-  }
-
-  return errorMessage
-}
+export const VALIDATOR_WHITELIST_DISABLED_ALERT = `Validator whitelist disabled`

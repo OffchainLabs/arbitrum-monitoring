@@ -13,21 +13,13 @@ import {
 } from './blockchain'
 import { getBlockTimeForChain, getChainFromId } from './chains'
 import {
-  analyzeConfirmationEvents,
-  analyzeCreationEvents,
-  checkConfirmationDelays,
-} from './monitoring'
+  MAXIMUM_SEARCH_DAYS,
+  SAFETY_BUFFER_DAYS,
+  VALIDATOR_AFK_BLOCKS,
+} from './constants'
+import { analyzeAssertionEvents } from './monitoring'
 import { reportAssertionMonitorErrorToSlack } from './reportAssertionMonitorAlertToSlack'
 import { BlockRange } from './types'
-
-/** Maximum number of blocks a validator can be inactive before alerts are triggered */
-const VALIDATOR_AFK_BLOCKS = 45818
-
-/** Maximum number of days to look back when scanning for assertions */
-const MAXIMUM_SEARCH_DAYS = 7
-
-/** Buffer period in days to avoid scanning too close to the current block */
-const SAFETY_BUFFER_DAYS = 4
 
 /**  Retrieves and validates the monitor configuration from the config file. */
 export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
@@ -64,7 +56,7 @@ function calculateSearchWindow(
   }
 
   const initialBlocksToSearch =
-    childChainInfo.confirmPeriodBlocks * VALIDATOR_AFK_BLOCKS
+    childChainInfo.confirmPeriodBlocks + VALIDATOR_AFK_BLOCKS
   const timespan = blockTime * initialBlocksToSearch
 
   const blocksInDays = timespan / (60 * 60 * 24)
@@ -131,7 +123,7 @@ export const checkChainForAssertionIssues = async (
     parentClient,
     childChainInfo.ethBridge.rollup
   )
-  console.log(`Chain type: ${isBold ? 'BOLD' : 'Classic'} rollup`)
+  console.log(`Chain type: ${isBold ? 'BoLD' : 'Classic'} rollup`)
 
   const { fromBlock, toBlock } =
     blockRange || (await getBlockRange(parentClient, childChainInfo))
@@ -149,51 +141,25 @@ export const checkChainForAssertionIssues = async (
     fromBlock,
     toBlock,
   })
+  // Get validator whitelist status
+  const validatorWhitelistDisabled = await getValidatorWhitelistDisabled(
+    parentClient,
+    childChainInfo.ethBridge.rollup
+  )
 
-  if (options?.enableAlerting) {
-    // Get validator whitelist status
-    const validatorWhitelistDisabled = await getValidatorWhitelistDisabled(
-      parentClient,
-      childChainInfo.ethBridge.rollup
-    )
-
-    // Analyze creation and confirmation events
-
-    const creationAlerts = await analyzeCreationEvents(
-      chainState,
-      childChainInfo
-    )
-
-    const confirmationAlerts = await analyzeConfirmationEvents(
-      chainState,
-      childChainInfo
-    )
-
-    const confirmationDelayAlerts = await checkConfirmationDelays(
-      childChainInfo,
-      chainState,
-      validatorWhitelistDisabled
-    )
-
-    const alerts = [
-      ...creationAlerts,
-      ...confirmationAlerts,
-      ...confirmationDelayAlerts,
-    ]
-
-    if (alerts.length > 0) {
-      console.log(
-        `Generated ${alerts.length} alerts for ${childChainInfo.name}`
-      )
-      return {
-        chainName: childChainInfo.name,
-        alertMessage: alerts.join('\n'),
-      }
-    }
+  const alerts = await analyzeAssertionEvents(
+    chainState,
+    childChainInfo,
+    validatorWhitelistDisabled,
+    isBold
+  )
+  if (alerts.length > 0) {
+    console.log(`Generated ${alerts.length} alerts for ${childChainInfo.name}`)
+    return `${childChainInfo.name}:\n- ${alerts.join('\n- ')}`
+  } else {
+    console.log(`No issues found for ${childChainInfo.name}`)
   }
-
-  console.log(`No issues found for ${childChainInfo.name}`)
-  return null
+  return
 }
 
 /**
@@ -203,7 +169,7 @@ export const checkChainForAssertionIssues = async (
 export const main = async () => {
   try {
     const { config, options } = getMonitorConfig()
-    const alerts: { chainName: string; alertMessage: string }[] = []
+    const alerts: string[] = []
     console.log('Starting assertion monitoring...')
 
     for (const chainInfo of config.childChains) {
@@ -215,10 +181,8 @@ export const main = async () => {
 
     if (alerts.length > 0) {
       const summaryMessage = alerts
-        .map(alert => `- ${alert.alertMessage}`)
-        .join('\n')
 
-      const alertMessage = `Assertion Monitor Alert Summary:\n${summaryMessage}`
+      const alertMessage = `Assertion Monitor Alert Summary:\n\n${summaryMessage}`
       console.error(alertMessage)
 
       if (options.enableAlerting) {

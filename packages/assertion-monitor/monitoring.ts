@@ -1,231 +1,240 @@
 import { ChildNetwork as ChainInfo } from '../utils'
 import {
-  generateChainActivityWithoutAssertionsAlert,
-  generateConfirmationIssuesAlert,
-  generateNoCreationEventsAlert,
-  generateParentConfirmationIssuesAlert,
+  CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT,
+  CONFIRMATION_DELAY_ALERT,
+  CREATION_EVENT_STUCK_ALERT,
+  NO_CONFIRMATION_EVENTS_ALERT,
+  NO_CREATION_EVENTS_ALERT,
+  NON_BOLD_NO_RECENT_CREATION_ALERT,
+  PARENT_CHAIN_AHEAD_ALERT,
+  VALIDATOR_WHITELIST_DISABLED_ALERT,
 } from './alerts'
+import { CHALLENGE_PERIOD_SECONDS, RECENT_ACTIVITY_SECONDS } from './constants'
 import type { ChainState } from './types'
-
-/** Maximum number of days to look back when scanning for assertions */
-const MAXIMUM_SEARCH_DAYS = 7
-
-/** Number of hours to check for recent creation events */
-const RECENT_CREATION_CHECK_HOURS = 4
-
-/** Number of hours to consider an event "recent" for confirmation checks */
-const RECENT_EVENT_HOURS = 24
-
-/** Convert hours to seconds for timestamp comparison */
-const hoursToSeconds = (hours: number) => hours * 60 * 60
+import { isEventRecent } from './utils'
 
 /**
- * Checks if an event is within a recent time window
- */
-function isEventRecent(
-  eventTimestamp: bigint,
-  currentTimestamp: bigint,
-  hoursThreshold: number
-): boolean {
-  const timeSinceEvent = Number(currentTimestamp - eventTimestamp)
-  return timeSinceEvent <= hoursToSeconds(hoursThreshold)
-}
-
-/**
- * Analyzes creation events to determine if there are any issues with assertion creation
- */
-export async function analyzeCreationEvents(
-  chainState: ChainState,
-  chainInfo: ChainInfo
-): Promise<string[]> {
-  const alerts: string[] = []
-
-  // Check for creation events in the full 7-day range
-  if (!chainState.latestCreationBlock) {
-    // No creation events in last 7 days
-    alerts.push(generateNoCreationEventsAlert(chainInfo, MAXIMUM_SEARCH_DAYS))
-    return alerts
-  }
-
-  // Check if there are created assertions in the last X hours
-  if (chainState.latestCreationBlock && chainState.childLatestBlock) {
-    const isRecent = isEventRecent(
-      chainState.latestCreationBlock.timestamp,
-      chainState.childLatestBlock.timestamp,
-      RECENT_CREATION_CHECK_HOURS
-    )
-
-    if (isRecent) {
-      // Chain functioning, proceed to confirmation check
-      console.log('Recent creation events found, chain functioning normally')
-      return alerts
-    }
-  }
-
-  // Check if there's new activity since last confirmed block
-  if (
-    chainState.latestConfirmedBlock &&
-    chainState.childLatestBlock.number &&
-    chainState.latestConfirmedBlock.number &&
-    chainState.childLatestBlock.number > chainState.latestConfirmedBlock.number
-  ) {
-    // Activity exists without new assertions
-    const activityAlerts = generateChainActivityWithoutAssertionsAlert(
-      chainInfo,
-      RECENT_CREATION_CHECK_HOURS,
-      chainState.latestConfirmedBlock.number,
-      chainState.childLatestBlock.number
-    )
-    alerts.push(activityAlerts)
-  } else {
-    // No new activity
-    console.log('No new activity detected on chain')
-  }
-
-  return alerts
-}
-
-/**
- * Analyzes confirmation events to determine if there are any issues with assertion confirmation.
- * Checks for confirmations in the past MAXIMUM_SEARCH_DAYS days and compares with creation events
- * to determine if there are confirmation issues.
+ * Analyzes chain state to detect assertion and confirmation issues
  *
- * The logic handles several cases:
- * - If there are no creations, no confirmations are expected (chain is idle)
- * - If there are creations but no confirmations, we have a confirmation issue
- * - If there are old confirmations but new creations, we check:
- *   a) If confirmations are significantly delayed (alert needed)
- *   b) If chain just resumed activity (normal delay, no alert needed)
- * - This prevents false alerts when the chain has no activity or just resumed
+ * Evaluates BOLD chains for:
+ * - Challenge/confirmation system health
+ * - Validator activity and challenge detection
+ * - Bounded finality guarantee issues
+ * - Whitelist security concerns
+ *
+ * Evaluates Classic chains with adjusted thresholds for:
+ * - Basic validator activity
+ * - Confirmation patterns
+ *
+ * @throws If chainState contains invalid data
  */
-export async function analyzeConfirmationEvents(
+export const analyzeAssertionEvents = async (
   chainState: ChainState,
-  chainInfo: ChainInfo
-): Promise<string[]> {
+  chainInfo: ChainInfo,
+  validatorWhitelistDisabled: boolean,
+  isBold: boolean = true
+): Promise<string[]> => {
   const alerts: string[] = []
 
-  // First check if we have any confirmations in the full search period
-  if (!chainState.latestConfirmedBlock) {
-    // No confirmations in the search period - compare with creation events
-    if (!chainState.latestCreationBlock) {
-      // No creations either - chain is completely idle
-      console.log(
-        `No activity on chain in the last ${MAXIMUM_SEARCH_DAYS} days - system idle`
-      )
-      return alerts
-    }
+  const {
+    creationEventsExist,
+    hasActivityWithoutRecentAssertions,
+    noConfirmationsWithCreationEvents,
+    confirmationDelayExceedsPeriod,
+    creationEventStuckInChallengePeriod,
+    parentChainAheadOfLatestCreation,
+    nonBoldMissingRecentCreation,
+  } = generateConditionsForAlerts(chainInfo, chainState, isBold)
 
-    // We have creations but no confirmations in the search period - this is an issue
-    console.log(
-      'Found creation events but no confirmations in search period - indicating confirmation issues'
-    )
-    alerts.push(
-      generateParentConfirmationIssuesAlert(
-        chainInfo,
-        chainState.childLatestBlock.number!
-      )
-    )
-    return alerts
+  if (validatorWhitelistDisabled) {
+    alerts.push(VALIDATOR_WHITELIST_DISABLED_ALERT)
   }
 
-  // We have confirmations - check if they're recent
-  const isConfirmationRecent = isEventRecent(
-    chainState.latestConfirmedBlock.timestamp,
-    chainState.childLatestBlock.timestamp,
-    RECENT_EVENT_HOURS
-  )
-
-  if (isConfirmationRecent) {
-    // Recent confirmations found - system is operational
-    console.log('Recent confirmation events found, system operational')
-    return alerts
+  if (!creationEventsExist) {
+    alerts.push(NO_CREATION_EVENTS_ALERT)
   }
 
-  // No recent confirmations - check if we have recent creations that should have been confirmed
-  if (chainState.latestCreationBlock) {
-    const isCreationRecent = isEventRecent(
-      chainState.latestCreationBlock.timestamp,
-      chainState.childLatestBlock.timestamp,
-      RECENT_EVENT_HOURS
-    )
+  if (hasActivityWithoutRecentAssertions) {
+    alerts.push(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
+  }
 
-    if (isCreationRecent) {
-      // Recent creations exist but no recent confirmations
-      // Check if the delay is beyond normal confirmation period
-      const blocksSinceLastConfirmation =
-        chainState.childLatestBlock.number! -
-        chainState.latestConfirmedBlock.number!
-      const confirmationDelayExceedsPeriod =
-        blocksSinceLastConfirmation > BigInt(chainInfo.confirmPeriodBlocks)
+  if (noConfirmationsWithCreationEvents) {
+    alerts.push(NO_CONFIRMATION_EVENTS_ALERT)
+  }
 
-      if (confirmationDelayExceedsPeriod) {
-        console.log(
-          'Significant confirmation delay detected - ' +
-            `${blocksSinceLastConfirmation} blocks since last confirmation ` +
-            `(confirm period: ${chainInfo.confirmPeriodBlocks})`
-        )
-        alerts.push(
-          generateParentConfirmationIssuesAlert(
-            chainInfo,
-            chainState.childLatestBlock.number!
-          )
-        )
-      } else {
-        // Normal delay within confirmation period - likely chain resuming activity
-        console.log(
-          'Recent creation events found with normal confirmation delay - ' +
-            'chain may be resuming activity after idle period'
-        )
-      }
-    } else {
-      // No recent activity at all - chain is currently idle
-      console.log('No recent activity detected - chain currently idle')
-    }
+  if (confirmationDelayExceedsPeriod) {
+    alerts.push(CONFIRMATION_DELAY_ALERT)
+  }
+
+  if (creationEventStuckInChallengePeriod) {
+    alerts.push(CREATION_EVENT_STUCK_ALERT)
+  }
+
+  if (parentChainAheadOfLatestCreation) {
+    alerts.push(PARENT_CHAIN_AHEAD_ALERT)
+  }
+
+  if (nonBoldMissingRecentCreation) {
+    alerts.push(NON_BOLD_NO_RECENT_CREATION_ALERT)
+  }
+
+  if (alerts.length > 0) {
+    console.log(alerts)
   }
 
   return alerts
 }
 
 /**
- * Checks for confirmation delays and generates alerts when confirmations exceed the expected period
+ * Generates boolean conditions for chain health alerts
+ *
+ * @throws If essential chain state data is missing
  */
-export async function checkConfirmationDelays(
-  childChainInfo: ChainInfo,
+export const generateConditionsForAlerts = (
+  chainInfo: ChainInfo,
   chainState: ChainState,
-  validatorWhitelistDisabled: boolean
-): Promise<string[]> {
-  const alerts: string[] = []
+  isBold: boolean
+) => {
+  const currentTimestamp = BigInt(Date.now())
+  const currentTimeSeconds = Number(currentTimestamp / 1000n)
 
-  if (
-    !chainState.latestConfirmedBlock ||
-    !chainState.latestCreationBlock ||
-    !chainState.latestConfirmedBlock.number ||
-    !chainState.latestCreationBlock.number
-  ) {
-    return alerts
-  }
+  const {
+    parentLatestBlock,
+    childLatestBlock,
+    latestCreationBlock,
+    latestConfirmedBlock,
+  } = chainState
 
-  const blocksSinceLastConfirmation =
-    chainState.childLatestBlock.number! -
-    chainState.latestConfirmedBlock.number!
+  /**
+   * Creation events existence check
+   *
+   * Critical for both chain types as assertions are fundamental to the rollup mechanism
+   * No assertions indicates severe validator issues or extreme chain inactivity
+   */
+  const creationEventsExist = !!latestCreationBlock
 
-  console.log(
-    `Blocks since last confirmation: ${blocksSinceLastConfirmation} (confirm period: ${childChainInfo.confirmPeriodBlocks})`
-  )
-
-  const confirmationDelayExceedsPeriod =
-    blocksSinceLastConfirmation > BigInt(childChainInfo.confirmPeriodBlocks)
-
-  if (confirmationDelayExceedsPeriod || blocksSinceLastConfirmation <= 0n) {
-    console.log('Confirmation delay exceeds period')
-
-    alerts.push(
-      generateConfirmationIssuesAlert(childChainInfo, chainState, {
-        validatorWhitelistDisabled,
-        confirmPeriodBlocks: childChainInfo.confirmPeriodBlocks,
-      })
+  /**
+   * Recent creation events check
+   *
+   * For BOLD: Critical for bounded finality guarantees
+   * For Classic: Indicates active validation
+   */
+  const hasRecentCreationEvents =
+    latestCreationBlock &&
+    isEventRecent(
+      latestCreationBlock.timestamp,
+      currentTimestamp / 1000n,
+      RECENT_ACTIVITY_SECONDS
     )
-  }
 
-  return alerts
+  /**
+   * Confirmation events existence check
+   *
+   * Missing confirmations may indicate challenge period in progress,
+   * active disputes, or confirmation system issues
+   */
+  const confirmationEventsExist = !!latestConfirmedBlock
+
+  /**
+   * Chain activity without assertions check
+   *
+   * Detects transaction processing in child chain not yet asserted in parent chain
+   * Normal in small amounts due to batching, concerning in large amounts
+   */
+  const hasActivityWithoutAssertions =
+    latestCreationBlock &&
+    childLatestBlock?.number &&
+    latestCreationBlock?.number &&
+    childLatestBlock.number > latestCreationBlock.number
+
+  /**
+   * Compound check for active chain with no recent assertions
+   *
+   * Critical for BOLD due to finality implications
+   * Indicates validator issues for both chain types
+   */
+  const hasActivityWithoutRecentAssertions =
+    hasActivityWithoutAssertions && !hasRecentCreationEvents
+
+  /**
+   * Check for assertions without confirmations
+   *
+   * May indicate active challenges or technical issues with confirmation
+   */
+  const noConfirmationsWithCreationEvents =
+    creationEventsExist && !confirmationEventsExist
+
+  /**
+   * Confirmation threshold calculation
+   *
+   * BOLD: Exact confirmPeriodBlocks for precise finality guarantee
+   * Classic: 20x multiplier based on empirical observations to prevent false positives
+   * while still detecting severe issues
+   */
+  const confirmationThresholdBlocks = isBold
+    ? BigInt(chainInfo.confirmPeriodBlocks)
+    : BigInt(chainInfo.confirmPeriodBlocks) * 20n
+
+  /**
+   * Confirmation delay check
+   *
+   * Detects when gap between creation and confirmation exceeds threshold
+   * May indicate challenges, disputes, or confirmation issues
+   */
+  const confirmationDelayExceedsPeriod =
+    latestCreationBlock &&
+    latestConfirmedBlock &&
+    latestCreationBlock?.number &&
+    latestConfirmedBlock?.number &&
+    latestCreationBlock.number - latestConfirmedBlock.number >
+      confirmationThresholdBlocks
+
+  /**
+   * BOLD-only check for assertions stuck in challenge period
+   *
+   * Identifies assertions exceeding challenge period (6.4 days) without confirmation
+   * Indicates active challenges or confirmation problems
+   */
+  const creationEventStuckInChallengePeriod =
+    isBold &&
+    latestCreationBlock &&
+    latestCreationBlock?.timestamp &&
+    latestCreationBlock.timestamp <
+      BigInt(currentTimeSeconds - CHALLENGE_PERIOD_SECONDS)
+
+  /**
+   * BOLD-only check for parent chain ahead of latest assertion
+   *
+   * Only meaningful for BOLD chains due to aligned block numbering
+   * May indicate validators struggling to keep up with parent chain
+   */
+  const parentChainAheadOfLatestCreation =
+    isBold &&
+    latestCreationBlock &&
+    parentLatestBlock &&
+    latestCreationBlock?.number &&
+    parentLatestBlock?.number &&
+    parentLatestBlock.number > latestCreationBlock.number + 10n
+
+  /**
+   * Classic chains check for missing recent assertions
+   *
+   * Only alerts when activity exists without assertions
+   * May be normal for low-activity chains, hence contextual consideration required
+   */
+  const nonBoldMissingRecentCreation =
+    !isBold &&
+    (!latestCreationBlock ||
+      (!hasRecentCreationEvents && hasActivityWithoutAssertions))
+
+  return {
+    creationEventsExist,
+    hasRecentCreationEvents,
+    hasActivityWithoutRecentAssertions,
+    noConfirmationsWithCreationEvents,
+    confirmationDelayExceedsPeriod,
+    creationEventStuckInChallengePeriod,
+    parentChainAheadOfLatestCreation,
+    nonBoldMissingRecentCreation,
+  }
 }
