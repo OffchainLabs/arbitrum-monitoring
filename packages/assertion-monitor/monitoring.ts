@@ -6,10 +6,13 @@ import {
   NO_CONFIRMATION_EVENTS_ALERT,
   NO_CREATION_EVENTS_ALERT,
   NON_BOLD_NO_RECENT_CREATION_ALERT,
-  PARENT_CHAIN_AHEAD_ALERT,
   VALIDATOR_WHITELIST_DISABLED_ALERT,
 } from './alerts'
-import { CHALLENGE_PERIOD_SECONDS, RECENT_ACTIVITY_SECONDS } from './constants'
+import {
+  CHALLENGE_PERIOD_SECONDS,
+  RECENT_ACTIVITY_SECONDS,
+  VALIDATOR_AFK_BLOCKS,
+} from './constants'
 import type { ChainState } from './types'
 import { isEventRecent } from './utils'
 
@@ -42,7 +45,6 @@ export const analyzeAssertionEvents = async (
     noConfirmationsWithCreationEvents,
     confirmationDelayExceedsPeriod,
     creationEventStuckInChallengePeriod,
-    parentChainAheadOfLatestCreation,
     nonBoldMissingRecentCreation,
   } = generateConditionsForAlerts(chainInfo, chainState, isBold)
 
@@ -70,10 +72,6 @@ export const analyzeAssertionEvents = async (
     alerts.push(CREATION_EVENT_STUCK_ALERT)
   }
 
-  if (parentChainAheadOfLatestCreation) {
-    alerts.push(PARENT_CHAIN_AHEAD_ALERT)
-  }
-
   if (nonBoldMissingRecentCreation) {
     alerts.push(NON_BOLD_NO_RECENT_CREATION_ALERT)
   }
@@ -99,10 +97,9 @@ export const generateConditionsForAlerts = (
   const currentTimeSeconds = Number(currentTimestamp / 1000n)
 
   const {
-    parentLatestBlock,
-    childLatestBlock,
-    latestCreationBlock,
-    latestConfirmedBlock,
+    latestChildBlock,
+    latestChildBlockCreated,
+    latestChildBlockConfirmed,
   } = chainState
 
   /**
@@ -111,18 +108,20 @@ export const generateConditionsForAlerts = (
    * Critical for both chain types as assertions are fundamental to the rollup mechanism
    * No assertions indicates severe validator issues or extreme chain inactivity
    */
-  const creationEventsExist = !!latestCreationBlock
+  const creationEventsExist = !!latestChildBlockCreated
 
   /**
    * Recent creation events check
    *
    * For BOLD: Critical for bounded finality guarantees
    * For Classic: Indicates active validation
+   *
+   * Always compare with current timestamp, not child chain latest block timestamp
    */
   const hasRecentCreationEvents =
-    latestCreationBlock &&
+    latestChildBlockCreated &&
     isEventRecent(
-      latestCreationBlock.timestamp,
+      latestChildBlockCreated.timestamp,
       currentTimestamp / 1000n,
       RECENT_ACTIVITY_SECONDS
     )
@@ -130,10 +129,10 @@ export const generateConditionsForAlerts = (
   /**
    * Confirmation events existence check
    *
-   * Missing confirmations may indicate challenge period in progress,
-   * active disputes, or confirmation system issues
+   * Missing confirmations may indicate challenge period in progress or
+   * may be normal for low-activity chains where no assertions need confirmation yet
    */
-  const confirmationEventsExist = !!latestConfirmedBlock
+  const confirmationEventsExist = !!latestChildBlockConfirmed
 
   /**
    * Chain activity without assertions check
@@ -142,10 +141,10 @@ export const generateConditionsForAlerts = (
    * Normal in small amounts due to batching, concerning in large amounts
    */
   const hasActivityWithoutAssertions =
-    latestCreationBlock &&
-    childLatestBlock?.number &&
-    latestCreationBlock?.number &&
-    childLatestBlock.number > latestCreationBlock.number
+    latestChildBlockCreated &&
+    latestChildBlock?.number &&
+    latestChildBlockCreated?.number &&
+    latestChildBlock.number > latestChildBlockCreated.number
 
   /**
    * Compound check for active chain with no recent assertions
@@ -160,33 +159,44 @@ export const generateConditionsForAlerts = (
    * Check for assertions without confirmations
    *
    * May indicate active challenges or technical issues with confirmation
+   * Could also be normal in low-activity chains where assertions are waiting for challenge period
    */
   const noConfirmationsWithCreationEvents =
     creationEventsExist && !confirmationEventsExist
 
   /**
-   * Confirmation threshold calculation
+   * Confirmation threshold adjustment
    *
-   * BOLD: Exact confirmPeriodBlocks for precise finality guarantee
-   * Classic: 20x multiplier based on empirical observations to prevent false positives
-   * while still detecting severe issues
+   * This attempts to approximate the comparison between parent chain and child chain blocks.
+   * A more accurate check would require tracking parent chain blocks for each event.
+   *
+   * BOLD: closer to 1:1 mapping with additional buffer for validator inactivity
+   * Classic: much higher multiplier to account for different block production rates and
+   * prevent false positives in low-activity chains
    */
   const confirmationThresholdBlocks = isBold
-    ? BigInt(chainInfo.confirmPeriodBlocks)
-    : BigInt(chainInfo.confirmPeriodBlocks) * 20n
+    ? BigInt(chainInfo.confirmPeriodBlocks + VALIDATOR_AFK_BLOCKS)
+    : BigInt(chainInfo.confirmPeriodBlocks + VALIDATOR_AFK_BLOCKS * 10)
 
   /**
    * Confirmation delay check
    *
-   * Detects when gap between creation and confirmation exceeds threshold
-   * May indicate challenges, disputes, or confirmation issues
+   * Detects when gap between latest block and latest confirmed block exceeds threshold
+   * This is an approximation as we're comparing child chain blocks against a threshold
+   * based on parent chain blocks
+   *
+   * Note: A more accurate check would be to compare parent chain block numbers, but this
+   * would require tracking the parent chain block for each confirmed event
    */
   const confirmationDelayExceedsPeriod =
-    latestCreationBlock &&
-    latestConfirmedBlock &&
-    latestCreationBlock?.number &&
-    latestConfirmedBlock?.number &&
-    latestCreationBlock.number - latestConfirmedBlock.number >
+    latestChildBlock &&
+    latestChildBlockConfirmed &&
+    latestChildBlock.number &&
+    latestChildBlockConfirmed.number &&
+    // For BOTH chain types: Only alert when child block to confirmation block gap
+    // exceeds the threshold. This is a rough approximation since the threshold
+    // is based on parent chain blocks, which have different production rates.
+    latestChildBlock.number - latestChildBlockConfirmed.number >
       confirmationThresholdBlocks
 
   /**
@@ -197,24 +207,10 @@ export const generateConditionsForAlerts = (
    */
   const creationEventStuckInChallengePeriod =
     isBold &&
-    latestCreationBlock &&
-    latestCreationBlock?.timestamp &&
-    latestCreationBlock.timestamp <
+    latestChildBlockCreated &&
+    latestChildBlockCreated?.timestamp &&
+    latestChildBlockCreated.timestamp <
       BigInt(currentTimeSeconds - CHALLENGE_PERIOD_SECONDS)
-
-  /**
-   * BOLD-only check for parent chain ahead of latest assertion
-   *
-   * Only meaningful for BOLD chains due to aligned block numbering
-   * May indicate validators struggling to keep up with parent chain
-   */
-  const parentChainAheadOfLatestCreation =
-    isBold &&
-    latestCreationBlock &&
-    parentLatestBlock &&
-    latestCreationBlock?.number &&
-    parentLatestBlock?.number &&
-    parentLatestBlock.number > latestCreationBlock.number + 10n
 
   /**
    * Classic chains check for missing recent assertions
@@ -224,7 +220,7 @@ export const generateConditionsForAlerts = (
    */
   const nonBoldMissingRecentCreation =
     !isBold &&
-    (!latestCreationBlock ||
+    (!latestChildBlockCreated ||
       (!hasRecentCreationEvents && hasActivityWithoutAssertions))
 
   return {
@@ -234,7 +230,6 @@ export const generateConditionsForAlerts = (
     noConfirmationsWithCreationEvents,
     confirmationDelayExceedsPeriod,
     creationEventStuckInChallengePeriod,
-    parentChainAheadOfLatestCreation,
     nonBoldMissingRecentCreation,
   }
 }

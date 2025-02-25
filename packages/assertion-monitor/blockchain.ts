@@ -313,8 +313,7 @@ export const fetchChainState = async ({
   fromBlock: bigint
   toBlock: bigint
 }): Promise<ChainState> => {
-  const parentLatestBlock = await parentClient.getBlock({ blockTag: 'latest' })
-  const childLatestBlock = await childChainClient.getBlock({
+  const latestChildBlock = await childChainClient.getBlock({
     blockTag: 'latest',
   })
 
@@ -334,29 +333,27 @@ export const fetchChainState = async ({
     isBold
   )
 
-  const latestConfirmedBlock = await getLatestConfirmedBlock(
+  const latestChildBlockConfirmed = await getLatestConfirmedBlock(
     childChainClient,
     recentConfirmation
   )
 
-  const latestCreationBlock = await getLatestCreationBlock(
+  const latestChildBlockCreated = await getLatestCreationBlock(
     childChainClient,
     recentCreation,
     isBold
   )
 
   const chainState: ChainState = {
-    parentLatestBlock,
-    childLatestBlock,
-    latestCreationBlock,
-    latestConfirmedBlock,
+    latestChildBlock,
+    latestChildBlockCreated,
+    latestChildBlockConfirmed,
   }
 
   console.log('Built chain state blocks:', {
-    parentLatestBlock: parentLatestBlock.number,
-    childLatestBlock: childLatestBlock.number,
-    latestCreationBlock: latestCreationBlock?.number,
-    latestConfirmedBlock: latestConfirmedBlock?.number,
+    latestChildBlock: latestChildBlock.number,
+    latestChildBlockCreated: latestChildBlockCreated?.number,
+    latestChildBlockConfirmed: latestChildBlockConfirmed?.number,
   })
 
   return chainState

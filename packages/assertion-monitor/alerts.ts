@@ -8,8 +8,6 @@ export const CONFIRMATION_DELAY_ALERT = `Confirmation period exceeded`
 
 export const CREATION_EVENT_STUCK_ALERT = `Assertion event stuck in challenge period`
 
-export const PARENT_CHAIN_AHEAD_ALERT = `Parent chain ahead of latest assertion event`
-
 export const NON_BOLD_NO_RECENT_CREATION_ALERT = `No recent node creation events detected for non-BOLD chain`
 
 export const VALIDATOR_WHITELIST_DISABLED_ALERT = `Validator whitelist disabled`
