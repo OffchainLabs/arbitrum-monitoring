@@ -97,24 +97,6 @@ export async function getLatestConfirmedBlock(
 }
 
 /**
- * Checks if there is any recent chain activity by comparing block numbers.
- * If new blocks are being produced after the last confirmed block, it indicates the chain is active.
- */
-export async function hasChainActivity(
-  childChainClient: PublicClient,
-  fromBlock: bigint
-): Promise<boolean> {
-  const latestSafeBlock = await childChainClient.getBlock({ blockTag: 'safe' })
-  const isActive = latestSafeBlock.number > fromBlock
-  console.log('Checking chain activity from block:', {
-    latestSafeBlock: latestSafeBlock.number,
-    fromBlock,
-    isActive,
-  })
-  return isActive
-}
-
-/**
  * Determines if the rollup contract is using BOLD mode by checking for a genesis assertion hash.
  * BOLD mode uses a different assertion format and validation process than Classic mode.
  */
