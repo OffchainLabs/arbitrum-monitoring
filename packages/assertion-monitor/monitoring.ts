@@ -29,7 +29,6 @@ import { isEventRecent } from './utils'
  * - Basic validator activity
  * - Confirmation patterns
  *
- * @throws If chainState contains invalid data
  */
 export const analyzeAssertionEvents = async (
   chainState: ChainState,
@@ -103,16 +102,12 @@ export const generateConditionsForAlerts = (
   } = chainState
 
   /**
-   * Creation events existence check
-   *
    * Critical for both chain types as assertions are fundamental to the rollup mechanism
    * No assertions indicates severe validator issues or extreme chain inactivity
    */
   const creationEventsExist = !!latestChildBlockCreated
 
   /**
-   * Recent creation events check
-   *
    * For BOLD: Critical for bounded finality guarantees
    * For Classic: Indicates active validation
    *
@@ -127,28 +122,21 @@ export const generateConditionsForAlerts = (
     )
 
   /**
-   * Confirmation events existence check
-   *
    * Missing confirmations may indicate challenge period in progress or
    * may be normal for low-activity chains where no assertions need confirmation yet
    */
   const confirmationEventsExist = !!latestChildBlockConfirmed
 
   /**
-   * Chain activity without assertions check
-   *
    * Detects transaction processing in child chain not yet asserted in parent chain
    * Normal in small amounts due to batching, concerning in large amounts
    */
   const hasActivityWithoutAssertions =
-    latestChildBlockCreated &&
     latestChildBlock?.number &&
     latestChildBlockCreated?.number &&
     latestChildBlock.number > latestChildBlockCreated.number
 
   /**
-   * Compound check for active chain with no recent assertions
-   *
    * Critical for BOLD due to finality implications
    * Indicates validator issues for both chain types
    */
@@ -156,8 +144,6 @@ export const generateConditionsForAlerts = (
     hasActivityWithoutAssertions && !hasRecentCreationEvents
 
   /**
-   * Check for assertions without confirmations
-   *
    * May indicate active challenges or technical issues with confirmation
    * Could also be normal in low-activity chains where assertions are waiting for challenge period
    */
@@ -165,8 +151,6 @@ export const generateConditionsForAlerts = (
     creationEventsExist && !confirmationEventsExist
 
   /**
-   * Confirmation threshold adjustment
-   *
    * This attempts to approximate the comparison between parent chain and child chain blocks.
    * A more accurate check would require tracking parent chain blocks for each event.
    *
@@ -179,8 +163,16 @@ export const generateConditionsForAlerts = (
     : BigInt(chainInfo.confirmPeriodBlocks + VALIDATOR_AFK_BLOCKS * 10)
 
   /**
-   * Confirmation delay check
-   *
+   * This is an approximation as we're comparing child chain blocks against a threshold
+   * based on parent chain blocks
+   */
+  const blocksSinceLastConfirmation =
+    (latestChildBlock?.number &&
+      latestChildBlockConfirmed?.number &&
+      latestChildBlock.number - latestChildBlockConfirmed.number) ??
+    0n
+
+  /**
    * Detects when gap between latest block and latest confirmed block exceeds threshold
    * This is an approximation as we're comparing child chain blocks against a threshold
    * based on parent chain blocks
@@ -189,19 +181,9 @@ export const generateConditionsForAlerts = (
    * would require tracking the parent chain block for each confirmed event
    */
   const confirmationDelayExceedsPeriod =
-    latestChildBlock &&
-    latestChildBlockConfirmed &&
-    latestChildBlock.number &&
-    latestChildBlockConfirmed.number &&
-    // For BOTH chain types: Only alert when child block to confirmation block gap
-    // exceeds the threshold. This is a rough approximation since the threshold
-    // is based on parent chain blocks, which have different production rates.
-    latestChildBlock.number - latestChildBlockConfirmed.number >
-      confirmationThresholdBlocks
+    blocksSinceLastConfirmation > confirmationThresholdBlocks
 
   /**
-   * BOLD-only check for assertions stuck in challenge period
-   *
    * Identifies assertions exceeding challenge period (6.4 days) without confirmation
    * Indicates active challenges or confirmation problems
    */
@@ -213,8 +195,6 @@ export const generateConditionsForAlerts = (
       BigInt(currentTimeSeconds - CHALLENGE_PERIOD_SECONDS)
 
   /**
-   * Classic chains check for missing recent assertions
-   *
    * Only alerts when activity exists without assertions
    * May be normal for low-activity chains, hence contextual consideration required
    */
