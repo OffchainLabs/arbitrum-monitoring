@@ -10,6 +10,7 @@ import {
   CREATION_EVENT_STUCK_ALERT,
   NON_BOLD_NO_RECENT_CREATION_ALERT,
   VALIDATOR_WHITELIST_DISABLED_ALERT,
+  NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT,
 } from '../alerts'
 
 // Mock constants to avoid importing from the actual constants file
@@ -87,6 +88,8 @@ describe('Assertion Health Monitoring', () => {
         hash: '0xparent3' as `0x${string}`,
         parentHash: '0x0000' as `0x${string}`,
       } as Block,
+      recentCreationEvent: null,
+      recentConfirmationEvent: null,
     }
   }
 
@@ -432,6 +435,45 @@ describe('Assertion Health Monitoring', () => {
       // Should NOT alert since parent chain blocks have no gap
       expect(alerts).not.toContain(CONFIRMATION_DELAY_ALERT)
     })
+
+    test('should alert when confirmation events exist but no confirmation blocks found', async () => {
+      const chainState = createBaseChainState()
+      
+      // Set up the inconsistent state: confirmation event exists but no confirmed block
+      chainState.childLatestConfirmedBlock = undefined
+      
+      // Add a mock confirmation event with the correct structure
+      chainState.recentConfirmationEvent = {
+        blockNumber: 130n,
+        args: {
+          blockHash: '0xef01' as `0x${string}`,
+          sendRoot: '0xabcd' as `0x${string}`,
+          assertionHash: '0x1234' as `0x${string}`,
+        },
+        // Add minimal required properties to satisfy the type
+        address: '0x1234' as `0x${string}`,
+        data: '0x' as `0x${string}`,
+        topics: ['0x1234' as `0x${string}`, '0x5678' as `0x${string}`],
+        transactionHash: '0x5678' as `0x${string}`,
+        logIndex: 0,
+        blockHash: '0xparent3' as `0x${string}`,
+        transactionIndex: 0,
+        removed: false,
+        eventName: 'AssertionConfirmed',
+      }
+
+      const alerts = await analyzeAssertionEvents(
+        chainState,
+        mockChainInfo,
+        false,
+        true
+      )
+
+      // Should contain both the standard no confirmation events alert and the specific inconsistency alert
+      expect(alerts).toContain(NO_CONFIRMATION_EVENTS_ALERT)
+      expect(alerts).toContain(NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT)
+    
+    })
   })
 
   describe('Non-BOLD Chain Tests', () => {
@@ -650,6 +692,44 @@ describe('Assertion Health Monitoring', () => {
       expect(alertsWithWhitelist).not.toContain(
         VALIDATOR_WHITELIST_DISABLED_ALERT
       )
+    })
+
+    test('should alert when confirmation events exist but no confirmation blocks found for non-BOLD chains', async () => {
+      const chainState = createBaseChainState()
+      
+      // Set up the inconsistent state: confirmation event exists but no confirmed block
+      chainState.childLatestConfirmedBlock = undefined
+      
+      // Add a mock confirmation event with the correct structure for NODE_CONFIRMED_EVENT
+      chainState.recentConfirmationEvent = {
+        blockNumber: 130n,
+        args: {
+          blockHash: '0xef01' as `0x${string}`,
+          sendRoot: '0xabcd' as `0x${string}`,
+          nodeNum: 42n,
+        },
+        // Add minimal required properties to satisfy the type
+        address: '0x1234' as `0x${string}`,
+        data: '0x' as `0x${string}`,
+        topics: ['0x1234' as `0x${string}`, '0x5678' as `0x${string}`],
+        transactionHash: '0x5678' as `0x${string}`,
+        logIndex: 0,
+        blockHash: '0xparent3' as `0x${string}`,
+        transactionIndex: 0,
+        removed: false,
+        eventName: 'NodeConfirmed',
+      }
+
+      const alerts = await analyzeAssertionEvents(
+        chainState,
+        mockChainInfo,
+        false,
+        false // isBold = false for non-BOLD chain
+      )
+
+      // Should contain both the standard no confirmation events alert and the specific inconsistency alert
+      expect(alerts).toContain(NO_CONFIRMATION_EVENTS_ALERT)
+      expect(alerts).toContain(NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT)
     })
   })
 })
