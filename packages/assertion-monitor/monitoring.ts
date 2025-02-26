@@ -39,7 +39,7 @@ export const analyzeAssertionEvents = async (
   const alerts: string[] = []
 
   const {
-    creationEventsExist,
+    doesLatestChildCreatedBlockExist,
     hasActivityWithoutRecentAssertions,
     noConfirmationsWithCreationEvents,
     confirmationDelayExceedsPeriod,
@@ -51,7 +51,7 @@ export const analyzeAssertionEvents = async (
     alerts.push(VALIDATOR_WHITELIST_DISABLED_ALERT)
   }
 
-  if (!creationEventsExist) {
+  if (!doesLatestChildCreatedBlockExist) {
     alerts.push(NO_CREATION_EVENTS_ALERT)
   }
 
@@ -103,7 +103,7 @@ export const generateConditionsForAlerts = (
    * Critical for both chain types as assertions are fundamental to the rollup mechanism
    * No assertions indicates severe validator issues or extreme chain inactivity
    */
-  const creationEventsExist = !!childLatestCreatedBlock
+  const doesLatestChildCreatedBlockExist = !!childLatestCreatedBlock
 
   /**
    * For BOLD: Critical for bounded finality guarantees
@@ -146,7 +146,7 @@ export const generateConditionsForAlerts = (
    * Could also be normal in low-activity chains where assertions are waiting for challenge period
    */
   const noConfirmationsWithCreationEvents =
-    creationEventsExist && !confirmationEventsExist
+    doesLatestChildCreatedBlockExist && !confirmationEventsExist
 
   /**
    * Parent chain block gap since last confirmation
@@ -194,7 +194,7 @@ export const generateConditionsForAlerts = (
       (!hasRecentCreationEvents && hasActivityWithoutAssertions))
 
   return {
-    creationEventsExist,
+    doesLatestChildCreatedBlockExist,
     hasRecentCreationEvents,
     hasActivityWithoutRecentAssertions,
     noConfirmationsWithCreationEvents,
