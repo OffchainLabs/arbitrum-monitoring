@@ -57,4 +57,6 @@ export interface ChainState {
   parentCurrentBlock?: Block
   parentBlockAtCreation?: Block 
   parentBlockAtConfirmation?: Block
+  recentCreationEvent: CreationEvent | null
+  recentConfirmationEvent: ConfirmationEvent | null
 }

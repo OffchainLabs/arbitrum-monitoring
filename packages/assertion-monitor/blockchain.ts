@@ -303,7 +303,7 @@ export const fetchChainState = async ({
     blockTag: 'latest',
   })
 
-  const recentCreation = await fetchMostRecentCreationEvent(
+  const recentCreationEvent = await fetchMostRecentCreationEvent(
     fromBlock,
     toBlock,
     parentClient,
@@ -311,7 +311,7 @@ export const fetchChainState = async ({
     isBold
   )
 
-  const recentConfirmation = await fetchMostRecentConfirmationEvent(
+  const recentConfirmationEvent = await fetchMostRecentConfirmationEvent(
     fromBlock,
     toBlock,
     parentClient,
@@ -321,28 +321,28 @@ export const fetchChainState = async ({
 
   const childLatestConfirmedBlock = await getLatestConfirmedBlock(
     childChainClient,
-    recentConfirmation
+    recentConfirmationEvent
   )
 
   const childLatestCreatedBlock = await getLatestCreationBlock(
     childChainClient,
-    recentCreation,
+    recentCreationEvent,
     isBold
   )
 
   // Get parent blocks at creation and confirmation
-  let parentBlockAtCreation;
-  if (recentCreation) {
+  let parentBlockAtCreation
+  if (recentCreationEvent) {
     parentBlockAtCreation = await parentClient.getBlock({
-      blockNumber: recentCreation.blockNumber
-    });
+      blockNumber: recentCreationEvent.blockNumber,
+    })
   }
 
-  let parentBlockAtConfirmation;
-  if (recentConfirmation) {
+  let parentBlockAtConfirmation
+  if (recentConfirmationEvent) {
     parentBlockAtConfirmation = await parentClient.getBlock({
-      blockNumber: recentConfirmation.blockNumber
-    });
+      blockNumber: recentConfirmationEvent.blockNumber,
+    })
   }
 
   const chainState: ChainState = {
@@ -351,7 +351,9 @@ export const fetchChainState = async ({
     childLatestConfirmedBlock,
     parentCurrentBlock,
     parentBlockAtCreation,
-    parentBlockAtConfirmation
+    parentBlockAtConfirmation,
+    recentCreationEvent,
+    recentConfirmationEvent,
   }
 
   console.log('Built chain state blocks:', {

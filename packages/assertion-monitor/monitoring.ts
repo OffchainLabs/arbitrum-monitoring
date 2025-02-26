@@ -3,6 +3,7 @@ import {
   CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT,
   CONFIRMATION_DELAY_ALERT,
   CREATION_EVENT_STUCK_ALERT,
+  NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT,
   NO_CONFIRMATION_EVENTS_ALERT,
   NO_CREATION_EVENTS_ALERT,
   NON_BOLD_NO_RECENT_CREATION_ALERT,
@@ -40,8 +41,10 @@ export const analyzeAssertionEvents = async (
 
   const {
     doesLatestChildCreatedBlockExist,
+    doesLatestChildConfirmedBlockExist,
     hasActivityWithoutRecentAssertions,
     noConfirmationsWithCreationEvents,
+    noConfirmedBlocksWithConfirmationEvents,
     confirmationDelayExceedsPeriod,
     creationEventStuckInChallengePeriod,
     nonBoldMissingRecentCreation,
@@ -53,6 +56,14 @@ export const analyzeAssertionEvents = async (
 
   if (!doesLatestChildCreatedBlockExist) {
     alerts.push(NO_CREATION_EVENTS_ALERT)
+  }
+
+  if (!doesLatestChildConfirmedBlockExist) {
+    alerts.push(NO_CONFIRMATION_EVENTS_ALERT)
+  }
+
+  if (noConfirmedBlocksWithConfirmationEvents) {
+    alerts.push(NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT)
   }
 
   if (hasActivityWithoutRecentAssertions) {
@@ -97,6 +108,8 @@ export const generateConditionsForAlerts = (
     childLatestConfirmedBlock,
     parentCurrentBlock,
     parentBlockAtConfirmation,
+    recentCreationEvent,
+    recentConfirmationEvent,
   } = chainState
 
   /**
@@ -123,7 +136,7 @@ export const generateConditionsForAlerts = (
    * Missing confirmations may indicate challenge period in progress or
    * may be normal for low-activity chains where no assertions need confirmation yet
    */
-  const confirmationEventsExist = !!childLatestConfirmedBlock
+  const doesLatestChildConfirmedBlockExist = !!childLatestConfirmedBlock
 
   /**
    * Detects transaction processing in child chain not yet asserted in parent chain
@@ -146,7 +159,15 @@ export const generateConditionsForAlerts = (
    * Could also be normal in low-activity chains where assertions are waiting for challenge period
    */
   const noConfirmationsWithCreationEvents =
-    doesLatestChildCreatedBlockExist && !confirmationEventsExist
+    doesLatestChildCreatedBlockExist && !doesLatestChildConfirmedBlockExist
+
+  /**
+   * Detects an inconsistent state where confirmation events exist but no confirmed blocks are recorded
+   * Indicates a technical issue with confirmation processing or data synchronization
+   * This should not occur in normal operation and requires investigation
+   */
+  const noConfirmedBlocksWithConfirmationEvents =
+    recentConfirmationEvent && !doesLatestChildConfirmedBlockExist
 
   /**
    * Parent chain block gap since last confirmation
@@ -195,9 +216,11 @@ export const generateConditionsForAlerts = (
 
   return {
     doesLatestChildCreatedBlockExist,
+    doesLatestChildConfirmedBlockExist,
     hasRecentCreationEvents,
     hasActivityWithoutRecentAssertions,
     noConfirmationsWithCreationEvents,
+    noConfirmedBlocksWithConfirmationEvents,
     confirmationDelayExceedsPeriod,
     creationEventStuckInChallengePeriod,
     nonBoldMissingRecentCreation,
