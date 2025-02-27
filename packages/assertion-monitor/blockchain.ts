@@ -17,7 +17,7 @@ import {
   boldABI,
   rollupABI,
 } from './abi'
-import { CHUNK_SIZE } from './constants'
+import { CHUNK_SIZE, MIN_BASE_STAKE_THRESHOLD } from './constants'
 import { AssertionDataError } from './errors'
 import { ChainState, ConfirmationEvent, CreationEvent } from './types'
 import { extractBoldBlockHash, extractClassicBlockHash } from './utils'
@@ -37,6 +37,34 @@ export async function getValidatorWhitelistDisabled(
   })
 
   return contract.read.validatorWhitelistDisabled()
+}
+
+/**
+ * Checks if the baseStake for a BoLD chain is below a threshold that would indicate
+ * permissionless validation might be disabled or restricted.
+ * A very low baseStake could indicate that validation is not intended to be permissionless.
+ */
+export async function isBaseStakeBelowThreshold(
+  client: PublicClient,
+  rollupAddress: string,
+  thresholdInWei: bigint = MIN_BASE_STAKE_THRESHOLD
+): Promise<boolean> {
+  try {
+    const contract = getContract({
+      address: rollupAddress as `0x${string}`,
+      abi: boldABI,
+      client,
+    })
+
+    const baseStake = await contract.read.baseStake()
+    console.log(`Base stake for rollup ${rollupAddress}: ${baseStake} wei`)
+    
+    return baseStake < thresholdInWei
+  } catch (error) {
+    console.error(`Error checking baseStake: ${error}`)
+    // Default to false if we can't check
+    return false
+  }
 }
 
 /**

@@ -28,5 +28,8 @@ export const SEARCH_WINDOW_SECONDS = MAXIMUM_SEARCH_DAYS * SECONDS_IN_A_DAY
 /** Recent activity threshold in seconds (4 hours) */
 export const RECENT_ACTIVITY_SECONDS = RECENT_CREATION_CHECK_HOURS * 60 * 60
 
+/** Minimum base stake threshold for BoLD chains (1 ETH in wei) */
+export const MIN_BASE_STAKE_THRESHOLD = BigInt('1000000000000000000')
+
 /** Convert hours to seconds for timestamp comparison */
 export const hoursToSeconds = (hours: number) => hours * 60 * 60 

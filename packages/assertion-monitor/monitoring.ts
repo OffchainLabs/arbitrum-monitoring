@@ -1,5 +1,6 @@
 import { ChildNetwork as ChainInfo } from '../utils'
 import {
+  BOLD_LOW_BASE_STAKE_ALERT,
   CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT,
   CONFIRMATION_DELAY_ALERT,
   CREATION_EVENT_STUCK_ALERT,
@@ -34,7 +35,7 @@ import { isEventRecent } from './utils'
 export const analyzeAssertionEvents = async (
   chainState: ChainState,
   chainInfo: ChainInfo,
-  validatorWhitelistDisabled: boolean,
+  validationPermissioningIssue: boolean,
   isBold: boolean = true
 ): Promise<string[]> => {
   const alerts: string[] = []
@@ -50,8 +51,12 @@ export const analyzeAssertionEvents = async (
     nonBoldMissingRecentCreation,
   } = generateConditionsForAlerts(chainInfo, chainState, isBold)
 
-  if (validatorWhitelistDisabled) {
-    alerts.push(VALIDATOR_WHITELIST_DISABLED_ALERT)
+  if (validationPermissioningIssue) {
+    if (isBold) {
+      alerts.push(BOLD_LOW_BASE_STAKE_ALERT)
+    } else {
+      alerts.push(VALIDATOR_WHITELIST_DISABLED_ALERT)
+    }
   }
 
   if (!doesLatestChildCreatedBlockExist) {
