@@ -44,7 +44,7 @@ export async function getValidatorWhitelistDisabled(
  * permissionless validation might be disabled or restricted.
  * A very low baseStake could indicate that validation is not intended to be permissionless.
  */
-export async function isBaseStakeBelowThreshold(
+export async function fetchIsBaseStakeBelowThreshold(
   client: PublicClient,
   rollupAddress: string,
   thresholdInWei: bigint = MIN_BASE_STAKE_THRESHOLD
@@ -58,7 +58,6 @@ export async function isBaseStakeBelowThreshold(
 
     const baseStake = await contract.read.baseStake()
     console.log(`Base stake for rollup ${rollupAddress}: ${baseStake} wei`)
-    
     return baseStake < thresholdInWei
   } catch (error) {
     console.error(`Error checking baseStake: ${error}`)
@@ -373,6 +372,15 @@ export const fetchChainState = async ({
     })
   }
 
+  const isValidatorWhitelistDisabled = await getValidatorWhitelistDisabled(
+    parentClient,
+    childChainInfo.ethBridge.rollup
+  )
+  const isBaseStakeBelowThreshold = await fetchIsBaseStakeBelowThreshold(
+    parentClient,
+    childChainInfo.ethBridge.rollup
+  )
+
   const chainState: ChainState = {
     childCurrentBlock,
     childLatestCreatedBlock,
@@ -382,6 +390,8 @@ export const fetchChainState = async ({
     parentBlockAtConfirmation,
     recentCreationEvent,
     recentConfirmationEvent,
+    isValidatorWhitelistDisabled,
+    isBaseStakeBelowThreshold,
   }
 
   console.log('Built chain state blocks:', {

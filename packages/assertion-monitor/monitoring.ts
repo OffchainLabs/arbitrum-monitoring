@@ -35,7 +35,6 @@ import { isEventRecent } from './utils'
 export const analyzeAssertionEvents = async (
   chainState: ChainState,
   chainInfo: ChainInfo,
-  validationPermissioningIssue: boolean,
   isBold: boolean = true
 ): Promise<string[]> => {
   const alerts: string[] = []
@@ -49,14 +48,16 @@ export const analyzeAssertionEvents = async (
     confirmationDelayExceedsPeriod,
     creationEventStuckInChallengePeriod,
     nonBoldMissingRecentCreation,
+    isValidatorWhitelistDisabledOnClassic,
+    isBaseStakeBelowThresholdOnBold,
   } = generateConditionsForAlerts(chainInfo, chainState, isBold)
 
-  if (validationPermissioningIssue) {
-    if (isBold) {
-      alerts.push(BOLD_LOW_BASE_STAKE_ALERT)
-    } else {
-      alerts.push(VALIDATOR_WHITELIST_DISABLED_ALERT)
-    }
+  if (isValidatorWhitelistDisabledOnClassic) {
+    alerts.push(VALIDATOR_WHITELIST_DISABLED_ALERT)
+  }
+
+  if (isBaseStakeBelowThresholdOnBold) {
+    alerts.push(BOLD_LOW_BASE_STAKE_ALERT)
   }
 
   if (!doesLatestChildCreatedBlockExist) {
@@ -219,6 +220,20 @@ export const generateConditionsForAlerts = (
     (!childLatestCreatedBlock ||
       (!hasRecentCreationEvents && hasActivityWithoutAssertions))
 
+  /**
+   * Whether a Classic chain's validator whitelist is disabled, allowing
+   * unauthorized validators to post assertions.
+   */
+  const isValidatorWhitelistDisabledOnClassic =
+    !isBold && chainState.isValidatorWhitelistDisabled
+
+  /**
+   * Whether a BoLD chain's base stake is below threshold, indicating restricted
+   * validator participation in dispute resolution.
+   */
+  const isBaseStakeBelowThresholdOnBold =
+    isBold && chainState.isBaseStakeBelowThreshold
+
   return {
     doesLatestChildCreatedBlockExist,
     doesLatestChildConfirmedBlockExist,
@@ -229,5 +244,7 @@ export const generateConditionsForAlerts = (
     confirmationDelayExceedsPeriod,
     creationEventStuckInChallengePeriod,
     nonBoldMissingRecentCreation,
+    isValidatorWhitelistDisabledOnClassic,
+    isBaseStakeBelowThresholdOnBold,
   }
 }

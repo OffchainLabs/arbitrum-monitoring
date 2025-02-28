@@ -59,4 +59,6 @@ export interface ChainState {
   parentBlockAtConfirmation?: Block
   recentCreationEvent: CreationEvent | null
   recentConfirmationEvent: ConfirmationEvent | null
+  isValidatorWhitelistDisabled: boolean
+  isBaseStakeBelowThreshold: boolean
 }

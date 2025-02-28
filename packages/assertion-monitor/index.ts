@@ -8,9 +8,7 @@ import {
 import {
   createChildChainClient,
   fetchChainState,
-  getValidatorWhitelistDisabled,
-  isBaseStakeBelowThreshold,
-  isBoldEnabled,
+  isBoldEnabled
 } from './blockchain'
 import { getBlockTimeForChain, getChainFromId } from './chains'
 import {
@@ -142,16 +140,10 @@ export const checkChainForAssertionIssues = async (
     fromBlock,
     toBlock,
   })
-  
-  // Check validation permissioning based on chain type
-  const validationPermissioningIssue = isBold
-    ? await isBaseStakeBelowThreshold(parentClient, childChainInfo.ethBridge.rollup)
-    : await getValidatorWhitelistDisabled(parentClient, childChainInfo.ethBridge.rollup);
 
   const alerts = await analyzeAssertionEvents(
     chainState,
     childChainInfo,
-    validationPermissioningIssue,
     isBold
   )
   if (alerts.length > 0) {
