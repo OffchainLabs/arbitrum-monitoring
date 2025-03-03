@@ -47,8 +47,13 @@ export async function getValidatorWhitelistDisabled(
 export async function fetchIsBaseStakeBelowThreshold(
   client: PublicClient,
   rollupAddress: string,
+  isBold: boolean,
   thresholdInWei: bigint = MIN_BASE_STAKE_THRESHOLD
 ): Promise<boolean> {
+  if (!isBold) {
+    return false
+  }
+
   try {
     const contract = getContract({
       address: rollupAddress as `0x${string}`,
@@ -378,7 +383,8 @@ export const fetchChainState = async ({
   )
   const isBaseStakeBelowThreshold = await fetchIsBaseStakeBelowThreshold(
     parentClient,
-    childChainInfo.ethBridge.rollup
+    childChainInfo.ethBridge.rollup,
+    isBold
   )
 
   const chainState: ChainState = {

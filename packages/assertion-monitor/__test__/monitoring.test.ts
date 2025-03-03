@@ -11,6 +11,7 @@ import {
   NON_BOLD_NO_RECENT_CREATION_ALERT,
   VALIDATOR_WHITELIST_DISABLED_ALERT,
   NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT,
+  BOLD_LOW_BASE_STAKE_ALERT,
 } from '../alerts'
 
 // Mock constants to avoid importing from the actual constants file
@@ -90,6 +91,8 @@ describe('Assertion Health Monitoring', () => {
       } as Block,
       recentCreationEvent: null,
       recentConfirmationEvent: null,
+      isValidatorWhitelistDisabled: false,
+      isBaseStakeBelowThreshold: false
     }
   }
 
@@ -474,6 +477,52 @@ describe('Assertion Health Monitoring', () => {
       expect(alerts).toContain(NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT)
     
     })
+
+    test('should alert when base stake is below threshold and whitelist is disabled for BoLD chain', async () => {
+      const chainState = createBaseChainState()
+      
+      // Set both conditions to trigger alert
+      chainState.isBaseStakeBelowThreshold = true
+      chainState.isValidatorWhitelistDisabled = true
+
+      const alerts = await analyzeAssertionEvents(
+        chainState,
+        mockChainInfo,
+        true // isBold
+      )
+
+      expect(alerts).toContain(BOLD_LOW_BASE_STAKE_ALERT)
+
+      // Test that alert is not generated when base stake is adequate
+      const chainStateWithAdequateStake = {
+        ...chainState,
+        isBaseStakeBelowThreshold: false
+      }
+
+      const alertsWithAdequateStake = await analyzeAssertionEvents(
+        chainStateWithAdequateStake,
+        mockChainInfo,
+        true // isBold
+      )
+
+      expect(alertsWithAdequateStake).not.toContain(BOLD_LOW_BASE_STAKE_ALERT)
+    })
+
+    test('should not alert for whitelist being disabled on BoLD chain', async () => {
+      const chainState = createBaseChainState()
+      
+      // Enable whitelist disabled flag
+      chainState.isValidatorWhitelistDisabled = true
+
+      const alerts = await analyzeAssertionEvents(
+        chainState,
+        mockChainInfo,
+        true // isBold
+      )
+
+      // Should not contain whitelist alert since this is a BoLD chain
+      expect(alerts).not.toContain(VALIDATOR_WHITELIST_DISABLED_ALERT)
+    })
   })
 
   describe('Non-BOLD Chain Tests', () => {
@@ -730,6 +779,53 @@ describe('Assertion Health Monitoring', () => {
       // Should contain both the standard no confirmation events alert and the specific inconsistency alert
       expect(alerts).toContain(NO_CONFIRMATION_EVENTS_ALERT)
       expect(alerts).toContain(NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT)
+    })
+  })
+
+  describe('Classic Chain Tests', () => {
+    test('should alert when validator whitelist is disabled on Classic chain', async () => {
+      const chainState = createBaseChainState()
+      
+      // Enable whitelist disabled flag
+      chainState.isValidatorWhitelistDisabled = true
+
+      const alerts = await analyzeAssertionEvents(
+        chainState,
+        mockChainInfo,
+        false // isBold
+      )
+
+      expect(alerts).toContain(VALIDATOR_WHITELIST_DISABLED_ALERT)
+
+      // Test that alert is not generated when whitelist is enabled
+      const chainStateWithWhitelist = {
+        ...chainState,
+        isValidatorWhitelistDisabled: false
+      }
+
+      const alertsWithWhitelist = await analyzeAssertionEvents(
+        chainStateWithWhitelist,
+        mockChainInfo,
+        false // isBold
+      )
+
+      expect(alertsWithWhitelist).not.toContain(VALIDATOR_WHITELIST_DISABLED_ALERT)
+    })
+
+    test('should not alert for base stake on Classic chain', async () => {
+      const chainState = createBaseChainState()
+      
+      // Set base stake below threshold
+      chainState.isBaseStakeBelowThreshold = true
+
+      const alerts = await analyzeAssertionEvents(
+        chainState,
+        mockChainInfo,
+        false // isBold
+      )
+
+      // Should not contain base stake alert since this is a Classic chain
+      expect(alerts).not.toContain(BOLD_LOW_BASE_STAKE_ALERT)
     })
   })
 })

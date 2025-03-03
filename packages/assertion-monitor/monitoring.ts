@@ -232,7 +232,9 @@ export const generateConditionsForAlerts = (
    * validator participation in dispute resolution.
    */
   const isBaseStakeBelowThresholdOnBold =
-    isBold && chainState.isBaseStakeBelowThreshold
+    isBold &&
+    chainState.isBaseStakeBelowThreshold &&
+    chainState.isValidatorWhitelistDisabled
 
   return {
     doesLatestChildCreatedBlockExist,
