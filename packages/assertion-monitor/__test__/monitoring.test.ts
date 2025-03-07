@@ -121,7 +121,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         true
       )
 
@@ -136,7 +135,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         true
       )
 
@@ -154,7 +152,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         true
       )
 
@@ -172,7 +169,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         true
       )
 
@@ -211,7 +207,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         true
       )
 
@@ -230,7 +225,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         true
       )
 
@@ -266,28 +260,28 @@ describe('Assertion Health Monitoring', () => {
         number: 100n, // 200 blocks behind, exceeds confirmPeriodBlocks(100) + VALIDATOR_AFK_BLOCKS(50)
       } as Block
 
+      chainState.isBaseStakeBelowThreshold = true
+      chainState.isValidatorWhitelistDisabled = true
+
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         true
       )
 
       // Check for expected alert
       expect(alerts).toContain(CONFIRMATION_DELAY_ALERT)
 
-      // Test with whitelist disabled
       const alertsWithWhitelistDisabled = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        true,
         true
       )
 
       // Should have both alerts
       expect(alertsWithWhitelistDisabled).toContain(CONFIRMATION_DELAY_ALERT)
       expect(alertsWithWhitelistDisabled).toContain(
-        VALIDATOR_WHITELIST_DISABLED_ALERT
+        BOLD_LOW_BASE_STAKE_ALERT
       )
     })
 
@@ -326,7 +320,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         true
       )
 
@@ -336,35 +329,6 @@ describe('Assertion Health Monitoring', () => {
       // Check for expected alerts
       expect(alerts).toContain(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
       expect(alerts).toContain(CONFIRMATION_DELAY_ALERT)
-    })
-
-    test('should alert when validator whitelist is disabled', async () => {
-      const chainState = createBaseChainState()
-
-      // Test with validator whitelist disabled
-      const alerts = await analyzeAssertionEvents(
-        chainState,
-        mockChainInfo,
-        true,
-        true
-      )
-
-      // Check if alerts array exists and has at least one element
-      expect(alerts.length).toBeGreaterThan(0)
-
-      // Check for the validator whitelist disabled alert
-      expect(alerts).toContain(VALIDATOR_WHITELIST_DISABLED_ALERT)
-
-      // Test with whitelist enabled to confirm no alert is generated
-      const alertsWithWhitelist = await analyzeAssertionEvents(
-        chainState,
-        mockChainInfo,
-        false,
-        true
-      )
-      expect(alertsWithWhitelist).not.toContain(
-        VALIDATOR_WHITELIST_DISABLED_ALERT
-      )
     })
 
     test('should use parent chain blocks for confirmation delay when available', async () => {
@@ -395,7 +359,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         true
       )
 
@@ -431,7 +394,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         true
       )
 
@@ -468,7 +430,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         true
       )
 
@@ -550,7 +511,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         false
       )
 
@@ -565,7 +525,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         false
       )
 
@@ -583,7 +542,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         false
       )
 
@@ -601,7 +559,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         false
       )
 
@@ -640,7 +597,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         false // non-BOLD
       )
 
@@ -659,7 +615,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         false
       )
 
@@ -704,7 +659,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         false // non-BOLD
       )
 
@@ -717,11 +671,12 @@ describe('Assertion Health Monitoring', () => {
     test('should alert when validator whitelist is disabled for non-BOLD chain', async () => {
       const chainState = createBaseChainState()
 
+      chainState.isValidatorWhitelistDisabled = true
+
       // Test with validator whitelist disabled
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        true,
         false
       )
 
@@ -731,11 +686,12 @@ describe('Assertion Health Monitoring', () => {
       // Check for the validator whitelist disabled alert
       expect(alerts).toContain(VALIDATOR_WHITELIST_DISABLED_ALERT)
 
+      chainState.isValidatorWhitelistDisabled = false
+
       // Test with whitelist enabled to confirm no alert is generated
       const alertsWithWhitelist = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         false
       )
       expect(alertsWithWhitelist).not.toContain(
@@ -772,7 +728,6 @@ describe('Assertion Health Monitoring', () => {
       const alerts = await analyzeAssertionEvents(
         chainState,
         mockChainInfo,
-        false,
         false // isBold = false for non-BOLD chain
       )
 
