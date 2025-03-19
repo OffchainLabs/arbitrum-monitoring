@@ -1,55 +1,86 @@
 # Batch Poster Monitor
 
-The Batch Poster Monitor is a package that allows you to monitor the progress of batch poster jobs in real-time. It provides a simple and intuitive interface to track the status of your batch poster jobs and view detailed information about each job.
+> For installation and general configuration, see the [main README](../../README.md).
 
-## Prerequisites
+## Overview
 
-Before using this tool, make sure you have the following installed:
+The Batch Poster Monitor ensures reliable L2->L1 data availability by tracking batch posting performance, data compression, and poster account balance.
 
-- [Node.js](https://nodejs.org/en)
-- [Yarn](https://classic.yarnpkg.com/lang/en/docs/install/#mac-stable)
-
-Additionally, ensure that you have added your Arbitrum network configuration to the `config.json` file in the `lib` directory;
-
-## Installation
-
-From the root directory of the project, run the following command to install dependencies:
+## Command-Line Interface
 
 ```bash
-yarn install
+yarn batch-poster-monitor [options]
+
+Monitor batch posting activity on Arbitrum chains
+
+Options:
+  --help             Show help                         [boolean]
+  --version          Show version number               [boolean]
+  --configPath       Path to config file               [string] [default: "config.json"]
+  --enableAlerting   Enable Slack alerts               [boolean] [default: false]
+
+Examples:
+  yarn batch-poster-monitor                            Run with default config
+  yarn batch-poster-monitor --enableAlerting           Enable Slack notifications
+  yarn batch-poster-monitor --configPath=custom.json   Use custom config file
+
+Environment Variables:
+  BATCH_POSTER_MONITORING_SLACK_TOKEN    Slack API token for alerts
+  BATCH_POSTER_MONITORING_SLACK_CHANNEL  Slack channel for alerts
 ```
 
-## Usage
+## Monitor Details
 
-To use the Batch Poster Monitor package, follow these steps:
+The Batch Poster Monitor is crucial for ensuring that L2 transaction data is reliably posted to L1, maintaining the chain's data availability guarantees. It monitors the batch posting process, which involves compressing L2 transaction data and submitting it to the L1 chain, while also tracking the batch poster's account balance to ensure uninterrupted operation.
 
-```bash
-yarn dev [--configPath=<CONFIG_PATH>] --enableAlerting
-```
+### Critical Events
 
-## Configuration Options
+The monitor tracks several key metrics and events:
 
-The Batch Poster Monitor accepts an array of chain configurations with the following parameters:
+- Batch posting frequency and timing
+- Data compression ratios
+- Poster account balance and gas costs
+- AnyTrust committee participation
+- Backlog accumulation
 
-```typescript
-      "name": string // Name of the chain being monitored
-      "chainId": number // ChainId of the chain being monitored
-      "parentChainId": number // ChainId of the chain's parent
-      "rpc": string // RPC URL of the chain being monitored
-      "rollup": string // Rollup address of the chain being monitored
-      "sequencerInbox": string //  Sequencer Inbox address of the chain being monitored
-      "bridge": string // Bridge address of the chain being monitored
+### Alert Scenarios
 
-```
+The monitor generates alerts in these critical scenarios:
 
-### Error Generation and Reporting
+#### Batch Posting Delays
+- No batches posted within 24 hours AND pending user transactions exist
+- Time since last batch post exceeds chain-specific time bounds:
+  - Default: 4 hours
+  - Customized based on `maxTimeVariation` contract setting
+  - Minimum: 1 hour
+  - Maximum: Chain's time bounds minus buffer
 
-To enable reporting, use `--enableAlerting` flag.
+#### Batch Poster Balance
+- Current balance falls below minimum required for 3 days of operation
+- Calculation based on:
+  - Rolling 24-hour gas cost average
+  - Current balance / daily posting cost estimate
+  - Fallback threshold: Static check if no recent activity
 
-This will enable alerts if a batch-poster monitoring detects any anomalies. Additionally, you might also want to log these errors to Slack, for which you will need to configure, in the `.env` file:
+#### AnyTrust-Specific
+- Committee failure detection:
+  - Chain reverted to posting full calldata on-chain (0x00 prefix)
+  - Indicates potential Data Availability Committee issues
+- Expected format: DACert (0x88 prefix)
 
-- `NODE_ENV=CI`
-- `BATCH_POSTER_MONITORING_SLACK_TOKEN=<your-slack-token>`
-- `BATCH_POSTER_MONITORING_SLACK_CHANNEL=<your-slack-channel-key>`
+#### Backlog Detection
+- Non-zero block backlog AND last batch posted > time bounds ago
+- Backlog measured as: `latestChildChainBlockNumber - lastBlockReported`
 
-Check [Slack integration documentation](https://api.slack.com/quickstart) for more information about getting these auth tokens.
+#### Processing Errors
+- Chain RPC connectivity issues
+- Contract interaction failures
+- Invalid response formats
+- Rate limiting errors
+
+Each alert includes:
+- Chain name and ID
+- Relevant contract addresses
+- Specific threshold violations
+- Time since last successful operation
+- Current system state metrics

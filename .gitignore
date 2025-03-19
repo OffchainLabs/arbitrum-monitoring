@@ -6,3 +6,4 @@ dist
 ./*.js
 .DS_Store
 logfile.log
+config.json

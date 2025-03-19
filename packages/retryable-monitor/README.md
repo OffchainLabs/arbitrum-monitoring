@@ -1,58 +1,62 @@
-# Retryables Monitor
+# Retryable Monitor
 
-This tool is designed to assist in identifying and displaying the status of retryable tickets sent to an Arbitrum chain from its parent chain. Read more about retryable tickets [here](https://docs.arbitrum.io/arbos/l1-to-l2-messaging).
+> For installation and general configuration, see the [main README](../../README.md).
 
-## Prerequisites
+## Overview
 
-Before using this tool, make sure you have the following installed:
+The Retryable Monitor tracks L1->L2 message execution through retryable tickets. These tickets are the primary mechanism for cross-chain communication in Arbitrum. [Learn more](https://docs.arbitrum.io/arbos/l1-to-l2-messaging).
 
-- [Node.js](https://nodejs.org/en)
-- [Yarn](https://classic.yarnpkg.com/lang/en/docs/install/#mac-stable)
-
-Additionally, ensure that you have added your Arbitrum network configuration to the `config.json` file in the `lib` directory;
-
-## Installation
-
-From the root directory of the project, run the following command to install dependencies:
+## Command-Line Interface
 
 ```bash
-yarn install
+yarn retryable-monitor [options]
+
+Monitor retryable tickets on Arbitrum chains
+
+Options:
+  --help             Show help                                         [boolean]
+  --version          Show version number                               [boolean]
+  --configPath       Path to config file                               [string] [default: "config.json"]
+  --enableAlerting   Enable Slack alerts                               [boolean] [default: false]
+  --fromBlock        Starting block number for monitoring              [number]
+  --toBlock          Ending block number for monitoring                [number]
+  --continuous       Run monitor continuously                          [boolean] [default: false]
+
+Examples:
+  yarn retryable-monitor --continuous                    Run continuous monitoring
+  yarn retryable-monitor --fromBlock=1000 --toBlock=2000 Check specific block range
+  yarn retryable-monitor --enableAlerting               Enable Slack notifications
+
+Environment Variables:
+  RETRYABLE_MONITORING_SLACK_TOKEN    Slack API token for alerts
+  RETRYABLE_MONITORING_SLACK_CHANNEL  Slack channel for alerts
 ```
 
-## Execution
+## Monitor Details
 
-### One-off Check
+Retryable tickets are Arbitrum's mechanism for guaranteed L1->L2 message delivery. When a message is sent from L1 to L2, it creates a retryable ticket that must be executed within 7 days. This monitor tracks these tickets from creation through execution, ensuring no messages are lost or expire unexecuted.
 
-To find retryable tickets and display their status for a specific block range, execute the following command:
+The monitoring process spans both L1 and L2 chains. On L1, we watch for new ticket creation events that indicate a message needs to be delivered to L2. Once created, tickets can be redeemed either automatically by the system or manually by users. The monitor tracks both types of redemption attempts and their outcomes.
 
-```bash
-yarn dev --fromBlock=<FROM_BLOCK> --toBlock=<TO_BLOCK> [--configPath=<CONFIG_PATH>]
-```
+Each ticket can trigger alerts based on several risk factors: approaching the 7-day expiration window, failed redemption attempts, gas-related issues preventing execution, or tickets stuck in pending state. These alerts help prevent message delivery failures that could impact cross-chain operations.
 
-- Replace <FROM_BLOCK>, <TO_BLOCK>, and <CONFIG_PATH> with the desired block numbers and the path to your configuration file.
-- If `--configPath` is not provided, it defaults to `config.json`.
-- This command will identify all retryable tickets initiated or created from the parent chain to your Orbit chain within the specified block range.
+### Critical Events
 
-### Continuous Update
+The monitor tracks five key events that represent state transitions:
 
-To continuously monitor and update the status of retryable tickets for multiple Orbit chains concurrently, execute the following command:
+- `RetryableTicketCreated`: A new L1->L2 message has been created and funded
+- `RedeemScheduled`: A manual redemption attempt has been initiated
+- `TicketRedeemed`: The message has been successfully executed on L2
+- `AutoRedemptionSuccess`: Automatic redemption system successfully executed the message
+- `AutoRedemptionFailed`: Automatic redemption attempt failed, manual intervention may be needed
 
-```bash
-yarn dev --continuous [--configPath=<CONFIG_PATH>]
-```
+### Alert Scenarios
 
-- - Replace <CONFIG_PATH> with the path to your configuration file.
-- If `--configPath` is not provided, it defaults to `config.json`.
-- This command will initiate continuous monitoring, dynamically determining the block range based on the latest block on the parent chain. The tool will automatically fetch and display the status of retryable tickets for all configured Orbit chains within the `config.json` file at regular intervals.
+The monitor generates alerts in these critical scenarios:
 
-### Error Generation and Reporting
+- Expiration Risk: Tickets older than 6 days that haven't been executed
+- Execution Failures: Both automatic and manual redemption attempts that fail
+- Gas Issues: When execution fails due to insufficient gas or high gas prices
+- Stuck Messages: Tickets that remain in a pending state without progress
 
-To enable reporting, use `--enableAlerting` flag.
-
-This will enable alerts if a retryable has not succeeded. Additionally, you might also want to log these errors to Slack, for which you will need to configure, in the `.env` file:
-
-- `NODE_ENV=CI`
-- `RETRYABLE_MONITORING_SLACK_TOKEN=<your-slack-token>`
-- `RETRYABLE_MONITORING_SLACK_CHANNEL=<your-slack-channel-key>`
-
-Check [Slack integration documentation](https://api.slack.com/quickstart) for more information about getting these auth tokens.
+This comprehensive monitoring ensures that cross-chain message delivery remains reliable and no messages are lost due to expiration or execution failures.
