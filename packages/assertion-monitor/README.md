@@ -31,7 +31,7 @@ Environment Variables:
 
 ## Monitor Details
 
-The Assertion Monitor ensures chain security by tracking assertions through their lifecycle, implementing distinct strategies for BOLD and Classic rollup chains.
+The Assertion Monitor tracks assertions through their lifecycle, implementing distinct strategies for BOLD and pre-BoLD rollup chains.
 
 ### Critical Events Monitored
 
