@@ -31,7 +31,7 @@ Environment Variables:
 
 ## Monitor Details
 
-The Batch Poster Monitor is crucial for ensuring that L2 transaction data is reliably posted to L1, maintaining the chain's data availability guarantees. It monitors the batch posting process, which involves compressing L2 transaction data and submitting it to the L1 chain, while also tracking the batch poster's account balance to ensure uninterrupted operation.
+The Batch Poster Monitor is crucial for ensuring that transaction data is reliably posted to the parent chain, maintaining the chain's data availability guarantees. It monitors the batch posting process, which involves compressing transaction data and submitting it to the parent chain, while also tracking the batch poster's account balance to ensure uninterrupted operation.
 
 ### Critical Events
 
