@@ -5,7 +5,7 @@
 This monitoring suite helps you track the health and performance of your Arbitrum chains through three specialized monitors:
 
 1. [**Retryable Monitor**](./packages/retryable-monitor/README.md) - Tracks L1->L2 message execution and retryable ticket lifecycle
-2. [**Batch Poster Monitor**](./packages/batch-poster-monitor/README.md) - Monitors L2->L1 batch posting and data availability
+2. [**Batch Poster Monitor**](./packages/batch-poster-monitor/README.md) - Monitors batch posting and data availability
 3. [**Assertion Monitor**](./packages/assertion-monitor/README.md) - Validates chain security and assertion lifecycle
 
 Each monitor has its own detailed documentation with technical specifics and implementation details.
