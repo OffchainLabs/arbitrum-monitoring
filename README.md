@@ -4,9 +4,9 @@
 
 This monitoring suite helps you track the health and performance of your Arbitrum chains through three specialized monitors:
 
-1. [**Retryable Monitor**](./packages/retryable-monitor/README.md) - Tracks L1->L2 message execution and retryable ticket lifecycle
-2. [**Batch Poster Monitor**](./packages/batch-poster-monitor/README.md) - Monitors batch posting and data availability
-3. [**Assertion Monitor**](./packages/assertion-monitor/README.md) - Validates chain security and assertion lifecycle
+1. [**Retryable Monitor**](./packages/retryable-monitor/README.md) - Tracks ParentChain->ChildChain message execution and retryable ticket lifecycle
+2. [**Batch Poster Monitor**](./packages/batch-poster-monitor/README.md) - Monitors ChildChain->ParentChain batch posting and data availability
+3. [**Assertion Monitor**](./packages/assertion-monitor/README.md) - Monitor assertion creation and validation on Arbitrum chains
 
 Each monitor has its own detailed documentation with technical specifics and implementation details.
 
@@ -15,6 +15,7 @@ Each monitor has its own detailed documentation with technical specifics and imp
 - Node.js v18 or greater
 - Yarn package manager
 - Access to Arbitrum chain RPC endpoints
+- Access to parent chain RPC endpoints
 - Slack workspace for alerts (optional)
 
 ## Installation

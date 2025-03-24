@@ -34,9 +34,9 @@ Environment Variables:
 
 ## Monitor Details
 
-Retryable tickets are Arbitrum's mechanism for guaranteed L1->L2 message delivery. When a message is sent from L1 to L2, it creates a retryable ticket that must be executed within 7 days. This monitor tracks these tickets from creation through execution, ensuring no messages are lost or expire unexecuted.
+Retryable tickets are Arbitrum's mechanism for guaranteed ParentChain->ChildChain message delivery. When a message is sent from the parent chain to the child chain, it creates a retryable ticket that must be executed within 7 days. This monitor tracks these tickets from creation through execution, ensuring no messages are lost or expire unexecuted.
 
-The monitoring process spans both L1 and L2 chains. On L1, we watch for new ticket creation events that indicate a message needs to be delivered to L2. Once created, tickets can be redeemed either automatically by the system or manually by users. The monitor tracks both types of redemption attempts and their outcomes.
+The monitoring process spans both parent and child chains. On the parent chain, we watch for new ticket creation events that indicate a message needs to be delivered to the child chain. Once created, tickets can be redeemed either automatically by the system or manually by users. The monitor tracks both types of redemption attempts and their outcomes.
 
 Each ticket can trigger alerts based on several risk factors: approaching the 7-day expiration window, failed redemption attempts, gas-related issues preventing execution, or tickets stuck in pending state. These alerts help prevent message delivery failures that could impact cross-chain operations.
 
@@ -44,9 +44,9 @@ Each ticket can trigger alerts based on several risk factors: approaching the 7-
 
 The monitor tracks five key events that represent state transitions:
 
-- `RetryableTicketCreated`: A new L1->L2 message has been created and funded
+- `RetryableTicketCreated`: A new ParentChain->ChildChain message has been created and funded
 - `RedeemScheduled`: A manual redemption attempt has been initiated
-- `TicketRedeemed`: The message has been successfully executed on L2
+- `TicketRedeemed`: The message has been successfully executed on ChildChain
 - `AutoRedemptionSuccess`: Automatic redemption system successfully executed the message
 - `AutoRedemptionFailed`: Automatic redemption attempt failed, manual intervention may be needed
 

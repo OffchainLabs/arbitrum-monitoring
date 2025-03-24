@@ -18,8 +18,14 @@
       }
     },
     {
+      "name": "Xai Testnet",
       "chainId": 37714555429,
+      "parentChainId": 421614,
       "confirmPeriodBlocks": 150,
+      "parentRpcUrl": "https://sepolia-rollup.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://testnet-v2.xai-chain.net/rpc",
+      "explorerUrl": "https://testnet-explorer-v2.xai-chain.net/",
+      "parentExplorerUrl": "https://sepolia.arbiscan.io/",
       "ethBridge": {
         "bridge": "0x6c7FAC4edC72E86B3388B48979eF37Ecca5027e6",
         "inbox": "0x6396825803B720bc6A43c63caa1DcD7B31EB4dd0",
@@ -28,13 +34,6 @@
         "sequencerInbox": "0x529a2061A1973be80D315770bA9469F3Da40D938"
       },
       "nativeToken": "0x4e6f41acbfa8eb4a3b25e151834d9a14b49b69d2",
-      "explorerUrl": "https://testnet-explorer-v2.xai-chain.net/",
-      "rpcUrl": "https://testnet-v2.xai-chain.net/rpc",
-      "name": "Xai Testnet",
-      "slug": "xai-testnet",
-      "parentChainId": 421614,
-      "retryableLifetimeSeconds": 604800,
-      "isCustom": true,
       "tokenBridge": {
         "parentCustomGateway": "0x04e14E04949D49ae9c551ca8Cc3192310Ce65D88",
         "parentErc20Gateway": "0xCcB451C4Df22addCFe1447c58bC6b2f264Bb1256",
@@ -50,24 +49,7 @@
         "childProxyAdmin": "0x7C1BA251d812fb34aF5C2566040C3C30585aFed9",
         "childWeth": "0x0000000000000000000000000000000000000000",
         "childWethGateway": "0x0000000000000000000000000000000000000000"
-      },
-      "bridgeUiConfig": {
-        "color": "#F30019",
-        "network": {
-          "name": "Xai Testnet",
-          "logo": "/images/XaiLogo.svg",
-          "description": "The testnet for Xai’s gaming chain."
-        },
-        "nativeTokenData": {
-          "name": "Xai",
-          "symbol": "sXAI",
-          "decimals": 18,
-          "logoUrl": "/images/XaiLogo.svg"
-        }
-      },
-      "orbitRpcUrl": "https://testnet-v2.xai-chain.net/rpc",
-      "parentRpcUrl": "https://sepolia-rollup.arbitrum.io/rpc",
-      "parentExplorerUrl": "https://sepolia.arbiscan.io/"
+      }
     }
   ]
 }

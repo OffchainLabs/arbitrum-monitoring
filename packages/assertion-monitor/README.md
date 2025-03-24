@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Assertion Monitor validates chain security by tracking the lifecycle of assertions in both BOLD (Bounded Liquidity Delay) and Classic rollup chains. [Learn more](https://docs.arbitrum.io/how-arbitrum-works/inside-arbitrum-nitro#arbitrum-rollup-protocol).
+The Assertion Monitor monitors the lifecycle of assertions in both BoLD (Bounded Liquidity Delay) and pre-BoLD rollup chains. [Learn more](https://docs.arbitrum.io/how-arbitrum-works/inside-arbitrum-nitro#arbitrum-rollup-protocol).
 
 ## Command-Line Interface
 
@@ -31,39 +31,41 @@ Environment Variables:
 
 ## Monitor Details
 
-The Assertion Monitor tracks assertions through their lifecycle, implementing distinct strategies for BOLD and pre-BoLD rollup chains.
+The Assertion Monitor tracks assertions through their lifecycle, implementing distinct strategies for BoLD and pre-BoLD rollup chains.
 
 ### Critical Events Monitored
 
-- Creation Events: Assertions and node creation
-- Confirmation Events: Assertion/node confirmations
-- Validator Events: Stake changes and status updates
-- Block Events: Creation rates and finalization
-- Chain State: Consistency and synchronization
+The monitor tracks five categories of blockchain events:
 
-### Chain-Specific Features
-
-- BOLD Chains: Base stake monitoring, finality validation, challenge period tracking
-- Classic Chains: Whitelist validation, basic activity tracking, adjusted thresholds
+- **Creation Events**: Records when new assertions and nodes are created on the chain to verify transaction execution
+- **Confirmation Events**: Identifies when assertions are confirmed on the parent chain after challenge periods end
+- **Validator Events**: Tracks validator participation metrics including stakes, challenges, and whitelist status
+- **Block Events**: Monitors block production rates, finalization timing, and synchronization between chains
+- **Chain State**: Analyzes the overall consistency between on-chain state and expected protocol behavior
 
 ### Alert Scenarios
 
+The monitor triggers alerts when these conditions are detected:
+
 #### Creation Issues
-- Missing assertion creation events
-- Chain activity without recent assertions
-- Non-BOLD node creation gaps
-- Validator participation tracking
+
+- No assertion creation events within configured time window
+- Chain activity without corresponding recent assertions
+- Extended node creation gaps on non-BoLD chains
+- Validator participation below required thresholds
 
 #### Confirmation Issues
-- Parent chain block threshold delays
-- Challenge period exceeded events
-- Confirmation block inconsistencies
-- Unconfirmed assertion buildup
+
+- Parent chain block threshold exceeded
+- Assertions stuck in challenge period
+- Data inconsistencies between confirmation events and confirmed blocks
+- Confirmation events missing despite available creation events
 
 #### Other Issues
-- Whitelist status (Classic chains)
-- Base stake thresholds (BOLD chains)
-- Chain synchronization issues
-- State consistency validation
+
+- Validator whitelist disabled on pre-BoLD chains
+- Base stake below 1 ETH threshold on BoLD chains
+- Parent-child chain synchronization anomalies
+- State inconsistencies between expected and observed chain state
 
 For implementation details and thresholds, see `alerts.ts` and `monitoring.ts`.
