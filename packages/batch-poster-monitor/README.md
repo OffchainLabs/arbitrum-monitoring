@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Batch Poster Monitor ensures reliable L2->L1 data availability by tracking batch posting performance, data compression, and poster account balance.
+The Batch Poster Monitor tracks batch posting performance, data compression, and poster account balance.
 
 ## Command-Line Interface
 
