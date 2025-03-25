@@ -45,7 +45,7 @@ Each ticket can trigger alerts based on several risk factors: approaching the 7-
 The monitor tracks five key events that represent state transitions:
 
 - `RetryableTicketCreated`: A new ParentChain->ChildChain message has been created and funded
-- `RedeemScheduled`: A manual redemption attempt has been initiated
+- `RedeemScheduled`: A redemption attempt has been initiated
 - `TicketRedeemed`: The message has been successfully executed on ChildChain
 - `AutoRedemptionSuccess`: Automatic redemption system successfully executed the message
 - `AutoRedemptionFailed`: Automatic redemption attempt failed, manual intervention may be needed
@@ -54,8 +54,8 @@ The monitor tracks five key events that represent state transitions:
 
 The monitor generates alerts in these critical scenarios:
 
-- Expiration Risk: Tickets older than 6 days that haven't been executed
 - Execution Failures: Both automatic and manual redemption attempts that fail
+- Expiration Risk: Tickets older than 6 days that haven't been executed
 - Gas Issues: When execution fails due to insufficient gas or high gas prices
 - Stuck Messages: Tickets that remain in a pending state without progress
 
