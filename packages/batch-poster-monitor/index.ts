@@ -445,10 +445,56 @@ const isAnyTrust = async (
     return anyTrustCoreChainIds.includes(chainId)
   }
 
-  return isAnyTrustOrbitChain({
-    publicClient: parentChainClient as any,
-    rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
-  })
+  try {
+    // Get the latest batch if possible
+    const latestBlockNumber = await parentChainClient.getBlockNumber()
+    const toBlock = latestBlockNumber
+    const fromBlock = toBlock - 100n
+
+    // Get sequencer inbox logs
+    const logs = await parentChainClient.getLogs({
+      address: childChainInformation.ethBridge.sequencerInbox as `0x${string}`,
+      event: sequencerBatchDeliveredEventAbi,
+      fromBlock,
+      toBlock,
+    })
+
+    if (logs.length === 0) {
+      // If no logs found, fall back to using the SDK method
+      return isAnyTrustOrbitChain({
+        publicClient: parentChainClient as any,
+        rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
+      }).catch(() => false)
+    }
+
+    // Get the transaction that emitted the log
+    const transaction = await parentChainClient.getTransaction({
+      hash: logs[0].transactionHash as `0x${string}`,
+    })
+
+    // Decode the function data
+    const { args } = decodeFunctionData({
+      abi: sequencerInboxAbi,
+      data: transaction.input,
+    })
+
+    // Extract the 'data' field and check its first byte
+    const batchData = args[1] as `0x${string}`
+    const firstByte = batchData.slice(0, 4)
+
+    // 0x88 indicates AnyTrust DACert format
+    return firstByte === '0x88'
+  } catch (error) {
+    // Fall back to the SDK method if our direct check fails
+    try {
+      return await isAnyTrustOrbitChain({
+        publicClient: parentChainClient as any,
+        rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
+      })
+    } catch {
+      return false
+    }
+  }
 }
 
 const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
@@ -587,7 +633,8 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   }
 
   // Get the latest log
-  const lastSequencerInboxLog = sequencerInboxLogs.pop()
+  const lastSequencerInboxLog =
+    sequencerInboxLogs[sequencerInboxLogs.length - 1]
 
   const isChainAnyTrust = await isAnyTrust(
     childChainInformation,
