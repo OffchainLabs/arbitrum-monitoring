@@ -40,6 +40,9 @@ import {
   getExplorerUrlPrefixes,
 } from '../utils'
 
+import { syncTicketToNotion } from './notion/syncTicket';
+
+
 // Path for the log file
 const logFilePath = 'logfile.log'
 
@@ -166,17 +169,32 @@ const processChildChain = async (
     },
     parentChainProvider: providers.Provider
   ) => {
+    console.log(
+      `[Debug] Fetching MessageDelivered events from block ${filter.fromBlock} to ${filter.toBlock}`
+    )
     const eventFetcher = new EventFetcher(parentChainProvider)
     const logs = await eventFetcher.getEvents(
       Bridge__factory,
       (g: any) => g.filters.MessageDelivered(),
       { ...filter, address: parentBridgeAddress }
     )
+    console.log(`[Debug] Total MessageDelivered logs fetched: ${logs.length}`)
+    if (logs.length > 0) {
+      console.log('[Debug] First raw log event sample:', logs[0])
+      console.log(
+        `[Debug] First log event.kind: ${logs[0]?.event?.kind}, typeof kind: ${typeof logs[0]?.event?.kind}`
+      )
+    }
+
 
     // Filter logs where event.kind is equal to 9
     // https://github.com/OffchainLabs/nitro-contracts/blob/38a70a5e14f8b52478eb5db08e7551a82ced14fe/src/libraries/MessageTypes.sol#L9
     const filteredLogs = logs.filter(log => log.event.kind === 9)
 
+
+    console.log(
+      `[Debug] Filtered MessageDelivered logs (kind === 9): ${filteredLogs.length}`
+    )
     return filteredLogs
   }
 
@@ -378,6 +396,9 @@ const processChildChain = async (
     fromBlock: number,
     toBlock: number
   ): Promise<boolean> => {
+    console.log(`[Debug] checkRetryables called with fromBlock=${fromBlock}, toBlock=${toBlock}`)
+  console.log('[Debug] Using parentBridgeAddress:', bridgeAddress) // ✅ Add this line
+
     const messageDeliveredLogs = await getMessageDeliveredEventData(
       bridgeAddress,
       { fromBlock, toBlock },
@@ -429,68 +450,62 @@ const processChildChain = async (
         for (let msgIndex = 0; msgIndex < retryables.length; msgIndex++) {
           const retryableMessage = retryables[msgIndex]
           const retryableTicketId = retryableMessage.retryableCreationId
-          let status = await retryableMessage.status()
-
-          // if a Retryable is not in a successful state, extract it's details
-          if (status !== ParentToChildMessageStatus.REDEEMED) {
-            // report the ticket only if `enableAlerting` flag is on
-            if (options.enableAlerting) {
-              const childChainTx = await childChainProvider.getTransaction(
-                retryableTicketId
-              )
-              const childChainTxReceipt =
-                await childChainProvider.getTransactionReceipt(
-                  retryableMessage.retryableCreationId
-                )
-
-              if (!childChainTxReceipt) {
-                // if child-chain tx is very recent, the tx receipt might not be found yet
-                // if not handled, this will result in `undefined` error while trying to extract retryable details
-                const resultMessage = `${msgIndex + 1}. ${
-                  ParentToChildMessageStatus[status]
-                }:\nChildChainTxHash: ${
-                  CHILD_CHAIN_TX_PREFIX + retryableTicketId
-                } (Receipt not found yet)`
-                logResult(childChain.name, resultMessage)
-
-                continue
-              }
-
-              const parentChainTicketReport = getParentChainTicketReport(
-                arbParentTxReceipt,
-                retryableMessage
-              )
-              const childChainTicketReport = await getChildChainTicketReport({
-                retryableMessage,
-                childChainTx,
-                childChainTxReceipt,
-              })
-              const tokenDepositData = await getTokenDepositData({
-                childChainTx,
-                retryableMessage,
-                arbParentTxReceipt,
-                depositsInitiatedLogs,
-              })
-
-              // report the unsuccessful ticket to the alerting system
-              await reportFailedTicket({
-                parentChainTicketReport,
-                childChainTicketReport,
-                tokenDepositData,
-                childChain,
-              })
-            }
+          const status = await retryableMessage.status()
+        
+          console.log(`[Monitor] Ticket ${retryableTicketId} status: ${status}`)
+        
+          const childChainTx = await childChainProvider.getTransaction(retryableTicketId)
+          const childChainTxReceipt = await childChainProvider.getTransactionReceipt(retryableTicketId)
+        
+          if (!childChainTxReceipt) {
+            const resultMessage = `${msgIndex + 1}. ${ParentToChildMessageStatus[status]}:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId} (Receipt not found yet)`
+            logResult(childChain.name, resultMessage)
+            continue
           }
-
-          // format the result message
-          const resultMessage = `${msgIndex + 1}. ${
-            ParentToChildMessageStatus[status]
-          }:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
+        
+          const childChainTicketReport = await getChildChainTicketReport({
+            retryableMessage,
+            childChainTx,
+            childChainTxReceipt,
+          })
+        
+          console.log(`[Notion] Syncing ticket to Notion:`, {
+            ticketId: retryableMessage.retryableCreationId,
+            l1TxHash: parentTxReceipt.transactionHash,
+            target: retryableMessage.messageData.destAddress,
+            createdAt: Number(childChainTicketReport.createdAtTimestamp) * 1000,
+          });
+          await syncTicketToNotion({
+            ticketId: retryableMessage.retryableCreationId,
+            l1TxHash: parentTxReceipt.transactionHash,
+            target: retryableMessage.messageData.destAddress,
+            createdAt: Number(childChainTicketReport.createdAtTimestamp) * 1000,
+          })
+        
+          if (status !== ParentToChildMessageStatus.REDEEMED && options.enableAlerting) {
+            const parentChainTicketReport = getParentChainTicketReport(
+              arbParentTxReceipt,
+              retryableMessage
+            )
+        
+            const tokenDepositData = await getTokenDepositData({
+              childChainTx,
+              retryableMessage,
+              arbParentTxReceipt,
+              depositsInitiatedLogs,
+            })
+        
+            await reportFailedTicket({
+              parentChainTicketReport,
+              childChainTicketReport,
+              tokenDepositData,
+              childChain,
+            })
+          }
+        
+          const resultMessage = `${msgIndex + 1}. ${ParentToChildMessageStatus[status]}:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
           logResult(childChain.name, resultMessage)
-
-          console.log(
-            '----------------------------------------------------------'
-          )
+          console.log('----------------------------------------------------------')
         }
         retryablesFound = true // Set to true if retryables are found
       }
