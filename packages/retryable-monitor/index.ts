@@ -39,27 +39,21 @@ import {
   getConfig,
   getExplorerUrlPrefixes,
 } from '../utils'
+import { syncTicketToNotion } from './notion/syncTicket'
 
-import { syncTicketToNotion } from './notion/syncTicket';
-
-
-// Path for the log file
 const logFilePath = 'logfile.log'
 
-// Check if the log file exists, if not, create it
 try {
   fs.accessSync(logFilePath)
 } catch (error) {
   try {
     fs.writeFileSync(logFilePath, '')
-    console.log(`Log file created: ${logFilePath}`)
   } catch (createError) {
     console.error(`Error creating log file: ${(createError as Error).message}`)
     process.exit(1)
   }
 }
 
-// Configure Winston logger
 const logger = winston.createLogger({
   format: winston.format.simple(),
   transports: [
@@ -68,29 +62,14 @@ const logger = winston.createLogger({
   ],
 })
 
-// Function to log results with chainName
 const logResult = (chainName: string, message: string) => {
   logger.info(`[${chainName}] ${message}`)
 }
 
 const getParentChainBlockTime = (childChain: ChildNetwork) => {
   const parentChainId = childChain.parentChainId
-
-  // for Ethereum / Sepolia / Holesky
-  if (
-    parentChainId === 1 ||
-    parentChainId === 11155111 ||
-    parentChainId === 17000
-  ) {
-    return 12
-  }
-
-  // for Base / Base Sepolia
-  if (parentChainId === 8453 || parentChainId === 84532) {
-    return 2
-  }
-
-  // for arbitrum networks, return the standard block time
+  if ([1, 11155111, 17000].includes(parentChainId)) return 12
+  if ([8453, 84532].includes(parentChainId)) return 2
   return ARB_MINIMUM_BLOCK_TIME_IN_SECONDS
 }
 
@@ -103,7 +82,6 @@ const networkIsRegistered = (networkId: number) => {
   }
 }
 
-// Parsing command line arguments using yargs
 const options: FindRetryablesOptions = yargs(process.argv.slice(2))
   .options({
     fromBlock: { type: 'number', default: 0 },
@@ -117,14 +95,10 @@ const options: FindRetryablesOptions = yargs(process.argv.slice(2))
 
 const config = getConfig({ configPath: options.configPath })
 
-// Function to process a child chain and check for retryable transactions
 const processChildChain = async (
   childChain: ChildNetwork,
   options: FindRetryablesOptions
 ) => {
-  console.log('----------------------------------------------------------')
-  console.log(`Running for Chain: ${childChain.name}`)
-  console.log('----------------------------------------------------------')
   if (!networkIsRegistered(childChain.chainId)) {
     registerCustomArbitrumNetwork(childChain)
   }
@@ -139,7 +113,6 @@ const processChildChain = async (
 
   let retryablesFound: boolean = false
 
-  // get deposit initiated event data
   const getDepositInitiatedEventData = async (
     parentChainGatewayAddress: string,
     filter: {
@@ -149,18 +122,15 @@ const processChildChain = async (
     parentChainProvider: providers.Provider
   ) => {
     const eventFetcher = new EventFetcher(parentChainProvider)
-    const logs = await eventFetcher.getEvents<
+    return await eventFetcher.getEvents<
       L1ERC20Gateway,
       DepositInitiatedEvent
     >(L1ERC20Gateway__factory, (g: any) => g.filters.DepositInitiated(), {
       ...filter,
       address: parentChainGatewayAddress,
     })
-
-    return logs
   }
 
-  // Function to get MessageDelivered events from the parent chain
   const getMessageDeliveredEventData = async (
     parentBridgeAddress: string,
     filter: {
@@ -169,72 +139,36 @@ const processChildChain = async (
     },
     parentChainProvider: providers.Provider
   ) => {
-    console.log(
-      `[Debug] Fetching MessageDelivered events from block ${filter.fromBlock} to ${filter.toBlock}`
-    )
     const eventFetcher = new EventFetcher(parentChainProvider)
     const logs = await eventFetcher.getEvents(
       Bridge__factory,
       (g: any) => g.filters.MessageDelivered(),
       { ...filter, address: parentBridgeAddress }
     )
-    console.log(`[Debug] Total MessageDelivered logs fetched: ${logs.length}`)
-    if (logs.length > 0) {
-      console.log('[Debug] First raw log event sample:', logs[0])
-      console.log(
-        `[Debug] First log event.kind: ${logs[0]?.event?.kind}, typeof kind: ${typeof logs[0]?.event?.kind}`
-      )
-    }
-
-
-    // Filter logs where event.kind is equal to 9
-    // https://github.com/OffchainLabs/nitro-contracts/blob/38a70a5e14f8b52478eb5db08e7551a82ced14fe/src/libraries/MessageTypes.sol#L9
-    const filteredLogs = logs.filter(log => log.event.kind === 9)
-
-
-    console.log(
-      `[Debug] Filtered MessageDelivered logs (kind === 9): ${filteredLogs.length}`
-    )
-    return filteredLogs
+    return logs.filter(log => log.event.kind === 9)
   }
 
-  const MAX_BLOCKS_TO_PROCESS = 5000 // event_logs can only be processed in batches of MAX_BLOCKS_TO_PROCESS blocks
+  const MAX_BLOCKS_TO_PROCESS = 5000
 
-  // Function to check retryable transactions in a specific block range
   const checkRetryablesOneOff = async (
     fromBlock: number,
     toBlock: number
   ): Promise<number> => {
     if (toBlock === 0) {
-      try {
-        const currentBlock = await parentChainProvider.getBlockNumber()
-        if (!currentBlock) {
-          throw new Error('Failed to retrieve the latest block.')
-        }
-        toBlock = currentBlock
-
-        // if no `fromBlock` or `toBlock` is provided, monitor for 14 days worth of blocks only
-        // only enforce `fromBlock` check if we want to report the ticket to the alerting system
-        if (fromBlock === 0 && options.enableAlerting) {
-          fromBlock =
-            toBlock -
-            (2 * SEVEN_DAYS_IN_SECONDS) / getParentChainBlockTime(childChain)
-          logResult(
-            childChain.name,
-            `Alerting mode enabled: limiting block-range to last 14 days [${fromBlock} to ${toBlock}]`
-          )
-        }
-      } catch (error) {
-        console.error(
-          `Error getting the latest block: ${(error as Error).message}`
+      const currentBlock = await parentChainProvider.getBlockNumber()
+      if (!currentBlock) throw new Error('Failed to retrieve the latest block.')
+      toBlock = currentBlock
+      if (fromBlock === 0 && options.enableAlerting) {
+        fromBlock =
+          toBlock -
+          (2 * SEVEN_DAYS_IN_SECONDS) / getParentChainBlockTime(childChain)
+        logResult(
+          childChain.name,
+          `Alerting mode enabled: limiting block-range to last 14 days [${fromBlock} to ${toBlock}]`
         )
-        throw error
       }
     }
 
-    // if the block range provided is >=MAX_BLOCKS_TO_PROCESS, we might get rate limited while fetching logs from the node
-    // so we break down the range into smaller chunks and process them sequentially
-    // generate the final ranges' batches to process [ [fromBlock, toBlock], [fromBlock, toBlock], ...]
     const ranges = []
     for (let i = fromBlock; i <= toBlock; i += MAX_BLOCKS_TO_PROCESS) {
       ranges.push([i, Math.min(i + MAX_BLOCKS_TO_PROCESS - 1, toBlock)])
@@ -248,7 +182,7 @@ const processChildChain = async (
           childChain.ethBridge.bridge,
           range[0],
           range[1]
-        )) || retryablesFound // the final `retryablesFound` value is the OR of all the `retryablesFound` for ranges
+        )) || retryablesFound
     }
 
     return toBlock
@@ -257,14 +191,12 @@ const processChildChain = async (
   const getParentChainTicketReport = (
     arbParentTxReceipt: ParentTransactionReceipt,
     retryableMessage: ParentToChildMessageReader
-  ): ParentChainTicketReport => {
-    return {
-      id: arbParentTxReceipt.transactionHash,
-      transactionHash: arbParentTxReceipt.transactionHash,
-      sender: arbParentTxReceipt.from,
-      retryableTicketID: retryableMessage.retryableCreationId,
-    }
-  }
+  ): ParentChainTicketReport => ({
+    id: arbParentTxReceipt.transactionHash,
+    transactionHash: arbParentTxReceipt.transactionHash,
+    sender: arbParentTxReceipt.from,
+    retryableTicketID: retryableMessage.retryableCreationId,
+  })
 
   const getChildChainTicketReport = async ({
     childChainTx,
@@ -276,27 +208,23 @@ const processChildChain = async (
     retryableMessage: ParentToChildMessageReader
   }): Promise<ChildChainTicketReport> => {
     let status = await retryableMessage.status()
-
     const timestamp = (
       await childChainProvider.getBlock(childChainTxReceipt.blockNumber)
     ).timestamp
-
-    const childChainTicketReport = {
+    return {
       id: retryableMessage.retryableCreationId,
       retryTxHash: (await retryableMessage.getAutoRedeemAttempt())
         ?.transactionHash,
       createdAtTimestamp: String(timestamp),
       createdAtBlockNumber: childChainTxReceipt.blockNumber,
       timeoutTimestamp: String(Number(timestamp) + SEVEN_DAYS_IN_SECONDS),
-      deposit: String(retryableMessage.messageData.l2CallValue), // eth amount
+      deposit: String(retryableMessage.messageData.l2CallValue),
       status: ParentToChildMessageStatus[status],
       retryTo: retryableMessage.messageData.destAddress,
       retryData: retryableMessage.messageData.data,
       gasFeeCap: (childChainTx.maxFeePerGas ?? BigNumber.from(0)).toNumber(),
       gasLimit: childChainTx.gasLimit.toNumber(),
     }
-
-    return childChainTicketReport
   }
 
   const getTokenDepositData = async ({
@@ -315,17 +243,14 @@ const processChildChain = async (
       tokenDepositData: TokenDepositData | undefined
 
     try {
-      const retryableMessageData = childChainTx.data
-      const retryableBody = retryableMessageData.split('0xc9f95d32')[1]
+      const retryableBody = childChainTx.data.split('0xc9f95d32')[1]
       const requestId = '0x' + retryableBody.slice(0, 64)
       const depositsInitiatedEvent = depositsInitiatedLogs.find(
         log => log.topics[3] === requestId
       )
       parentChainErc20Address = depositsInitiatedEvent?.event[0]
       tokenAmount = depositsInitiatedEvent?.event[4]?.toString()
-    } catch (e) {
-      console.log(e)
-    }
+    } catch (_) {}
 
     if (parentChainErc20Address) {
       try {
@@ -347,9 +272,7 @@ const processChildChain = async (
             id: parentChainErc20Address,
           },
         }
-      } catch (e) {
-        console.log('failed to fetch token data', e)
-      }
+      } catch (_) {}
     }
 
     return tokenDepositData
@@ -364,29 +287,16 @@ const processChildChain = async (
     toBlock: number
     parentChainProvider: Provider
   }) => {
-    const [
-      depositsInitiatedLogsL1Erc20Gateway,
-      depositsInitiatedLogsL1CustomGateway,
-      depositsInitiatedLogsL1WethGateway,
-    ] = await Promise.all(
+    const [a, b, c] = await Promise.all(
       [
         childChain.tokenBridge!.parentErc20Gateway,
         childChain.tokenBridge!.parentCustomGateway,
         childChain.tokenBridge!.parentWethGateway,
-      ].map(gatewayAddress => {
-        return getDepositInitiatedEventData(
-          gatewayAddress,
-          { fromBlock, toBlock },
-          parentChainProvider
-        )
-      })
+      ].map(addr =>
+        getDepositInitiatedEventData(addr, { fromBlock, toBlock }, parentChainProvider)
+      )
     )
-
-    return [
-      ...depositsInitiatedLogsL1Erc20Gateway,
-      ...depositsInitiatedLogsL1CustomGateway,
-      ...depositsInitiatedLogsL1WethGateway,
-    ]
+    return [...a, ...b, ...c]
   }
 
   const checkRetryables = async (
@@ -396,29 +306,21 @@ const processChildChain = async (
     fromBlock: number,
     toBlock: number
   ): Promise<boolean> => {
-    console.log(`[Debug] checkRetryables called with fromBlock=${fromBlock}, toBlock=${toBlock}`)
-  console.log('[Debug] Using parentBridgeAddress:', bridgeAddress) // ✅ Add this line
-
     const messageDeliveredLogs = await getMessageDeliveredEventData(
       bridgeAddress,
       { fromBlock, toBlock },
       parentChainProvider
     )
-
-    // used for finding the token-details associated with a deposit, if any
     const depositsInitiatedLogs = await getDepositInitiatedLogs({
       fromBlock,
       toBlock,
       parentChainProvider,
     })
 
-    const uniqueTxHashes = new Set<string>()
-    for (let messageDeliveredLog of messageDeliveredLogs) {
-      const { transactionHash: parentTxHash } = messageDeliveredLog
-      uniqueTxHashes.add(parentTxHash)
-    }
+    const uniqueTxHashes = new Set(
+      messageDeliveredLogs.map(log => log.transactionHash)
+    )
 
-    // for each parent-chain-transaction found, extract the Retryables thus created by it
     for (const parentTxHash of uniqueTxHashes) {
       const parentTxReceipt = await parentChainProvider.getTransactionReceipt(
         parentTxHash
@@ -436,65 +338,55 @@ const processChildChain = async (
           childChain.name,
           `${retryables.length} retryable${
             retryables.length === 1 ? '' : 's'
-          } found for ${
-            childChain.name
-          } chain. Checking their status:\n\nParentChainTxHash: ${
+          } found for ${childChain.name}. Checking their status:\n\nParentChainTxHash: ${
             PARENT_CHAIN_TX_PREFIX + parentTxHash
           }`
         )
-        console.log(
-          '----------------------------------------------------------'
-        )
 
-        // for each retryable, extract the detail for it's status / redemption
         for (let msgIndex = 0; msgIndex < retryables.length; msgIndex++) {
           const retryableMessage = retryables[msgIndex]
-          const retryableTicketId = retryableMessage.retryableCreationId
           const status = await retryableMessage.status()
-        
-          console.log(`[Monitor] Ticket ${retryableTicketId} status: ${status}`)
-        
-          const childChainTx = await childChainProvider.getTransaction(retryableTicketId)
-          const childChainTxReceipt = await childChainProvider.getTransactionReceipt(retryableTicketId)
-        
+          const childChainTx = await childChainProvider.getTransaction(
+            retryableMessage.retryableCreationId
+          )
+          const childChainTxReceipt = await childChainProvider.getTransactionReceipt(
+            retryableMessage.retryableCreationId
+          )
+
           if (!childChainTxReceipt) {
-            const resultMessage = `${msgIndex + 1}. ${ParentToChildMessageStatus[status]}:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId} (Receipt not found yet)`
+            const resultMessage = `${msgIndex + 1}. ${ParentToChildMessageStatus[status]}:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableMessage.retryableCreationId} (Receipt not found yet)`
             logResult(childChain.name, resultMessage)
             continue
           }
-        
+
           const childChainTicketReport = await getChildChainTicketReport({
             retryableMessage,
             childChainTx,
             childChainTxReceipt,
           })
-        
-          console.log(`[Notion] Syncing ticket to Notion:`, {
-            ticketId: retryableMessage.retryableCreationId,
-            l1TxHash: parentTxReceipt.transactionHash,
-            target: retryableMessage.messageData.destAddress,
-            createdAt: Number(childChainTicketReport.createdAtTimestamp) * 1000,
-          });
+
           await syncTicketToNotion({
             ticketId: retryableMessage.retryableCreationId,
             l1TxHash: parentTxReceipt.transactionHash,
             target: retryableMessage.messageData.destAddress,
             createdAt: Number(childChainTicketReport.createdAtTimestamp) * 1000,
           })
-        
-          if (status !== ParentToChildMessageStatus.REDEEMED && options.enableAlerting) {
+
+          if (
+            status !== ParentToChildMessageStatus.REDEEMED &&
+            options.enableAlerting
+          ) {
             const parentChainTicketReport = getParentChainTicketReport(
               arbParentTxReceipt,
               retryableMessage
             )
-        
             const tokenDepositData = await getTokenDepositData({
               childChainTx,
               retryableMessage,
               arbParentTxReceipt,
               depositsInitiatedLogs,
             })
-        
+
             await reportFailedTicket({
               parentChainTicketReport,
               childChainTicketReport,
@@ -502,19 +394,17 @@ const processChildChain = async (
               childChain,
             })
           }
-        
-          const resultMessage = `${msgIndex + 1}. ${ParentToChildMessageStatus[status]}:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableTicketId}`
+
+          const resultMessage = `${msgIndex + 1}. ${ParentToChildMessageStatus[status]}:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableMessage.retryableCreationId}`
           logResult(childChain.name, resultMessage)
-          console.log('----------------------------------------------------------')
         }
-        retryablesFound = true // Set to true if retryables are found
+        retryablesFound = true
       }
     }
 
     return retryablesFound
   }
 
-  // Function to continuously check retryable transactions
   const checkRetryablesContinuous = async (
     fromBlock: number,
     toBlock: number
@@ -523,31 +413,21 @@ const processChildChain = async (
     let isContinuous = options.continuous
     const startTime = Date.now()
 
-    // Function to process blocks and check for retryables
     const processBlocks = async () => {
       const lastBlockChecked = await checkRetryablesOneOff(fromBlock, toBlock)
-      console.log('Check completed for block:', lastBlockChecked)
       fromBlock = lastBlockChecked + 1
-      console.log('Continuing from block:', fromBlock)
-
       toBlock = await parentChainProvider.getBlockNumber()
-      console.log(`Processed blocks up to ${lastBlockChecked}`)
-
       return lastBlockChecked
     }
 
-    // Continuous loop for checking retryables
     while (isContinuous) {
       const lastBlockChecked = await processBlocks()
-
       if (lastBlockChecked >= toBlock) {
-        // Wait for a short interval before checking again
         await new Promise(resolve => setTimeout(resolve, 1000))
       }
-
-      const currentTime = Date.now()
-      const elapsedTimeInSeconds = Math.floor((currentTime - startTime) / 1000)
-
+      const elapsedTimeInSeconds = Math.floor(
+        (Date.now() - startTime) / 1000
+      )
       if (elapsedTimeInSeconds >= processingDurationInSeconds) {
         isContinuous = false
       }
@@ -555,49 +435,28 @@ const processChildChain = async (
   }
 
   if (options.continuous) {
-    console.log('Continuous mode activated.')
     await checkRetryablesContinuous(options.fromBlock, options.toBlock)
   } else {
-    console.log('One-off mode activated.')
     await checkRetryablesOneOff(options.fromBlock, options.toBlock)
-    // Log a message if no retryables were found for the child chain
     if (!retryablesFound) {
-      console.log(`No retryables found for ${childChain.name}`)
-      console.log('----------------------------------------------------------')
+      logResult(childChain.name, `No retryables found for ${childChain.name}`)
     }
   }
 }
 
-// Function to process multiple child chains concurrently
 const processOrbitChainsConcurrently = async () => {
-  // log the chains being processed for better debugging in github actions
-  console.log(
-    '>>>>>> Processing child chains: ',
-    config.childChains.map((childChain: ChildNetwork) => ({
-      name: childChain.name,
-      chainID: childChain.chainId,
-      orbitRpcUrl: childChain.orbitRpcUrl,
-      parentRpcUrl: childChain.parentRpcUrl,
-    }))
-  )
-
   const promises = config.childChains.map(async (childChain: ChildNetwork) => {
     try {
       return await processChildChain(childChain, options)
     } catch (e) {
       const errorStr = `Retryable monitor - Error processing chain [${childChain.name}]: ${e.message}`
       if (options.enableAlerting) {
-        reportRetryableErrorToSlack({
-          message: errorStr,
-        })
+        reportRetryableErrorToSlack({ message: errorStr })
       }
       console.error(errorStr)
     }
   })
-
-  // keep running the script until we get resolution (success or error) for all the chains
   await Promise.allSettled(promises)
 }
 
-// Start processing child chains concurrently
 processOrbitChainsConcurrently()
