@@ -330,8 +330,10 @@ const processChildChain = async (
         childChainProvider
       )
 
-      const { PARENT_CHAIN_TX_PREFIX, CHILD_CHAIN_TX_PREFIX } =
-        getExplorerUrlPrefixes(childChain)
+      const {
+        PARENT_CHAIN_TX_PREFIX,
+        CHILD_CHAIN_TX_PREFIX,
+      } = getExplorerUrlPrefixes(childChain)
 
       if (retryables.length > 0) {
         logResult(
@@ -354,7 +356,7 @@ const processChildChain = async (
           )
 
           if (!childChainTxReceipt) {
-            const resultMessage = `${msgIndex + 1}. ${ParentToChildMessageStatus[status]}:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableMessage.retryableCreationId} (Receipt not found yet)`
+            const resultMessage = `${msgIndex + 1}. ${ParentToChildMessageStatus[status]}:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}} (Receipt not found yet)`
             logResult(childChain.name, resultMessage)
             continue
           }
@@ -365,11 +367,18 @@ const processChildChain = async (
             childChainTxReceipt,
           })
 
-          await syncTicketToNotion({
-            ticketId: retryableMessage.retryableCreationId,
-            l1TxHash: parentTxReceipt.transactionHash,
+          const ticket = await syncTicketToNotion({
+            childChainTxHash: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
+            parentChainTxHash: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
             target: retryableMessage.messageData.destAddress,
             createdAt: Number(childChainTicketReport.createdAtTimestamp) * 1000,
+            status: 'Untriaged',
+            priority: 'Unset',
+            metadata: {
+              deposit: childChainTicketReport.deposit,
+              gasFeeCap: childChainTicketReport.gasFeeCap,
+              gasLimit: childChainTicketReport.gasLimit,
+            }
           })
 
           if (
@@ -395,7 +404,7 @@ const processChildChain = async (
             })
           }
 
-          const resultMessage = `${msgIndex + 1}. ${ParentToChildMessageStatus[status]}:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX + retryableMessage.retryableCreationId}`
+          const resultMessage = `${msgIndex + 1}. ${ParentToChildMessageStatus[status]}:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}}`
           logResult(childChain.name, resultMessage)
         }
         retryablesFound = true
