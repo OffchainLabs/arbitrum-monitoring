@@ -43,6 +43,7 @@ import {
 import { syncTicketToNotion } from './notion/syncTicket'
 import { getTokenPrice } from './reportRetryables'
 import { getGasInfo } from './reportRetryables'
+import { formatL2Callvalue } from './reportRetryables'
 
 const logFilePath = 'logfile.log'
 
@@ -370,6 +371,17 @@ const processChildChain = async (
             childChainTxReceipt,
           })
 
+          const formattedCallValueFull = await formatL2Callvalue(
+            childChainTicketReport,
+            childChain,
+            parentChainProvider
+          )
+
+
+          const l2CallValueFormatted = formattedCallValueFull
+  .replace('\n\t *Child chain callvalue:* ', '')
+  .trim()
+
           // Already in your code
 const tokenDepositData = await getTokenDepositData({
   childChainTx,
@@ -395,7 +407,6 @@ if (tokenDepositData?.tokenAmount && tokenDepositData?.l1Token) {
 const {
   l2GasPrice,
   l2GasPriceAtCreation,
-  redeemEstimate,
 } = await getGasInfo(
   childChainTicketReport.createdAtBlockNumber,
   retryableMessage.retryableCreationId,
@@ -409,7 +420,7 @@ const gasPriceAtCreation = l2GasPriceAtCreation
 const gasPriceNow = `${ethers.utils.formatUnits(l2GasPrice, 'gwei')} gwei`
 
 
-  await syncTicketToNotion({
+await syncTicketToNotion({
   childChainTxHash: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
   parentChainTxHash: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
   target: retryableMessage.messageData.destAddress,
@@ -418,10 +429,11 @@ const gasPriceNow = `${ethers.utils.formatUnits(l2GasPrice, 'gwei')} gwei`
   priority: 'Unset',
   metadata: {
     deposit: childChainTicketReport.deposit,
-    ...(formattedTokenString && { tokensDeposited: formattedTokenString }),
+    tokensDeposited: formattedTokenString,
     gasPriceProvided,
     gasPriceAtCreation,
-    gasPriceNow
+    gasPriceNow,
+    l2CallValue: l2CallValueFormatted,
   },
 })
 

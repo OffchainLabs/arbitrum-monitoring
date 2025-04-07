@@ -223,7 +223,7 @@ const formatL2ExecutionTX = (
   }>`
 }
 
-const formatL2Callvalue = async (
+export const formatL2Callvalue = async (
   ticket: ChildChainTicketReport,
   childChain: ChildNetwork,
   parentChainProvider: Provider

@@ -15,6 +15,7 @@ interface SyncTicketInput {
         gasPriceProvided: string
         gasPriceAtCreation?: string
         gasPriceNow: string
+        l2CallValue: string
       }
   }
   
@@ -67,6 +68,9 @@ interface SyncTicketInput {
             rich_text: [{ text: { content: metadata.tokensDeposited } }],
           };
         }
+        notionProps['L2CallValue'] = {
+            rich_text: [{ text: { content: metadata.l2CallValue } }],
+          }
           
       }
   
