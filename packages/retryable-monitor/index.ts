@@ -420,22 +420,22 @@ const gasPriceAtCreation = l2GasPriceAtCreation
 const gasPriceNow = `${ethers.utils.formatUnits(l2GasPrice, 'gwei')} gwei`
 
 
-await syncTicketToNotion({
-  childChainTxHash: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
-  parentChainTxHash: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
-  target: retryableMessage.messageData.destAddress,
-  createdAt: Number(childChainTicketReport.createdAtTimestamp) * 1000,
-  status: 'Untriaged',
-  priority: 'Unset',
-  metadata: {
-    deposit: childChainTicketReport.deposit,
-    tokensDeposited: formattedTokenString,
-    gasPriceProvided,
-    gasPriceAtCreation,
-    gasPriceNow,
-    l2CallValue: l2CallValueFormatted,
-  },
-})
+if (status !== ParentToChildMessageStatus.REDEEMED) {
+  await syncTicketToNotion({
+    childChainTxHash: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
+    parentChainTxHash: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
+    createdAt: Number(childChainTicketReport.createdAtTimestamp) * 1000,
+    status: 'Untriaged',
+    priority: 'Unset',
+    metadata: {
+      tokensDeposited: formattedTokenString,
+      gasPriceProvided,
+      gasPriceAtCreation,
+      gasPriceNow,
+      l2CallValue: l2CallValueFormatted,
+    },
+  })
+}
 
   
 

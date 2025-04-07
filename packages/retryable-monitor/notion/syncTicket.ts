@@ -5,12 +5,10 @@ const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!;
 interface SyncTicketInput {
     childChainTxHash: string
     parentChainTxHash: string
-    target: string
     createdAt: number
     status?: 'Untriaged' | 'Investigating' | 'Resolved' | 'False Positive' | 'Expired'
     priority?: 'High' | 'Medium' | 'Low' | 'Unset'
     metadata?: {
-        deposit: string
         tokensDeposited?: string
         gasPriceProvided: string
         gasPriceAtCreation?: string
@@ -25,7 +23,6 @@ interface SyncTicketInput {
     const {
       childChainTxHash,
       parentChainTxHash,
-      target,
       createdAt,
       status = 'Untriaged',
       priority = 'Unset',
@@ -45,14 +42,12 @@ interface SyncTicketInput {
   
       const notionProps: Record<string, any> = {
         'parentChainTxHash': { rich_text: [{ text: { content: parentChainTxHash } }] },
-        'Target': { rich_text: [{ text: { content: target } }] },
         'CreatedAt': { date: { start: new Date(createdAt).toISOString() } },
         'Status': { select: { name: status } },
         'Priority': { select: { name: priority } },
       };
   
       if (metadata) {
-        notionProps['Deposit'] = { rich_text: [{ text: { content: metadata.deposit } }] };
         notionProps['Gas Price Provided'] = {
             rich_text: [{ text: { content: metadata.gasPriceProvided } }],
           }
