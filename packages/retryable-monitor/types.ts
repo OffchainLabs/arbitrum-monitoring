@@ -5,6 +5,7 @@ export type FindRetryablesOptions = {
   continuous: boolean
   configPath: string
   enableAlerting: boolean
+  writeToNotion?: boolean
 }
 
 export interface ParentChainTicketReport {
