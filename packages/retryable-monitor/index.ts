@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import yargs from 'yargs'
+import { ethers } from 'ethers'
 import winston from 'winston'
 import { BigNumber, providers } from 'ethers'
 import {
@@ -41,6 +42,7 @@ import {
 } from '../utils'
 import { syncTicketToNotion } from './notion/syncTicket'
 import { getTokenPrice } from './reportRetryables'
+import { getGasInfo } from './reportRetryables'
 
 const logFilePath = 'logfile.log'
 
@@ -390,7 +392,24 @@ if (tokenDepositData?.tokenAmount && tokenDepositData?.l1Token) {
 
   formattedTokenString = `${humanAmount.toFixed(6)} ${symbol} ($${usdValue.toFixed(2)}) (${address})`
 }
-await syncTicketToNotion({
+const {
+  l2GasPrice,
+  l2GasPriceAtCreation,
+  redeemEstimate,
+} = await getGasInfo(
+  childChainTicketReport.createdAtBlockNumber,
+  retryableMessage.retryableCreationId,
+  childChainProvider
+)
+
+const gasPriceProvided = `${ethers.utils.formatUnits(childChainTicketReport.gasFeeCap, 'gwei')} gwei`
+const gasPriceAtCreation = l2GasPriceAtCreation
+  ? `${ethers.utils.formatUnits(l2GasPriceAtCreation, 'gwei')} gwei`
+  : undefined
+const gasPriceNow = `${ethers.utils.formatUnits(l2GasPrice, 'gwei')} gwei`
+
+
+  await syncTicketToNotion({
   childChainTxHash: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
   parentChainTxHash: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
   target: retryableMessage.messageData.destAddress,
@@ -399,11 +418,14 @@ await syncTicketToNotion({
   priority: 'Unset',
   metadata: {
     deposit: childChainTicketReport.deposit,
-    gasFeeCap: childChainTicketReport.gasFeeCap,
-    gasLimit: childChainTicketReport.gasLimit,
     ...(formattedTokenString && { tokensDeposited: formattedTokenString }),
+    gasPriceProvided,
+    gasPriceAtCreation,
+    gasPriceNow
   },
 })
+
+  
 
 
 

@@ -10,18 +10,19 @@ interface SyncTicketInput {
     status?: 'Untriaged' | 'Investigating' | 'Resolved' | 'False Positive' | 'Expired'
     priority?: 'High' | 'Medium' | 'Low' | 'Unset'
     metadata?: {
-      deposit: string
-      gasFeeCap: number
-      gasLimit: number
-      tokensDeposited?: string // ✅ add this optional field
-    }
+        deposit: string
+        tokensDeposited?: string
+        gasPriceProvided: string
+        gasPriceAtCreation?: string
+        gasPriceNow: string
+      }
   }
   
   export async function syncTicketToNotion(input: SyncTicketInput): Promise<{ id: string; status: string } | undefined> {
     if (!process.env.RETRYABLE_MONITORING_ENABLE_TRIAGE) return;
   
     const {
-        childChainTxHash,
+      childChainTxHash,
       parentChainTxHash,
       target,
       createdAt,
@@ -51,13 +52,25 @@ interface SyncTicketInput {
   
       if (metadata) {
         notionProps['Deposit'] = { rich_text: [{ text: { content: metadata.deposit } }] };
-        notionProps['GasFeeCap'] = { number: metadata.gasFeeCap };
-        notionProps['GasLimit'] = { number: metadata.gasLimit };
+        notionProps['Gas Price Provided'] = {
+            rich_text: [{ text: { content: metadata.gasPriceProvided } }],
+          }
+          notionProps['Gas Price At Creation'] = {
+            rich_text: [{ text: { content: metadata.gasPriceAtCreation ?? 'N/A' } }],
+          }
+          notionProps['Gas Price Now'] = {
+            rich_text: [{ text: { content: metadata.gasPriceNow } }],
+          }
+          
         if (metadata.tokensDeposited) {
-          notionProps['TokensDeposited'] = { rich_text: [{ text: { content: metadata.tokensDeposited } }] }
+          notionProps['TokensDeposited'] = {
+            rich_text: [{ text: { content: metadata.tokensDeposited } }],
+          };
         }
+          
       }
   
+      
       if (search.results.length > 0) {
         const pageId = search.results[0].id;
         await notion.pages.update({
@@ -77,7 +90,6 @@ interface SyncTicketInput {
       }
     } catch (err) {
       console.error('❌ Failed to sync ticket to Notion:', err);
-      return undefined; // 🧼 make sure something is always returned
+      return undefined;
     }
   }
-  
