@@ -516,10 +516,12 @@ const processChildChain = async (
             options.writeToNotion
           ) {
             await syncTicketToNotion({
-              childChainTxHash: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
-              parentChainTxHash: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
+              ChildTx: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
+              ParentTx: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
               createdAt:
                 Number(childChainTicketReport.createdAtTimestamp) * 1000,
+              timeout: Number(childChainTicketReport.timeoutTimestamp) * 1000,
+  
               status: 'Untriaged',
               priority: 'Unset',
               metadata: {

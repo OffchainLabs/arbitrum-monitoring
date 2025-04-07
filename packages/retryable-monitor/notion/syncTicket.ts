@@ -3,9 +3,10 @@ import { notion } from './notionClient';
 const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!;
 
 interface SyncTicketInput {
-    childChainTxHash: string
-    parentChainTxHash: string
+    ChildTx: string
+    ParentTx: string
     createdAt: number
+    timeout?: number
     status?: 'Untriaged' | 'Investigating' | 'Resolved' | 'False Positive' | 'Expired'
     priority?: 'High' | 'Medium' | 'Low' | 'Unset'
     metadata?: {
@@ -21,9 +22,10 @@ interface SyncTicketInput {
     if (!process.env.RETRYABLE_MONITORING_ENABLE_TRIAGE) return;
   
     const {
-      childChainTxHash,
-      parentChainTxHash,
+        ChildTx,
+        ParentTx,
       createdAt,
+      timeout,
       status = 'Untriaged',
       priority = 'Unset',
       metadata,
@@ -33,28 +35,33 @@ interface SyncTicketInput {
       const search = await notion.databases.query({
         database_id: databaseId,
         filter: {
-          property: 'childChainTxHash',
+          property: 'ChildTx',
           rich_text: {
-            equals: childChainTxHash,
+            equals: ChildTx,
           },
         },
       });
   
       const notionProps: Record<string, any> = {
-        'parentChainTxHash': { rich_text: [{ text: { content: parentChainTxHash } }] },
+        'ParentTx': { rich_text: [{ text: { content: ParentTx } }] },
         'CreatedAt': { date: { start: new Date(createdAt).toISOString() } },
         'Status': { select: { name: status } },
         'Priority': { select: { name: priority } },
       };
+      if (timeout) {
+        notionProps['timeout'] = {
+          date: { start: new Date(timeout).toISOString() },
+        };
+      }
   
       if (metadata) {
-        notionProps['Gas Price Provided'] = {
+        notionProps['GasPriceProvided'] = {
             rich_text: [{ text: { content: metadata.gasPriceProvided } }],
           }
-          notionProps['Gas Price At Creation'] = {
+          notionProps['GasPriceAtCreation'] = {
             rich_text: [{ text: { content: metadata.gasPriceAtCreation ?? 'N/A' } }],
           }
-          notionProps['Gas Price Now'] = {
+          notionProps['GasPriceNow'] = {
             rich_text: [{ text: { content: metadata.gasPriceNow } }],
           }
           
@@ -81,7 +88,7 @@ interface SyncTicketInput {
         const created = await notion.pages.create({
           parent: { database_id: databaseId },
           properties: {
-            'childChainTxHash': { title: [{ text: { content: childChainTxHash } }] },
+            'ChildTx': { title: [{ text: { content: ChildTx } }] },
             ...notionProps,
           },
         });
