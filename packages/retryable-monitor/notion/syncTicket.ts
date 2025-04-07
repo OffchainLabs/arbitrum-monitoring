@@ -3,18 +3,20 @@ import { notion } from './notionClient';
 const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!;
 
 interface SyncTicketInput {
-    childChainTxHash: string;
-    parentChainTxHash: string;
-    target: string;
-    createdAt: number;
-    status?: 'Untriaged' | 'Investigating' | 'Resolved' | 'False Positive' | 'Expired';
-    priority?: 'High' | 'Medium' | 'Low' | 'Unset';
+    childChainTxHash: string
+    parentChainTxHash: string
+    target: string
+    createdAt: number
+    status?: 'Untriaged' | 'Investigating' | 'Resolved' | 'False Positive' | 'Expired'
+    priority?: 'High' | 'Medium' | 'Low' | 'Unset'
     metadata?: {
-        deposit: string;
-        gasFeeCap: number;
-        gasLimit: number;
-      };
+      deposit: string
+      gasFeeCap: number
+      gasLimit: number
+      tokensDeposited?: string // ✅ add this optional field
+    }
   }
+  
   export async function syncTicketToNotion(input: SyncTicketInput): Promise<{ id: string; status: string } | undefined> {
     if (!process.env.RETRYABLE_MONITORING_ENABLE_TRIAGE) return;
   
@@ -51,6 +53,9 @@ interface SyncTicketInput {
         notionProps['Deposit'] = { rich_text: [{ text: { content: metadata.deposit } }] };
         notionProps['GasFeeCap'] = { number: metadata.gasFeeCap };
         notionProps['GasLimit'] = { number: metadata.gasLimit };
+        if (metadata.tokensDeposited) {
+          notionProps['TokensDeposited'] = { rich_text: [{ text: { content: metadata.tokensDeposited } }] }
+        }
       }
   
       if (search.results.length > 0) {

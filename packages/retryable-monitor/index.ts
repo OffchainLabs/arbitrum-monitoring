@@ -40,6 +40,7 @@ import {
   getExplorerUrlPrefixes,
 } from '../utils'
 import { syncTicketToNotion } from './notion/syncTicket'
+import { getTokenPrice } from './reportRetryables'
 
 const logFilePath = 'logfile.log'
 
@@ -367,19 +368,44 @@ const processChildChain = async (
             childChainTxReceipt,
           })
 
-          const ticket = await syncTicketToNotion({
-            childChainTxHash: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
-            parentChainTxHash: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
-            target: retryableMessage.messageData.destAddress,
-            createdAt: Number(childChainTicketReport.createdAtTimestamp) * 1000,
-            status: 'Untriaged',
-            priority: 'Unset',
-            metadata: {
-              deposit: childChainTicketReport.deposit,
-              gasFeeCap: childChainTicketReport.gasFeeCap,
-              gasLimit: childChainTicketReport.gasLimit,
-            }
-          })
+          // Already in your code
+const tokenDepositData = await getTokenDepositData({
+  childChainTx,
+  retryableMessage,
+  arbParentTxReceipt,
+  depositsInitiatedLogs,
+})
+
+// ✅ Add this block right after
+let formattedTokenString: string | undefined = undefined
+if (tokenDepositData?.tokenAmount && tokenDepositData?.l1Token) {
+  const amount = BigNumber.from(tokenDepositData.tokenAmount)
+  const decimals = tokenDepositData.l1Token.decimals
+  const symbol = tokenDepositData.l1Token.symbol
+  const address = tokenDepositData.l1Token.id
+
+  const humanAmount = Number(amount) / 10 ** decimals
+  const price = await getTokenPrice(address) ?? 1
+  const usdValue = humanAmount * price
+
+  formattedTokenString = `${humanAmount.toFixed(6)} ${symbol} ($${usdValue.toFixed(2)}) (${address})`
+}
+await syncTicketToNotion({
+  childChainTxHash: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
+  parentChainTxHash: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
+  target: retryableMessage.messageData.destAddress,
+  createdAt: Number(childChainTicketReport.createdAtTimestamp) * 1000,
+  status: 'Untriaged',
+  priority: 'Unset',
+  metadata: {
+    deposit: childChainTicketReport.deposit,
+    gasFeeCap: childChainTicketReport.gasFeeCap,
+    gasLimit: childChainTicketReport.gasLimit,
+    ...(formattedTokenString && { tokensDeposited: formattedTokenString }),
+  },
+})
+
+
 
           if (
             status !== ParentToChildMessageStatus.REDEEMED &&

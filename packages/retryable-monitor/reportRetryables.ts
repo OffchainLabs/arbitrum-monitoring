@@ -353,7 +353,7 @@ const getEthPrice = async () => {
   return ethPriceCache
 }
 
-const getTokenPrice = async (tokenAddress: string) => {
+export const getTokenPrice = async (tokenAddress: string) => {
   if (tokenPriceCache[tokenAddress] !== undefined) {
     return tokenPriceCache[tokenAddress]
   }
