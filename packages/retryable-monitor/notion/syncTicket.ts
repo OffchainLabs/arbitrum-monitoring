@@ -6,7 +6,6 @@ interface SyncTicketInput {
     ChildTx: string
     ParentTx: string
     createdAt: number
-    timeout?: number
     status?: 'Untriaged' | 'Investigating' | 'Resolved' | 'False Positive' | 'Expired'
     priority?: 'High' | 'Medium' | 'Low' | 'Unset'
     metadata?: {
@@ -25,7 +24,6 @@ interface SyncTicketInput {
         ChildTx,
         ParentTx,
       createdAt,
-      timeout,
       status = 'Untriaged',
       priority = 'Unset',
       metadata,
@@ -48,11 +46,6 @@ interface SyncTicketInput {
         'Status': { select: { name: status } },
         'Priority': { select: { name: priority } },
       };
-      if (timeout) {
-        notionProps['timeout'] = {
-          date: { start: new Date(timeout).toISOString() },
-        };
-      }
   
       if (metadata) {
         notionProps['GasPriceProvided'] = {
