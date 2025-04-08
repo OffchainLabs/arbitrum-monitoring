@@ -18,7 +18,6 @@ interface SyncTicketInput {
   }
   
   export async function syncTicketToNotion(input: SyncTicketInput): Promise<{ id: string; status: string } | undefined> {
-    if (!process.env.RETRYABLE_MONITORING_ENABLE_TRIAGE) return;
   
     const {
         ChildTx,
