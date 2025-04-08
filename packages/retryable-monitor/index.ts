@@ -1,5 +1,4 @@
 import * as fs from 'fs'
-import * as path from 'path'
 import yargs from 'yargs'
 import { ethers } from 'ethers'
 import winston from 'winston'
@@ -46,8 +45,8 @@ import { getGasInfo } from './reportRetryables'
 import { formatL2Callvalue } from './reportRetryables'
 import { notion, databaseId } from './notion/notionClient'
 
+// Ensure the log file exists, or create one
 const logFilePath = 'logfile.log'
-
 try {
   fs.accessSync(logFilePath)
 } catch (error) {
@@ -59,6 +58,7 @@ try {
   }
 }
 
+// Set up a logger for console and file outputs
 const logger = winston.createLogger({
   format: winston.format.simple(),
   transports: [
@@ -67,10 +67,12 @@ const logger = winston.createLogger({
   ],
 })
 
+// Helper to log messages with chain name prefix
 const logResult = (chainName: string, message: string) => {
   logger.info(`[${chainName}] ${message}`)
 }
 
+// Return the block time for the parent chain
 const getParentChainBlockTime = (childChain: ChildNetwork) => {
   const parentChainId = childChain.parentChainId
   if ([1, 11155111, 17000].includes(parentChainId)) return 12
@@ -78,6 +80,7 @@ const getParentChainBlockTime = (childChain: ChildNetwork) => {
   return ARB_MINIMUM_BLOCK_TIME_IN_SECONDS
 }
 
+// Checks whether an Arbitrum network is already registered
 const networkIsRegistered = (networkId: number) => {
   try {
     getArbitrumNetwork(networkId)
@@ -87,6 +90,7 @@ const networkIsRegistered = (networkId: number) => {
   }
 }
 
+// Parse CLI arguments using yargs
 const options: FindRetryablesOptions = yargs(process.argv.slice(2))
   .options({
     fromBlock: { type: 'number', default: 0 },
@@ -99,12 +103,15 @@ const options: FindRetryablesOptions = yargs(process.argv.slice(2))
   .strict()
   .parseSync() as FindRetryablesOptions
 
+// Load configuration file
 const config = getConfig({ configPath: options.configPath })
 
+// Main processing logic per child chain
 const processChildChain = async (
   childChain: ChildNetwork,
   options: FindRetryablesOptions
 ) => {
+  // Register custom Arbitrum network if needed
   if (!networkIsRegistered(childChain.chainId)) {
     registerCustomArbitrumNetwork(childChain)
   }
@@ -119,6 +126,7 @@ const processChildChain = async (
 
   let retryablesFound: boolean = false
 
+  // Fetch DepositInitiated events from a given parent gateway
   const getDepositInitiatedEventData = async (
     parentChainGatewayAddress: string,
     filter: {
@@ -128,15 +136,17 @@ const processChildChain = async (
     parentChainProvider: providers.Provider
   ) => {
     const eventFetcher = new EventFetcher(parentChainProvider)
-    return await eventFetcher.getEvents<
-      L1ERC20Gateway,
-      DepositInitiatedEvent
-    >(L1ERC20Gateway__factory, (g: any) => g.filters.DepositInitiated(), {
-      ...filter,
-      address: parentChainGatewayAddress,
-    })
+    return await eventFetcher.getEvents<L1ERC20Gateway, DepositInitiatedEvent>(
+      L1ERC20Gateway__factory,
+      (g: any) => g.filters.DepositInitiated(),
+      {
+        ...filter,
+        address: parentChainGatewayAddress,
+      }
+    )
   }
 
+  // Fetch MessageDelivered logs from the bridge
   const getMessageDeliveredEventData = async (
     parentBridgeAddress: string,
     filter: {
@@ -156,10 +166,12 @@ const processChildChain = async (
 
   const MAX_BLOCKS_TO_PROCESS = 5000
 
+  // Run retryable checks in fixed-size block ranges
   const checkRetryablesOneOff = async (
     fromBlock: number,
     toBlock: number
   ): Promise<number> => {
+    // If toBlock is 0, default to the latest block
     if (toBlock === 0) {
       const currentBlock = await parentChainProvider.getBlockNumber()
       if (!currentBlock) throw new Error('Failed to retrieve the latest block.')
@@ -194,16 +206,7 @@ const processChildChain = async (
     return toBlock
   }
 
-  const getParentChainTicketReport = (
-    arbParentTxReceipt: ParentTransactionReceipt,
-    retryableMessage: ParentToChildMessageReader
-  ): ParentChainTicketReport => ({
-    id: arbParentTxReceipt.transactionHash,
-    transactionHash: arbParentTxReceipt.transactionHash,
-    sender: arbParentTxReceipt.from,
-    retryableTicketID: retryableMessage.retryableCreationId,
-  })
-
+  // Build a retryable ticket report from a child chain tx
   const getChildChainTicketReport = async ({
     childChainTx,
     childChainTxReceipt,
@@ -232,6 +235,8 @@ const processChildChain = async (
       gasLimit: childChainTx.gasLimit.toNumber(),
     }
   }
+
+  // Try to extract ERC20 deposit details from matching DepositInitiated logs
 
   const getTokenDepositData = async ({
     childChainTx,
@@ -283,6 +288,7 @@ const processChildChain = async (
 
     return tokenDepositData
   }
+  // Get DepositInitiated logs from all token bridge contracts
 
   const getDepositInitiatedLogs = async ({
     fromBlock,
@@ -299,11 +305,16 @@ const processChildChain = async (
         childChain.tokenBridge!.parentCustomGateway,
         childChain.tokenBridge!.parentWethGateway,
       ].map(addr =>
-        getDepositInitiatedEventData(addr, { fromBlock, toBlock }, parentChainProvider)
+        getDepositInitiatedEventData(
+          addr,
+          { fromBlock, toBlock },
+          parentChainProvider
+        )
       )
     )
     return [...a, ...b, ...c]
   }
+  // Check retryables in a block range, log details, optionally write to Notion
 
   const checkRetryables = async (
     parentChainProvider: providers.Provider,
@@ -336,17 +347,17 @@ const processChildChain = async (
         childChainProvider
       )
 
-      const {
-        PARENT_CHAIN_TX_PREFIX,
-        CHILD_CHAIN_TX_PREFIX,
-      } = getExplorerUrlPrefixes(childChain)
+      const { PARENT_CHAIN_TX_PREFIX, CHILD_CHAIN_TX_PREFIX } =
+        getExplorerUrlPrefixes(childChain)
 
       if (retryables.length > 0) {
         logResult(
           childChain.name,
           `${retryables.length} retryable${
             retryables.length === 1 ? '' : 's'
-          } found for ${childChain.name}. Checking their status:\n\nParentChainTxHash: ${
+          } found for ${
+            childChain.name
+          }. Checking their status:\n\nParentChainTxHash: ${
             PARENT_CHAIN_TX_PREFIX + parentTxHash
           }`
         )
@@ -359,12 +370,17 @@ const processChildChain = async (
           const childChainTx = await childChainProvider.getTransaction(
             retryableMessage.retryableCreationId
           )
-          const childChainTxReceipt = await childChainProvider.getTransactionReceipt(
-            retryableMessage.retryableCreationId
-          )
+          const childChainTxReceipt =
+            await childChainProvider.getTransactionReceipt(
+              retryableMessage.retryableCreationId
+            )
 
           if (!childChainTxReceipt) {
-            const resultMessage = `${msgIndex + 1}. ${ParentToChildMessageStatus[status]}:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}} (Receipt not found yet)`
+            const resultMessage = `${msgIndex + 1}. ${
+              ParentToChildMessageStatus[status]
+            }:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX}${
+              retryableMessage.retryableCreationId
+            }} (Receipt not found yet)`
             logResult(childChain.name, resultMessage)
             continue
           }
@@ -381,70 +397,75 @@ const processChildChain = async (
             parentChainProvider
           )
 
-
           const l2CallValueFormatted = formattedCallValueFull
-  .replace('\n\t *Child chain callvalue:* ', '')
-  .trim()
+            .replace('\n\t *Child chain callvalue:* ', '')
+            .trim()
 
           // Already in your code
-const tokenDepositData = await getTokenDepositData({
-  childChainTx,
-  retryableMessage,
-  arbParentTxReceipt,
-  depositsInitiatedLogs,
-})
+          const tokenDepositData = await getTokenDepositData({
+            childChainTx,
+            retryableMessage,
+            arbParentTxReceipt,
+            depositsInitiatedLogs,
+          })
 
-// ✅ Add this block right after
-let formattedTokenString: string | undefined = undefined
-if (tokenDepositData?.tokenAmount && tokenDepositData?.l1Token) {
-  const amount = BigNumber.from(tokenDepositData.tokenAmount)
-  const decimals = tokenDepositData.l1Token.decimals
-  const symbol = tokenDepositData.l1Token.symbol
-  const address = tokenDepositData.l1Token.id
+       
+          let formattedTokenString: string | undefined = undefined
+          if (tokenDepositData?.tokenAmount && tokenDepositData?.l1Token) {
+            const amount = BigNumber.from(tokenDepositData.tokenAmount)
+            const decimals = tokenDepositData.l1Token.decimals
+            const symbol = tokenDepositData.l1Token.symbol
+            const address = tokenDepositData.l1Token.id
 
-  const humanAmount = Number(amount) / 10 ** decimals
-  const price = await getTokenPrice(address) ?? 1
-  const usdValue = humanAmount * price
+            const humanAmount = Number(amount) / 10 ** decimals
+            const price = (await getTokenPrice(address)) ?? 1
+            const usdValue = humanAmount * price
 
-  formattedTokenString = `${humanAmount.toFixed(6)} ${symbol} ($${usdValue.toFixed(2)}) (${address})`
-}
-const {
-  l2GasPrice,
-  l2GasPriceAtCreation,
-} = await getGasInfo(
-  childChainTicketReport.createdAtBlockNumber,
-  retryableMessage.retryableCreationId,
-  childChainProvider
-)
+            formattedTokenString = `${humanAmount.toFixed(
+              6
+            )} ${symbol} ($${usdValue.toFixed(2)}) (${address})`
+          }
+          const { l2GasPrice, l2GasPriceAtCreation } = await getGasInfo(
+            childChainTicketReport.createdAtBlockNumber,
+            retryableMessage.retryableCreationId,
+            childChainProvider
+          )
 
-const gasPriceProvided = `${ethers.utils.formatUnits(childChainTicketReport.gasFeeCap, 'gwei')} gwei`
-const gasPriceAtCreation = l2GasPriceAtCreation
-  ? `${ethers.utils.formatUnits(l2GasPriceAtCreation, 'gwei')} gwei`
-  : undefined
-const gasPriceNow = `${ethers.utils.formatUnits(l2GasPrice, 'gwei')} gwei`
+          const gasPriceProvided = `${ethers.utils.formatUnits(
+            childChainTicketReport.gasFeeCap,
+            'gwei'
+          )} gwei`
+          const gasPriceAtCreation = l2GasPriceAtCreation
+            ? `${ethers.utils.formatUnits(l2GasPriceAtCreation, 'gwei')} gwei`
+            : undefined
+          const gasPriceNow = `${ethers.utils.formatUnits(
+            l2GasPrice,
+            'gwei'
+          )} gwei`
 
+          if (options.writeToNotion) {
+            await syncTicketToNotion({
+              ChildTx: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
+              ParentTx: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
+              createdAt:
+                Number(childChainTicketReport.createdAtTimestamp) * 1000,
+              status: notionStatus,
+              priority: 'Unset',
+              metadata: {
+                tokensDeposited: formattedTokenString,
+                gasPriceProvided,
+                gasPriceAtCreation,
+                gasPriceNow,
+                l2CallValue: l2CallValueFormatted,
+              },
+            })
+          }
 
-if (options.writeToNotion) {
-  await syncTicketToNotion({
-    ChildTx: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
-    ParentTx: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
-    createdAt: Number(childChainTicketReport.createdAtTimestamp) * 1000,
-    status: notionStatus,
-    priority: 'Unset',
-    metadata: {
-      tokensDeposited: formattedTokenString,
-      gasPriceProvided,
-      gasPriceAtCreation,
-      gasPriceNow,
-      l2CallValue: l2CallValueFormatted,
-    },
-  })
-}
-
-
-          
-
-          const resultMessage = `${msgIndex + 1}. ${ParentToChildMessageStatus[status]}:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}}`
+          const resultMessage = `${msgIndex + 1}. ${
+            ParentToChildMessageStatus[status]
+          }:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX}${
+            retryableMessage.retryableCreationId
+          }}`
           logResult(childChain.name, resultMessage)
         }
         retryablesFound = true
@@ -453,6 +474,7 @@ if (options.writeToNotion) {
 
     return retryablesFound
   }
+  // Continuously check retryables with periodic sweeps
 
   const checkRetryablesContinuous = async (
     fromBlock: number,
@@ -461,31 +483,34 @@ if (options.writeToNotion) {
     const processingDurationInSeconds = 180
     let isContinuous = options.continuous
     const startTime = Date.now()
-  
+
     let lastSweepTime = Date.now()
     const sweepInterval = 24 * 60 * 60 * 1000 // 24 hours
-  
+
     const processBlocks = async () => {
       const lastBlockChecked = await checkRetryablesOneOff(fromBlock, toBlock)
       fromBlock = lastBlockChecked + 1
       toBlock = await parentChainProvider.getBlockNumber()
       return lastBlockChecked
     }
-  
+
     while (isContinuous) {
       const lastBlockChecked = await processBlocks()
-  
+
       if (lastBlockChecked >= toBlock) {
         await new Promise(resolve => setTimeout(resolve, 1000))
       }
-  
+
       const now = Date.now()
       if (now - lastSweepTime > sweepInterval) {
-        logResult('Monitor', '⏳ Running Notion sweep for expiring retryables...')
+        logResult(
+          'Monitor',
+          '⏳ Running Notion sweep for expiring retryables...'
+        )
         await checkNotionForExpiringRetryables()
         lastSweepTime = now
       }
-  
+
       const elapsedTimeInSeconds = Math.floor((now - startTime) / 1000)
       if (elapsedTimeInSeconds >= processingDurationInSeconds) {
         isContinuous = false
@@ -501,6 +526,7 @@ if (options.writeToNotion) {
     }
   }
 }
+// Query Notion database and send Slack alerts for retryables close to expiring
 
 const checkNotionForExpiringRetryables = async () => {
   const now = Date.now()
@@ -536,8 +562,7 @@ const checkNotionForExpiringRetryables = async () => {
     }
   }
 }
-
-
+// Launch the main process across all child chains concurrently
 
 const processOrbitChainsConcurrently = async () => {
   const promises = config.childChains.map(async (childChain: ChildNetwork) => {
@@ -553,4 +578,5 @@ const processOrbitChainsConcurrently = async () => {
   })
   await Promise.allSettled(promises)
 }
+// Start the monitor
 processOrbitChainsConcurrently()
