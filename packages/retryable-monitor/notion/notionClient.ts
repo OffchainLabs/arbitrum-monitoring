@@ -1,5 +1,8 @@
-import { Client } from '@notionhq/client';
+// notion.ts
+import { Client } from '@notionhq/client'
+import dotenv from 'dotenv'
 
-export const notion = new Client({
-  auth: process.env.RETRYABLE_MONITORING_NOTION_TOKEN,
-});
+dotenv.config()
+
+export const notion = new Client({ auth: process.env.RETRYABLE_MONITORING_NOTION_TOKEN })
+export const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!

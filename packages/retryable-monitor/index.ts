@@ -44,6 +44,7 @@ import { syncTicketToNotion } from './notion/syncTicket'
 import { getTokenPrice } from './reportRetryables'
 import { getGasInfo } from './reportRetryables'
 import { formatL2Callvalue } from './reportRetryables'
+import { notion, databaseId } from './notion/notionClient'
 
 const logFilePath = 'logfile.log'
 
@@ -93,6 +94,7 @@ const options: FindRetryablesOptions = yargs(process.argv.slice(2))
     continuous: { type: 'boolean', default: false },
     configPath: { type: 'string', default: DEFAULT_CONFIG_PATH },
     enableAlerting: { type: 'boolean', default: false },
+    writeToNotion: { type: 'boolean', default: false },
   })
   .strict()
   .parseSync() as FindRetryablesOptions
@@ -352,6 +354,8 @@ const processChildChain = async (
         for (let msgIndex = 0; msgIndex < retryables.length; msgIndex++) {
           const retryableMessage = retryables[msgIndex]
           const status = await retryableMessage.status()
+          const notionStatus = 'Untriaged'
+
           const childChainTx = await childChainProvider.getTransaction(
             retryableMessage.retryableCreationId
           )
@@ -420,12 +424,12 @@ const gasPriceAtCreation = l2GasPriceAtCreation
 const gasPriceNow = `${ethers.utils.formatUnits(l2GasPrice, 'gwei')} gwei`
 
 
-
+if (options.writeToNotion) {
   await syncTicketToNotion({
     ChildTx: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
     ParentTx: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
     createdAt: Number(childChainTicketReport.createdAtTimestamp) * 1000,
-    status: 'Untriaged',
+    status: notionStatus,
     priority: 'Unset',
     metadata: {
       tokensDeposited: formattedTokenString,
@@ -435,34 +439,10 @@ const gasPriceNow = `${ethers.utils.formatUnits(l2GasPrice, 'gwei')} gwei`
       l2CallValue: l2CallValueFormatted,
     },
   })
+}
 
 
-  
-
-
-
-          if (
-            status !== ParentToChildMessageStatus.REDEEMED &&
-            options.enableAlerting
-          ) {
-            const parentChainTicketReport = getParentChainTicketReport(
-              arbParentTxReceipt,
-              retryableMessage
-            )
-            const tokenDepositData = await getTokenDepositData({
-              childChainTx,
-              retryableMessage,
-              arbParentTxReceipt,
-              depositsInitiatedLogs,
-            })
-
-            await reportFailedTicket({
-              parentChainTicketReport,
-              childChainTicketReport,
-              tokenDepositData,
-              childChain,
-            })
-          }
+          
 
           const resultMessage = `${msgIndex + 1}. ${ParentToChildMessageStatus[status]}:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}}`
           logResult(childChain.name, resultMessage)
@@ -481,28 +461,37 @@ const gasPriceNow = `${ethers.utils.formatUnits(l2GasPrice, 'gwei')} gwei`
     const processingDurationInSeconds = 180
     let isContinuous = options.continuous
     const startTime = Date.now()
-
+  
+    let lastSweepTime = Date.now()
+    const sweepInterval = 24 * 60 * 60 * 1000 // 24 hours
+  
     const processBlocks = async () => {
       const lastBlockChecked = await checkRetryablesOneOff(fromBlock, toBlock)
       fromBlock = lastBlockChecked + 1
       toBlock = await parentChainProvider.getBlockNumber()
       return lastBlockChecked
     }
-
+  
     while (isContinuous) {
       const lastBlockChecked = await processBlocks()
+  
       if (lastBlockChecked >= toBlock) {
         await new Promise(resolve => setTimeout(resolve, 1000))
       }
-      const elapsedTimeInSeconds = Math.floor(
-        (Date.now() - startTime) / 1000
-      )
+  
+      const now = Date.now()
+      if (now - lastSweepTime > sweepInterval) {
+        logResult('Monitor', '⏳ Running Notion sweep for expiring retryables...')
+        await checkNotionForExpiringRetryables()
+        lastSweepTime = now
+      }
+  
+      const elapsedTimeInSeconds = Math.floor((now - startTime) / 1000)
       if (elapsedTimeInSeconds >= processingDurationInSeconds) {
         isContinuous = false
       }
     }
   }
-
   if (options.continuous) {
     await checkRetryablesContinuous(options.fromBlock, options.toBlock)
   } else {
@@ -512,6 +501,43 @@ const gasPriceNow = `${ethers.utils.formatUnits(l2GasPrice, 'gwei')} gwei`
     }
   }
 }
+
+const checkNotionForExpiringRetryables = async () => {
+  const now = Date.now()
+  const MS_IN_DAY = 24 * 60 * 60 * 1000
+  const TWO_DAYS_IN_MS = 2 * MS_IN_DAY
+
+  const response = await notion.databases.query({
+    database_id: databaseId,
+    page_size: 100,
+    filter: {
+      or: [
+        { property: 'Status', select: { equals: 'Untriaged' } },
+        { property: 'Status', select: { equals: 'Investigating' } },
+      ],
+    },
+  })
+
+  for (const page of response.results) {
+    const props = (page as any).properties
+    const timeoutStr = props?.timeoutTimestamp?.date?.start
+    const retryableUrl = props?.ChildTx?.url || '(unknown)'
+
+    if (!timeoutStr) continue
+
+    const timeout = new Date(timeoutStr).getTime()
+    const timeLeft = timeout - now
+
+    if (timeLeft <= TWO_DAYS_IN_MS) {
+      const status = props?.Status?.select?.name ?? 'Unknown'
+      await reportRetryableErrorToSlack({
+        message: `\u23F0 Retryable ticket expiring soon!\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Status: ${status}`,
+      })
+    }
+  }
+}
+
+
 
 const processOrbitChainsConcurrently = async () => {
   const promises = config.childChains.map(async (childChain: ChildNetwork) => {
@@ -527,5 +553,4 @@ const processOrbitChainsConcurrently = async () => {
   })
   await Promise.allSettled(promises)
 }
-
 processOrbitChainsConcurrently()
