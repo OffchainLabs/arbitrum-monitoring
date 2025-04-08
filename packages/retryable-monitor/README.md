@@ -40,8 +40,11 @@ Environment Variables:
 When `--continuous` is enabled, the monitor:
 
 ✅ Watches for new retryable tickets every 3 minutes
+
 ✅ Optionally writes ticket data to Notion (--writeToNotion)
+
 ✅ Sends Slack alerts for tickets close to expiry (--enableAlerting)
+
 ✅ Runs a Notion DB sweep every 24 hours to:
 
 - Mark tickets as "Expired" if older than 7 days
@@ -92,21 +95,20 @@ The Notion database serves as a central triage system for tracking the status, m
 
 Successfully redeemed tickets are intentionally excluded to keep the database focused on actionable items—such as retryables that are stuck, failed, or at risk of expiration.
 
-
 ### Required Columns
 
 The Notion database should be configured with the following columns:
 
-| **Column**           | **Type**     | **Description**                                                                 |
-|----------------------|--------------|---------------------------------------------------------------------------------|
-| `ParentTx`           | URL          | Link to the parent chain transaction that created the retryable                |
-| `ChildTx`            | URL          | Link to the child chain transaction (if available)                              |
-| `CreatedAt`         | Date         | Timestamp (ms) when the retryable was created                                   |
-| `Timeout`            | Number       | Expiration timestamp in milliseconds                                            |
-| `Status`             | Select       | Workflow status (`Untriaged`, `Investigating`, `Expired`, `Resolved`.)                |
-| `Priority`           | Select       | Optional manual priority (`High`, `Medium`, `Low`, `Unset`)                    |
-| `TokensDeposited`    | Text         | Amount, symbol, and token address (e.g. `1.23 USDC ($1.23) (0xToken...)`)      |
-| `GasPriceProvided`   | Text         | Gas price submitted when the ticket was created                                |
-| `GasPriceAtCreation` | Text         | L2 gas price at the time of ticket creation                                    |
-| `gasPriceNow`        | Text         | Current L2 gas price                                                            |
-| `L2CallValue`        | Text         | ETH or native callvalue (e.g. `0.0001 ETH ($0.18)`)                             |
+| **Column**           | **Type** | **Description**                                                           |
+| -------------------- | -------- | ------------------------------------------------------------------------- |
+| `ParentTx`           | URL      | Link to the parent chain transaction that created the retryable           |
+| `ChildTx`            | URL      | Link to the child chain transaction (if available)                        |
+| `CreatedAt`          | Date     | Timestamp (ms) when the retryable was created                             |
+| `Timeout`            | Number   | Expiration timestamp in milliseconds                                      |
+| `Status`             | Select   | Workflow status (`Untriaged`, `Investigating`, `Expired`, `Resolved`.)    |
+| `Priority`           | Select   | Optional manual priority (`High`, `Medium`, `Low`, `Unset`)               |
+| `TokensDeposited`    | Text     | Amount, symbol, and token address (e.g. `1.23 USDC ($1.23) (0xToken...)`) |
+| `GasPriceProvided`   | Text     | Gas price submitted when the ticket was created                           |
+| `GasPriceAtCreation` | Text     | L2 gas price at the time of ticket creation                               |
+| `gasPriceNow`        | Text     | Current L2 gas price                                                      |
+| `L2CallValue`        | Text     | ETH or native callvalue (e.g. `0.0001 ETH ($0.18)`)                       |
