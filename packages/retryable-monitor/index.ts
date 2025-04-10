@@ -375,6 +375,10 @@ const processChildChain = async (
         for (let msgIndex = 0; msgIndex < retryables.length; msgIndex++) {
           const retryableMessage = retryables[msgIndex]
           const status = await retryableMessage.status()
+
+          if (status === ParentToChildMessageStatus.REDEEMED) {
+            continue
+          }
           const notionStatus = 'Untriaged'
 
           const childChainTx = await childChainProvider.getTransaction(
