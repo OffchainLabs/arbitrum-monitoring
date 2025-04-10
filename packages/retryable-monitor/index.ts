@@ -173,17 +173,27 @@ const processChildChain = async (
   ): Promise<number> => {
     // If toBlock is 0, default to the latest block
     if (toBlock === 0) {
-      const currentBlock = await parentChainProvider.getBlockNumber()
-      if (!currentBlock) throw new Error('Failed to retrieve the latest block.')
-      toBlock = currentBlock
-      if (fromBlock === 0 && options.enableAlerting) {
-        fromBlock =
-          toBlock -
-          (2 * SEVEN_DAYS_IN_SECONDS) / getParentChainBlockTime(childChain)
-        logResult(
-          childChain.name,
-          `Alerting mode enabled: limiting block-range to last 14 days [${fromBlock} to ${toBlock}]`
+      try {
+        const currentBlock = await parentChainProvider.getBlockNumber()
+        if (!currentBlock) {
+          throw new Error('Failed to retrieve the latest block.')
+        }
+        toBlock = currentBlock
+    
+        if (fromBlock === 0 && options.enableAlerting) {
+          fromBlock =
+            toBlock -
+            (2 * SEVEN_DAYS_IN_SECONDS) / getParentChainBlockTime(childChain)
+          logResult(
+            childChain.name,
+            `Alerting mode enabled: limiting block-range to last 14 days [${fromBlock} to ${toBlock}]`
+          )
+        }
+      } catch (error) {
+        console.error(
+          `Error getting the latest block: ${(error as Error).message}`
         )
+        throw error
       }
     }
 
