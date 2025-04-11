@@ -20,7 +20,7 @@ interface SyncTicketInput {
 
 export async function syncTicketToNotion(
   input: SyncTicketInput
-): Promise<{ id: string; status: string } | undefined> {
+): Promise<{ id: string; status: string; isNew: boolean } | undefined> {
   const {
     ChildTx,
     ParentTx,
@@ -93,7 +93,7 @@ export async function syncTicketToNotion(
         properties: notionProps,
       })
 
-      return { id: page.id, status: currentStatus ?? status }
+      return { id: page.id, status: currentStatus ?? status, isNew: false }
     }
 
     // Entry doesn't exist — create it
@@ -106,7 +106,7 @@ export async function syncTicketToNotion(
       },
     })
 
-    return { id: created.id, status }
+    return { id: created.id, status, isNew: true }
   } catch (err) {
     console.error('❌ Failed to sync ticket to Notion:', err)
     return undefined

@@ -43,7 +43,8 @@ import { syncTicketToNotion } from './notion/syncTicket'
 import { getTokenPrice } from './reportRetryables'
 import { getGasInfo } from './reportRetryables'
 import { formatL2Callvalue } from './reportRetryables'
-import { notion, databaseId } from './notion/notionClient'
+import { alertUntriagedNotionRetryables } from './notion/alertUntriagedRetryables'
+
 
 // Ensure the log file exists, or create one
 const logFilePath = 'logfile.log'
@@ -458,7 +459,7 @@ const processChildChain = async (
           )} gwei`
 
           if (options.writeToNotion) {
-            await syncTicketToNotion({
+            const result = await syncTicketToNotion({
               ChildTx: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
               ParentTx: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
               createdAt:
@@ -473,6 +474,11 @@ const processChildChain = async (
                 l2CallValue: l2CallValueFormatted,
               },
             })
+            if (result?.isNew && options.enableAlerting) {
+              await reportRetryableErrorToSlack({
+                message: `🆕 New retryable detected:\n• Retryable: ${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}\n• Status: Untriaged\n• Timeout: ${childChainTicketReport.timeoutTimestamp}`,
+              })
+            }
           }
 
           const resultMessage = `${msgIndex + 1}. ${
@@ -521,7 +527,7 @@ const processChildChain = async (
           'Monitor',
           '⏳ Running Notion sweep for expiring retryables...'
         )
-        await checkNotionForExpiringRetryables()
+        await alertUntriagedNotionRetryables()
         lastSweepTime = now
       }
 
@@ -540,42 +546,8 @@ const processChildChain = async (
     }
   }
 }
-// Query Notion database and send Slack alerts for retryables close to expiring
 
-const checkNotionForExpiringRetryables = async () => {
-  const now = Date.now()
-  const MS_IN_DAY = 24 * 60 * 60 * 1000
-  const TWO_DAYS_IN_MS = 2 * MS_IN_DAY
 
-  const response = await notion.databases.query({
-    database_id: databaseId,
-    page_size: 100,
-    filter: {
-      or: [
-        { property: 'Status', select: { equals: 'Untriaged' } },
-        { property: 'Status', select: { equals: 'Investigating' } },
-      ],
-    },
-  })
-
-  for (const page of response.results) {
-    const props = (page as any).properties
-    const timeoutStr = props?.timeoutTimestamp?.date?.start
-    const retryableUrl = props?.ChildTx?.url || '(unknown)'
-
-    if (!timeoutStr) continue
-
-    const timeout = new Date(timeoutStr).getTime()
-    const timeLeft = timeout - now
-
-    if (timeLeft <= TWO_DAYS_IN_MS) {
-      const status = props?.Status?.select?.name ?? 'Unknown'
-      await reportRetryableErrorToSlack({
-        message: `\u23F0 Retryable ticket expiring soon!\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Status: ${status}`,
-      })
-    }
-  }
-}
 // Launch the main process across all child chains concurrently
 
 const processOrbitChainsConcurrently = async () => {
