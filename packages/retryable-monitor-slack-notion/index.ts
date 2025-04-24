@@ -45,7 +45,6 @@ import { getGasInfo } from './reportRetryables'
 import { formatL2Callvalue } from './reportRetryables'
 import { alertUntriagedNotionRetryables } from './notion/alertUntriagedRetryables'
 
-
 // Ensure the log file exists, or create one
 const logFilePath = 'logfile.log'
 try {
@@ -180,7 +179,7 @@ const processChildChain = async (
           throw new Error('Failed to retrieve the latest block.')
         }
         toBlock = currentBlock
-    
+
         if (fromBlock === 0 && options.enableAlerting) {
           fromBlock =
             toBlock -
@@ -310,20 +309,26 @@ const processChildChain = async (
     toBlock: number
     parentChainProvider: Provider
   }) => {
-    const [a, b, c] = await Promise.all(
-      [
-        childChain.tokenBridge!.parentErc20Gateway,
-        childChain.tokenBridge!.parentCustomGateway,
-        childChain.tokenBridge!.parentWethGateway,
-      ].map(addr =>
-        getDepositInitiatedEventData(
-          addr,
-          { fromBlock, toBlock },
-          parentChainProvider
+    const [logsFromErc20Gateway, logsFromCustomGateway, logsFromWethGateway] =
+      await Promise.all(
+        [
+          childChain.tokenBridge!.parentErc20Gateway,
+          childChain.tokenBridge!.parentCustomGateway,
+          childChain.tokenBridge!.parentWethGateway,
+        ].map(gatewayAddress =>
+          getDepositInitiatedEventData(
+            gatewayAddress,
+            { fromBlock, toBlock },
+            parentChainProvider
+          )
         )
       )
-    )
-    return [...a, ...b, ...c]
+
+    return [
+      ...logsFromErc20Gateway,
+      ...logsFromCustomGateway,
+      ...logsFromWethGateway,
+    ]
   }
   // Check retryables in a block range, log details, optionally write to Notion
 
@@ -424,7 +429,6 @@ const processChildChain = async (
             depositsInitiatedLogs,
           })
 
-       
           let formattedTokenString: string | undefined = undefined
           if (tokenDepositData?.tokenAmount && tokenDepositData?.l1Token) {
             const amount = BigNumber.from(tokenDepositData.tokenAmount)
@@ -546,7 +550,6 @@ const processChildChain = async (
     }
   }
 }
-
 
 // Launch the main process across all child chains concurrently
 

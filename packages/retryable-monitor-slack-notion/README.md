@@ -1,4 +1,4 @@
-# Retryable Monitor
+# Retryable Monitor 
 
 > For installation and general configuration, see the [main README](../../README.md).
 
@@ -26,7 +26,7 @@ Options:
 Examples:
   yarn retryable-monitor --continuous                    Run continuous monitoring
   yarn retryable-monitor --fromBlock=1000 --toBlock=2000 Check specific block range
-  yarn retryable-monitor --enableAlerting --writeToNotion           Enable Slack notifications and writes to Notion
+  yarn retryable-monitor --enableAlerting --writeToNotion           Enables Slack alerts and syncs retryable data to Notion
 
 Environment Variables:
   RETRYABLE_MONITORING_SLACK_TOKEN    Slack API token for alerts
@@ -37,21 +37,20 @@ Environment Variables:
 
 ## Monitoring Behavior
 
-When `--continuous` is enabled, the monitor:
+By default, the monitor runs once. You can pass `--continuous` to keep it running.
 
-✅ Watches for new retryable tickets every 3 minutes
+✅ Finds retryable tickets
+✅ Writes to Notion if `--writeToNotion` is used:
+  • New tickets are marked `Untriaged`
+  • Existing tickets update metadata only
+✅ Sends Slack alerts for new tickets added to Notion if both `--writeToNotion` and `--enableAlerting` are used
 
-✅ Optionally writes ticket data to Notion (`--writeToNotion`)  
-  • If the ticket is **new**, it is written with status `"Untriaged"`  
-  • If the ticket already exists, **only metadata is updated** — the `Status` is **preserved** unless it's still `"Untriaged"` or blank
+When `--continuous` is on, it also:
 
-✅ Sends Slack alerts for tickets close to expiry (`--enableAlerting`)
-
-✅ Runs a Notion DB sweep every 24 hours to:
-
-- Mark tickets as `"Expired"` if older than 7 days
-- Alert if tickets are under 2 days from expiry and still `"Untriaged"` or `"Investigating"`
-
+✅ Checks for new tickets every 3 minutes
+✅ Sweeps the Notion DB every 24 hours to:
+  • Mark tickets as "Expired" after 7 days
+  • Alert on tickets expiring soon and still `Untriaged` or `Investigating`
 
 ## Monitor Details
 
@@ -60,18 +59,20 @@ Retryable tickets are Arbitrum’s mechanism for guaranteed ParentChain → Chil
 The monitoring process spans both parent and child chains:
 
 - On the parent chain, it listens for `MessageDelivered` events that indicate a retryable ticket has been created.
+
 - On the child chain, it checks the status of each ticket, including whether it was successfully redeemed (automatically or manually), still pending, or failed.
 
 If `--writeToNotion` is enabled, each detected ticket is written to a Notion database with metadata such as creation time, gas information, callvalue, token deposit amount, and expiration timestamp.
 
-If `--enableAlerting` is enabled, the monitor sends Slack alerts only for tickets that are close to expiration (less than 2 days remaining) and still marked as "Untriaged" or "Investigating" in Notion.
+- If both --`writeToNotion` and `--enableAlerting` are enabled, the monitor sends a Slack alert the first time a new retryable is added to Notion with status `Untriaged`.
 
-Additionally, the monitor includes a background Notion DB sweep that runs every 24 hours to:
+When running in `--continuous` mode, the monitor also performs a Notion sweep every 24 hours to:
 
-- Automatically mark retryable tickets as "Expired" if more than 7 days have passed without redemption
-- Alert on tickets close to expiration that are still "Untriaged" or "Investigating"
+- Mark tickets as `Expired` if more than 7 days have passed without redemption.
 
-This dual-layer monitoring ensures cross-chain messages are reliably delivered and that at-risk messages are surfaced for action before expiration.
+- Alert on tickets that are close to expiring (less than 2 days left) and still marked as `Untriaged` or `Investigating`.
+
+This dual-layer monitoring ensures cross-chain messages are reliably delivered and that at-risk tickets are surfaced for action before expiration.
 
 ### Critical Events
 
@@ -85,32 +86,36 @@ The monitor tracks five key events that represent state transitions:
 
 ### Alert Scenarios
 
-Slack alerts are triggered only when:
+By default, Slack alerts are not sent.
 
-- A retryable ticket is within 2 days of expiration
-- And its Notion Status is either "Untriaged" or "Investigating"
+If `--enableAlerting` is used without `--writeToNotion`, alerts are only sent when errors occur during processing (e.g., RPC failures or unexpected exceptions).
 
-`Redeemed`, `resolved`, or `expired` retryables are not alerted.
+When used with `--writeToNotion`, Slack alerts are more advanced. See the next section for details — including alerts for new retryables and tickets close to expiration based on Notion status.
 
 ## About the Notion Database
 
-
-The Notion database serves as a central triage system for tracking the status, metadata, and resolution lifecycle of retryable tickets across Orbit chains.
+The Notion database acts as a shared triage board for tracking retryable ticket status and metadata across Orbit chains.
 
 When the monitor is run with `--writeToNotion`:
 
-- Each unredeemed ticket is written to the database **once**, with structured metadata (gas, tokens, callvalue, etc.)
-- If the ticket already exists, it is **updated with fresh metadata** but its `Status` field is **preserved** unless it's still `"Untriaged"` or missing
+- Each unredeemed ticket is written to Notion once, with structured metadata like gas info, deposited tokens, callvalue, and expiration time.
 
-This allows the responsible team to manually triage tickets (e.g., mark as `"Investigating"` or `"Resolved"`) without that work being accidentally overwritten on the next run.
+- If the ticket already exists, its metadata is updated — but the Status field is preserved unless it's still `Untriaged` or blank.
 
-Slack alerts are only sent for retryables that are:
+This prevents overwriting any manual updates (e.g., `Investigating` or `Resolved`).
+This enables teams to track and resolve at-risk retryables without losing triage state between runs.
 
-- Still `"Untriaged"` or `"Investigating"`
-- Within 2 days of expiration
-- Not already marked as `"Resolved"` or `"Expired"`
+### Slack Alerts (when `--enableAlerting` is also used)
 
-Successfully redeemed tickets are intentionally excluded to keep the database focused on actionable items—such as retryables that are stuck, failed, or at risk of expiration.
+Slack alerts are sent only for tickets that:
+
+- Are marked as `Untriaged` or `Investigating`,
+
+- Have less than 2 days left before expiration.
+
+- Are not already marked as `Resolved` or `Expired`
+
+- Successfully redeemed tickets are skipped, keeping the database focused on retryables that are stuck, failed, or at risk.
 
 ### Required Columns
 
