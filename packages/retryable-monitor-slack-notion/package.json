@@ -1,5 +1,6 @@
 {
-  "name": "retryable-monitor",
+  "name": "retryable-monitor-notifier",
+  "description": "Retryable monitor with Slack + Notion integration",
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
@@ -7,6 +8,7 @@
     "@arbitrum/sdk": "^4.0.0",
     "@arbitrum/token-bridge-contracts": "v1.1.0-beta.2",
     "@ethersproject/abstract-provider": "^5.5.1",
+    "@notionhq/client": "^2.3.0",
     "axios": "^1.7.2",
     "ethers": "^5.5.4",
     "graphql": "^16.6.0",
@@ -18,6 +20,6 @@
     "lint": "eslint .",
     "build": "rm -rf ./dist && tsc",
     "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "dev": "yarn build && node ./dist/retryable-monitor/index.js"
+    "dev": "yarn build && node ./dist/retryable-monitor-slack-notion/index.js"
   }
 }
