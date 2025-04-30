@@ -1,5 +1,13 @@
+/*
+  Logic for generating the intermediate and final reports for the Retryables
+*/
+
 import axios from 'axios'
-import { ParentToChildMessageStatus } from '@arbitrum/sdk'
+import {
+  ParentToChildMessageStatus,
+  ParentTransactionReceipt,
+  ParentToChildMessageReader,
+} from '@arbitrum/sdk'
 import { ERC20__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ERC20__factory'
 import { BigNumber, ethers, providers } from 'ethers'
 import { ArbGasInfo__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ArbGasInfo__factory'
@@ -9,27 +17,136 @@ import {
 } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 import { ArbRetryableTx__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ArbRetryableTx__factory'
 import { Provider } from '@ethersproject/abstract-provider'
-import { reportRetryableErrorToSlack } from './reportRetryableErrorToSlack'
+import { reportRetryableErrorToSlack } from '../slackReporter'
 import {
   ChildChainTicketReport,
   ParentChainTicketReport,
   TokenDepositData,
 } from './types'
-import { ChildNetwork, getExplorerUrlPrefixes } from '../utils'
+import { TransactionReceipt } from '@ethersproject/abstract-provider'
+import { FetchedEvent } from '@arbitrum/sdk/dist/lib/utils/eventFetcher'
+import { TypedEvent } from '@arbitrum/sdk/dist/lib/abi/common'
+import { SEVEN_DAYS_IN_SECONDS } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
+import { ChildNetwork, getExplorerUrlPrefixes } from '../../utils'
 
-export const reportFailedTicket = async ({
-  parentChainTicketReport,
-  childChainTicketReport,
+export const getParentChainRetryableReport = (
+  arbParentTxReceipt: ParentTransactionReceipt,
+  retryableMessage: ParentToChildMessageReader
+): ParentChainTicketReport => {
+  return {
+    id: arbParentTxReceipt.transactionHash,
+    transactionHash: arbParentTxReceipt.transactionHash,
+    sender: arbParentTxReceipt.from,
+    retryableTicketID: retryableMessage.retryableCreationId,
+  }
+}
+
+export const getChildChainRetryableReport = async ({
+  childChainTx,
+  childChainTxReceipt,
+  retryableMessage,
+  childChainProvider,
+}: {
+  childChainTx: providers.TransactionResponse
+  childChainTxReceipt: TransactionReceipt
+  retryableMessage: ParentToChildMessageReader
+  childChainProvider: providers.Provider
+}): Promise<ChildChainTicketReport> => {
+  let status = await retryableMessage.status()
+
+  const timestamp = (
+    await childChainProvider.getBlock(childChainTxReceipt.blockNumber)
+  ).timestamp
+
+  const childChainTicketReport = {
+    id: retryableMessage.retryableCreationId,
+    retryTxHash: (await retryableMessage.getAutoRedeemAttempt())
+      ?.transactionHash,
+    createdAtTimestamp: String(timestamp),
+    createdAtBlockNumber: childChainTxReceipt.blockNumber,
+    timeoutTimestamp: String(Number(timestamp) + SEVEN_DAYS_IN_SECONDS),
+    deposit: String(retryableMessage.messageData.l2CallValue), // eth amount
+    status: ParentToChildMessageStatus[status],
+    retryTo: retryableMessage.messageData.destAddress,
+    retryData: retryableMessage.messageData.data,
+    gasFeeCap: (childChainTx.maxFeePerGas ?? BigNumber.from(0)).toNumber(),
+    gasLimit: childChainTx.gasLimit.toNumber(),
+  }
+
+  return childChainTicketReport
+}
+
+export const getTokenDepositData = async ({
+  childChainTx,
+  retryableMessage,
+  arbParentTxReceipt,
+  depositsInitiatedLogs,
+  parentChainProvider,
+}: {
+  childChainTx: providers.TransactionResponse
+  retryableMessage: ParentToChildMessageReader
+  arbParentTxReceipt: ParentTransactionReceipt
+  depositsInitiatedLogs: FetchedEvent<TypedEvent<any, any>>[]
+  parentChainProvider: providers.Provider
+}): Promise<TokenDepositData | undefined> => {
+  let parentChainErc20Address: string | undefined,
+    tokenAmount: string | undefined,
+    tokenDepositData: TokenDepositData | undefined
+
+  try {
+    const retryableMessageData = childChainTx.data
+    const retryableBody = retryableMessageData.split('0xc9f95d32')[1]
+    const requestId = '0x' + retryableBody.slice(0, 64)
+    const depositsInitiatedEvent = depositsInitiatedLogs.find(
+      log => log.topics[3] === requestId
+    )
+    parentChainErc20Address = depositsInitiatedEvent?.event[0]
+    tokenAmount = depositsInitiatedEvent?.event[4]?.toString()
+  } catch (e) {
+    console.log(e)
+  }
+
+  if (parentChainErc20Address) {
+    try {
+      const erc20 = ERC20__factory.connect(
+        parentChainErc20Address,
+        parentChainProvider
+      )
+      const [symbol, decimals] = await Promise.all([
+        erc20.symbol(),
+        erc20.decimals(),
+      ])
+      tokenDepositData = {
+        l2TicketId: retryableMessage.retryableCreationId,
+        tokenAmount,
+        sender: arbParentTxReceipt.from,
+        l1Token: {
+          symbol,
+          decimals,
+          id: parentChainErc20Address,
+        },
+      }
+    } catch (e) {
+      console.log('failed to fetch token data', e)
+    }
+  }
+
+  return tokenDepositData
+}
+
+export const reportFailedRetryables = async ({
+  parentChainRetryableReport,
+  childChainRetryableReport,
   tokenDepositData,
   childChain,
 }: {
-  parentChainTicketReport: ParentChainTicketReport
-  childChainTicketReport: ChildChainTicketReport
+  parentChainRetryableReport: ParentChainTicketReport
+  childChainRetryableReport: ChildChainTicketReport
   tokenDepositData?: TokenDepositData
   childChain: ChildNetwork
 }) => {
   // slack it
-  const t = childChainTicketReport
+  const t = childChainRetryableReport
   const now = Math.floor(new Date().getTime() / 1000) // now in s
 
   // don't report tickets which are not yet scheduled if they have been created in last 2h
@@ -50,7 +167,7 @@ export const reportFailedTicket = async ({
     return
   }
 
-  const l1Report = parentChainTicketReport
+  const l1Report = parentChainRetryableReport
 
   const childChainProvider = new providers.JsonRpcProvider(
     String(childChain.orbitRpcUrl)
