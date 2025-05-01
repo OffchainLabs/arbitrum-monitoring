@@ -15,10 +15,10 @@ import {
 import {
   getParentChainRetryableReport,
   getChildChainRetryableReport,
-  getTokenDepositData,
 } from './reportGenerator'
-import { reportFailedRetryables } from './reportGenerator'
 import { getExplorerUrlPrefixes } from '../../utils'
+import { OnFailedRetryableFound } from './types'
+import { getTokenDepositData } from './tokenDataFetcher'
 
 export const checkRetryables = async (
   parentChainProvider: providers.Provider,
@@ -27,7 +27,8 @@ export const checkRetryables = async (
   bridgeAddress: string,
   fromBlock: number,
   toBlock: number,
-  enableAlerting: boolean
+  enableAlerting: boolean,
+  onFailedRetryableFound?: OnFailedRetryableFound
 ): Promise<boolean> => {
   let retryablesFound = false
 
@@ -88,50 +89,48 @@ export const checkRetryables = async (
 
         // if a Retryable is not in a successful state, extract it's details
         if (status !== ParentToChildMessageStatus.REDEEMED) {
-          // report the ticket only if `enableAlerting` flag is on
-          if (enableAlerting) {
-            const childChainTx = await childChainProvider.getTransaction(
-              retryableTicketId
+          const childChainTx = await childChainProvider.getTransaction(
+            retryableTicketId
+          )
+          const childChainTxReceipt =
+            await childChainProvider.getTransactionReceipt(
+              retryableMessage.retryableCreationId
             )
-            const childChainTxReceipt =
-              await childChainProvider.getTransactionReceipt(
-                retryableMessage.retryableCreationId
-              )
 
-            if (!childChainTxReceipt) {
-              // if child-chain tx is very recent, the tx receipt might not be found yet
-              // if not handled, this will result in `undefined` error while trying to extract retryable details
-              console.log(
-                `${msgIndex + 1}. ${
-                  ParentToChildMessageStatus[status]
-                }:\nChildChainTxHash: ${
-                  CHILD_CHAIN_TX_PREFIX + retryableTicketId
-                } (Receipt not found yet)`
-              )
-              continue
-            }
-
-            const parentChainRetryableReport = getParentChainRetryableReport(
-              arbParentTxReceipt,
-              retryableMessage
+          if (!childChainTxReceipt) {
+            // if child-chain tx is very recent, the tx receipt might not be found yet
+            // if not handled, this will result in `undefined` error while trying to extract retryable details
+            console.log(
+              `${msgIndex + 1}. ${
+                ParentToChildMessageStatus[status]
+              }:\nChildChainTxHash: ${
+                CHILD_CHAIN_TX_PREFIX + retryableTicketId
+              } (Receipt not found yet)`
             )
-            const childChainRetryableReport =
-              await getChildChainRetryableReport({
-                retryableMessage,
-                childChainTx,
-                childChainTxReceipt,
-                childChainProvider,
-              })
-            const tokenDepositData = await getTokenDepositData({
-              childChainTx,
-              retryableMessage,
-              arbParentTxReceipt,
-              depositsInitiatedLogs,
-              parentChainProvider,
-            })
+            continue
+          }
 
-            // report the unsuccessful ticket to the alerting system
-            await reportFailedRetryables({
+          const parentChainRetryableReport = getParentChainRetryableReport(
+            arbParentTxReceipt,
+            retryableMessage
+          )
+          const childChainRetryableReport = await getChildChainRetryableReport({
+            retryableMessage,
+            childChainTx,
+            childChainTxReceipt,
+            childChainProvider,
+          })
+          const tokenDepositData = await getTokenDepositData({
+            childChainTx,
+            retryableMessage,
+            arbParentTxReceipt,
+            depositsInitiatedLogs,
+            parentChainProvider,
+          })
+
+          // Call the provided callback if it exists
+          if (enableAlerting && onFailedRetryableFound) {
+            await onFailedRetryableFound({
               parentChainRetryableReport,
               childChainRetryableReport,
               tokenDepositData,

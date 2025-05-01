@@ -2,12 +2,16 @@
 You can check retryables in two modes:
 1. One-off mode: Check retryables for a specific block range and exit
 2. Continuous mode / Watch mode: Check retryables for the latest blocks, and continue checking for new blocks as they are added to the chain
+
+```
+
 */
 
 import { providers } from 'ethers'
 import { ChildNetwork } from 'utils'
 import { checkRetryables } from './retryableChecker'
 import { SEVEN_DAYS_IN_SECONDS } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
+import { OnFailedRetryableFound } from './types'
 
 export const getParentChainBlockTime = (childChain: ChildNetwork) => {
   const parentChainId = childChain.parentChainId
@@ -36,7 +40,8 @@ export const checkRetryablesOneOff = async (
   childChain: ChildNetwork,
   fromBlock: number,
   toBlock: number,
-  enableAlerting: boolean
+  enableAlerting: boolean,
+  onFailedRetryableFound: OnFailedRetryableFound
 ): Promise<number> => {
   if (toBlock === 0) {
     try {
@@ -84,7 +89,8 @@ export const checkRetryablesOneOff = async (
         childChain.ethBridge.bridge,
         range[0],
         range[1],
-        enableAlerting
+        enableAlerting,
+        onFailedRetryableFound
       )) || retryablesFound // the final `retryablesFound` value is the OR of all the `retryablesFound` for ranges
   }
 
@@ -98,7 +104,8 @@ export const checkRetryablesContinuous = async (
   fromBlock: number,
   toBlock: number,
   enableAlerting: boolean,
-  continuous: boolean
+  continuous: boolean,
+  onFailedRetryableFound: OnFailedRetryableFound
 ) => {
   const processingDurationInSeconds = 180
   let isContinuous = continuous
@@ -112,7 +119,8 @@ export const checkRetryablesContinuous = async (
       childChain,
       fromBlock,
       toBlock,
-      enableAlerting
+      enableAlerting,
+      onFailedRetryableFound
     )
     console.log('Check completed for block:', lastBlockChecked)
     fromBlock = lastBlockChecked + 1

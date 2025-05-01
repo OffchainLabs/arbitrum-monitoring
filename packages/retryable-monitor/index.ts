@@ -6,13 +6,14 @@ import {
   getArbitrumNetwork,
   registerCustomArbitrumNetwork,
 } from '@arbitrum/sdk'
-import { reportRetryableErrorToSlack } from './slackReporter'
 import { FindRetryablesOptions } from './core/types'
 import { ChildNetwork, DEFAULT_CONFIG_PATH, getConfig } from '../utils'
 import {
   checkRetryablesOneOff,
   checkRetryablesContinuous,
 } from './core/retryableCheckerMode'
+import { reportFailedRetryables } from './handlers/failedRetryableHandler'
+import { postSlackMessage } from './handlers/postSlackMessage'
 
 // Path for the log file
 const logFilePath = 'logfile.log'
@@ -91,7 +92,8 @@ const processChildChain = async (
       options.fromBlock,
       options.toBlock,
       options.enableAlerting,
-      options.continuous
+      options.continuous,
+      reportFailedRetryables
     )
   } else {
     console.log('One-off mode activated.')
@@ -101,7 +103,8 @@ const processChildChain = async (
       childChain,
       options.fromBlock,
       options.toBlock,
-      options.enableAlerting
+      options.enableAlerting,
+      reportFailedRetryables
     )
     // Log a message if no retryables were found for the child chain
     if (!retryablesFound) {
@@ -130,7 +133,7 @@ const processOrbitChainsConcurrently = async () => {
     } catch (e) {
       const errorStr = `Retryable monitor - Error processing chain [${childChain.name}]: ${e.message}`
       if (options.enableAlerting) {
-        reportRetryableErrorToSlack({
+        postSlackMessage({
           message: errorStr,
         })
       }
