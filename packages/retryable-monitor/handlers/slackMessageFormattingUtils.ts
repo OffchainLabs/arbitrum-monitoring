@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { ParentToChildMessageStatus } from '@arbitrum/sdk'
 import { ERC20__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ERC20__factory'
-import { BigNumber, ethers, providers } from 'ethers'
+import { BigNumber, ethers } from 'ethers'
 import { ArbGasInfo__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ArbGasInfo__factory'
 import {
   ARB_GAS_INFO,

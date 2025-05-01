@@ -1,12 +1,12 @@
 import { FetchedEvent } from '@arbitrum/sdk/dist/lib/utils/eventFetcher'
 import { TypedEvent } from '@arbitrum/sdk/dist/lib/abi/common'
 import { providers } from 'ethers'
-import { TokenDepositData } from './types'
 import {
   ParentTransactionReceipt,
   ParentToChildMessageReader,
 } from '@arbitrum/sdk'
 import { ERC20__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ERC20__factory'
+import { TokenDepositData } from './types'
 
 export const getTokenDepositData = async ({
   childChainTx,

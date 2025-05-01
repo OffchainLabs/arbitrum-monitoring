@@ -8,9 +8,9 @@ import {
   ParentToChildMessageReader,
 } from '@arbitrum/sdk'
 import { BigNumber, providers } from 'ethers'
-import { ChildChainTicketReport, ParentChainTicketReport } from './types'
 import { TransactionReceipt } from '@ethersproject/abstract-provider'
 import { SEVEN_DAYS_IN_SECONDS } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
+import { ChildChainTicketReport, ParentChainTicketReport } from './types'
 
 export const getParentChainRetryableReport = (
   arbParentTxReceipt: ParentTransactionReceipt,

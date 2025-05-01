@@ -8,10 +8,10 @@ You can check retryables in two modes:
 */
 
 import { providers } from 'ethers'
-import { ChildNetwork } from 'utils'
-import { checkRetryables } from './retryableChecker'
 import { SEVEN_DAYS_IN_SECONDS } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 import { OnFailedRetryableFound } from './types'
+import { ChildNetwork } from '../../utils'
+import { checkRetryables } from './retryableChecker'
 
 export const getParentChainBlockTime = (childChain: ChildNetwork) => {
   const parentChainId = childChain.parentChainId
