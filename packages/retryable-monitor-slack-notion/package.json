@@ -20,6 +20,8 @@
     "lint": "eslint .",
     "build": "rm -rf ./dist && tsc",
     "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "dev": "yarn build && node ./dist/retryable-monitor-slack-notion/index.js"
+    "dev": "yarn build && node ./dist/retryable-monitor-slack-notion/index.js",
+    "sweep:notion": "ts-node sweepNotion.ts",
+    "monitor:full": "yarn retryable-monitor-slack-notion --writeToNotion --enableAlerting && yarn sweep:notion"
   }
 }

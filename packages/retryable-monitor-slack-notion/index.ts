@@ -43,7 +43,6 @@ import { syncTicketToNotion } from './notion/syncTicket'
 import { getTokenPrice } from './reportRetryables'
 import { getGasInfo } from './reportRetryables'
 import { formatL2Callvalue } from './reportRetryables'
-import { alertUntriagedNotionRetryables } from './notion/alertUntriagedRetryables'
 
 // Ensure the log file exists, or create one
 const logFilePath = 'logfile.log'
@@ -498,7 +497,9 @@ const processChildChain = async (
 
     return retryablesFound
   }
-  // Continuously check retryables with periodic sweeps
+  // Continuously check retryables 
+  // Notion sweep is now handled by a separate CI job.
+  // This script no longer performs periodic sweeps.
 
   const checkRetryablesContinuous = async (
     fromBlock: number,
@@ -508,8 +509,6 @@ const processChildChain = async (
     let isContinuous = options.continuous
     const startTime = Date.now()
 
-    let lastSweepTime = Date.now()
-    const sweepInterval = 24 * 60 * 60 * 1000 // 24 hours
 
     const processBlocks = async () => {
       const lastBlockChecked = await checkRetryablesOneOff(fromBlock, toBlock)
@@ -526,14 +525,6 @@ const processChildChain = async (
       }
 
       const now = Date.now()
-      if (now - lastSweepTime > sweepInterval) {
-        logResult(
-          'Monitor',
-          '⏳ Running Notion sweep for expiring retryables...'
-        )
-        await alertUntriagedNotionRetryables()
-        lastSweepTime = now
-      }
 
       const elapsedTimeInSeconds = Math.floor((now - startTime) / 1000)
       if (elapsedTimeInSeconds >= processingDurationInSeconds) {
