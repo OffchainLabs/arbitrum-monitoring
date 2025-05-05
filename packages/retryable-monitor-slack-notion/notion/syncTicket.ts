@@ -1,5 +1,7 @@
 import { notion } from './notionClient'
 import { PageObjectResponse } from '@notionhq/client/build/src/api-endpoints'
+import { reportRetryableErrorToSlack } from '../reportRetryableErrorToSlack'
+
 
 const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!
 
@@ -71,7 +73,9 @@ export async function syncTicketToNotion(
       const page = search.results[0]
 
       if (!('properties' in page)) {
-        console.error('⚠️ Skipping update: Notion page missing properties.')
+        const errorMessage = `⚠️ Notion sync failed: page for ${ChildTx} is missing 'properties'. Skipping update.`
+        console.error(errorMessage)
+        await reportRetryableErrorToSlack({ message: errorMessage })
         return
       }
 
