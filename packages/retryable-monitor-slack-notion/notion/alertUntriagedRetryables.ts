@@ -14,7 +14,7 @@ export const alertUntriagedNotionRetryables = async () => {
   for (const page of response.results) {
     const props = (page as any).properties
     const timeoutStr = props?.timeoutTimestamp?.date?.start
-    const retryableUrl = props?.ChildTx?.url || '(unknown)'
+    const retryableUrl = props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
 
     if (!timeoutStr) continue
 
