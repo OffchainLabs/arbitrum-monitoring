@@ -9,6 +9,7 @@ interface SyncTicketInput {
   ChildTx: string
   ParentTx: string
   createdAt: number
+  timeout?: number
   status?: 'Untriaged' | 'Investigating' | 'Resolved' | 'False Positive' | 'Expired'
   priority?: 'High' | 'Medium' | 'Low' | 'Unset'
   metadata?: {
@@ -48,7 +49,11 @@ export async function syncTicketToNotion(
       CreatedAt: { date: { start: new Date(createdAt).toISOString() } },
       Priority: { select: { name: priority } },
     }
-
+    if (input.timeout) {
+      notionProps['timeoutTimestamp'] = {
+        date: { start: new Date(input.timeout * 1000).toISOString() },
+      }
+    }
     if (metadata) {
       notionProps['GasPriceProvided'] = {
         rich_text: [{ text: { content: metadata.gasPriceProvided } }],
@@ -59,7 +64,7 @@ export async function syncTicketToNotion(
       notionProps['GasPriceNow'] = {
         rich_text: [{ text: { content: metadata.gasPriceNow } }],
       }
-      notionProps['L2CallValue'] = {
+      notionProps['TotalRetryableDeposit'] = {
         rich_text: [{ text: { content: metadata.l2CallValue } }],
       }
       if (metadata.tokensDeposited) {
