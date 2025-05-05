@@ -239,7 +239,7 @@ const formatL2Callvalue = async (
     ])
 
     const nativeTokenAmount = ethers.utils.formatUnits(ticket.deposit, decimals)
-    return `\n\t *Child chain callvalue:* ${nativeTokenAmount} ${symbol} (Gas token: ${symbol})`
+    return `\n\t *Total retryable deposit (incl. callvalue + fees):* ${nativeTokenAmount} ${symbol} (Gas token: ${symbol})`
   } else {
     const ethAmount = ethers.utils.formatEther(ticket.deposit)
     const depositWorthInUsd = (+ethAmount * (await getEthPrice())).toFixed(2)
