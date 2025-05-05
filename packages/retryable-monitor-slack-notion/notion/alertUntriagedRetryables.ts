@@ -16,8 +16,6 @@ export const alertUntriagedNotionRetryables = async () => {
     const timeoutStr = props?.timeoutTimestamp?.date?.start
     const retryableUrl = props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
 
-    if (!timeoutStr) continue
-
     await reportRetryableErrorToSlack({
       message: `⚠️ Retryable ticket still untriaged:\n• Retryable: ${retryableUrl}\n• Status: Untriaged\n• Timeout: ${timeoutStr}`,
     })
