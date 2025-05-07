@@ -54,12 +54,12 @@
   optionalDependencies:
     sol2uml "2.2.0"
 
-"@arbitrum/orbit-sdk@^0.19.0":
-  version "0.19.0"
-  resolved "https://registry.yarnpkg.com/@arbitrum/orbit-sdk/-/orbit-sdk-0.19.0.tgz#afa7202eb1bc6de0a86d040622c870ea76b5bf5b"
-  integrity sha512-ASlE2gE3Ts4rVZLIsdA6pjsx7IXC0r2U0faMr8a7YRQE8deCiEQbQYBOfldShz7s1i/ywykweyYHQRFQzKJ+GQ==
+"@arbitrum/orbit-sdk@^0.23.1":
+  version "0.23.1"
+  resolved "https://registry.yarnpkg.com/@arbitrum/orbit-sdk/-/orbit-sdk-0.23.1.tgz#1e45fdfb82c7027d495509484e72ce21c1b6d72b"
+  integrity sha512-zUrytW3QSi0IeO8QDfJSsnjskgc7JukaCBZ9OSuLTDTGRwk5vuvF6imoZX7VbesX9Dg/8qJQmDF+QiwEZmGlkA==
   dependencies:
-    "@arbitrum/sdk" "^4.0.0"
+    "@arbitrum/sdk" "^4.0.2"
     "@arbitrum/token-bridge-contracts" "^1.2.2"
     "@offchainlabs/fund-distribution-contracts" "^1.0.1"
     "@safe-global/protocol-kit" "^4.0.2"
@@ -69,6 +69,17 @@
   version "4.0.0"
   resolved "https://registry.yarnpkg.com/@arbitrum/sdk/-/sdk-4.0.0.tgz#8eb2deed1a438250acb4084a4bb8fc7eae7659b6"
   integrity sha512-wNZFRs4yYxd6Pyc6xEjksp3C59PikmmVPIw49ceMoLY5D0e6xJt2nuA7jjsemDgRe7q6EvLFvHAY2At6XUWrkg==
+  dependencies:
+    "@ethersproject/address" "^5.0.8"
+    "@ethersproject/bignumber" "^5.1.1"
+    "@ethersproject/bytes" "^5.0.8"
+    async-mutex "^0.4.0"
+    ethers "^5.1.0"
+
+"@arbitrum/sdk@^4.0.2":
+  version "4.0.4"
+  resolved "https://registry.yarnpkg.com/@arbitrum/sdk/-/sdk-4.0.4.tgz#32f3cfa75d2b3f9ab0be01eb807112e0001f428d"
+  integrity sha512-GscwlkHYmPzRKs9huDHntbqx1xMRhTraTUvTC9exu+prjndKxHe9ZORuIcqmtEqwLwma/l8nqxI+k+pEEdIO6Q==
   dependencies:
     "@ethersproject/address" "^5.0.8"
     "@ethersproject/bignumber" "^5.1.1"
