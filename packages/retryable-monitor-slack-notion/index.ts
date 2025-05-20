@@ -382,8 +382,40 @@ const processChildChain = async (
           const status = await retryableMessage.status()
 
           if (status === ParentToChildMessageStatus.REDEEMED) {
+            if (options.writeToNotion) {
+              const result = await syncTicketToNotion({
+                ChildTx: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
+                ParentTx: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
+                createdAt: Date.now(), // fallback; won't overwrite real one
+                timeout: Date.now() + SEVEN_DAYS_IN_SECONDS * 1000,
+                status: 'Resolved',
+                priority: 'Unset',
+                metadata: {
+                  tokensDeposited: undefined,
+                  gasPriceProvided: '-',
+                  gasPriceAtCreation: undefined,
+                  gasPriceNow: '-',
+                  l2CallValue: '-',
+                },
+              })
+
+              if (!result || result.isNew) {
+                continue // don't insert new resolved tickets
+              }
+
+              logResult(
+                childChain.name,
+                `${
+                  msgIndex + 1
+                }. Resolved:\nChildChainTxHash: ${CHILD_CHAIN_TX_PREFIX}${
+                  retryableMessage.retryableCreationId
+                }}`
+              )
+            }
+
             continue
           }
+
           const notionStatus = 'Untriaged'
 
           const childChainTx = await childChainProvider.getTransaction(
@@ -498,7 +530,7 @@ const processChildChain = async (
 
     return retryablesFound
   }
-  // Continuously check retryables 
+  // Continuously check retryables
   // Notion sweep is now handled by a separate CI job.
   // This script no longer performs periodic sweeps.
 
@@ -509,7 +541,6 @@ const processChildChain = async (
     const processingDurationInSeconds = 180
     let isContinuous = options.continuous
     const startTime = Date.now()
-
 
     const processBlocks = async () => {
       const lastBlockChecked = await checkRetryablesOneOff(fromBlock, toBlock)
