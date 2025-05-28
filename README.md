@@ -82,6 +82,11 @@ ASSERTION_MONITORING_SLACK_TOKEN=your-slack-token
 ASSERTION_MONITORING_SLACK_CHANNEL=your-slack-channel
 ```
 
+Required environment variables:
+
+- `RETRYABLE_MONITORING_NOTION_TOKEN`: Notion API token for database integration
+- `RETRYABLE_MONITORING_NOTION_DB_ID`: Notion database ID for storing retryable tickets
+
 ## Usage
 
 All monitors support these base options:
@@ -107,3 +112,21 @@ See individual monitor READMEs for specific options and features:
 - [Retryable Monitor Details](./packages/retryable-monitor/README.md)
 - [Batch Poster Monitor Details](./packages/batch-poster-monitor/README.md)
 - [Assertion Monitor Details](./packages/assertion-monitor/README.md)
+
+### Notion Integration
+
+When `--writeToNotion` is enabled, the monitor will:
+
+- Create new pages in the Notion database for each retryable ticket
+- Update existing pages when ticket status changes
+- Run a daily sweep to mark expired tickets
+- Track ticket status, creation time, expiration time, and transaction hashes
+
+The Notion database should have the following properties:
+
+- Ticket ID (title)
+- Status (select)
+- Created At (date)
+- Expires At (date)
+- Transaction Hash (url)
+- Last Updated (date)

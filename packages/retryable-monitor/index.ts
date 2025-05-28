@@ -14,6 +14,10 @@ import {
 } from './core/retryableCheckerMode'
 import { reportFailedRetryables } from './handlers/failedRetryableHandler'
 import { postSlackMessage } from './handlers/postSlackMessage'
+import {
+  syncRetryableToNotion,
+  sweepNotionDatabase,
+} from './handlers/notionHandler'
 
 // Path for the log file
 const logFilePath = 'logfile.log'
@@ -57,6 +61,7 @@ const options: FindRetryablesOptions = yargs(process.argv.slice(2))
     continuous: { type: 'boolean', default: false },
     configPath: { type: 'string', default: DEFAULT_CONFIG_PATH },
     enableAlerting: { type: 'boolean', default: false },
+    writeToNotion: { type: 'boolean', default: false },
   })
   .strict()
   .parseSync() as FindRetryablesOptions
@@ -93,8 +98,24 @@ const processChildChain = async (
       options.toBlock,
       options.enableAlerting,
       options.continuous,
-      reportFailedRetryables
+      async ticket => {
+        await reportFailedRetryables(ticket)
+        if (options.writeToNotion) {
+          await syncRetryableToNotion(ticket)
+        }
+      }
     )
+
+    // If in continuous mode and Notion is enabled, run the sweep every 24 hours
+    if (options.writeToNotion) {
+      setInterval(async () => {
+        try {
+          await sweepNotionDatabase()
+        } catch (error) {
+          console.error('Error running Notion sweep:', error)
+        }
+      }, 24 * 60 * 60 * 1000) // 24 hours
+    }
   } else {
     console.log('One-off mode activated.')
     const retryablesFound = await checkRetryablesOneOff(
@@ -104,7 +125,12 @@ const processChildChain = async (
       options.fromBlock,
       options.toBlock,
       options.enableAlerting,
-      reportFailedRetryables
+      async ticket => {
+        await reportFailedRetryables(ticket)
+        if (options.writeToNotion) {
+          await syncRetryableToNotion(ticket)
+        }
+      }
     )
     // Log a message if no retryables were found for the child chain
     if (!retryablesFound) {
