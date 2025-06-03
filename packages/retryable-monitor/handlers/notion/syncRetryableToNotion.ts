@@ -38,6 +38,8 @@ export async function syncRetryableToNotion(
       },
     })
 
+    const isRetryableFoundInNotion = search.results.length > 0
+
     const notionProps: Record<string, any> = {
       ParentTx: { rich_text: [{ text: { content: ParentTx } }] },
       CreatedAt: { date: { start: new Date(createdAt).toISOString() } },
@@ -70,7 +72,7 @@ export async function syncRetryableToNotion(
       }
     }
 
-    if (search.results.length > 0) {
+    if (isRetryableFoundInNotion) {
       const page = search.results[0]
 
       if (!('properties' in page)) {
@@ -101,7 +103,12 @@ export async function syncRetryableToNotion(
       return { id: page.id, status: currentStatus ?? status, isNew: false }
     }
 
-    // Entry doesn't exist — create it
+    if (isRetryableFoundInNotion && status === 'Resolved') {
+      // if the retryable is resolved, we don't need to do anything
+      return undefined
+    }
+
+    // For Unresolved retryables, we need to create a new entry in the Notion database
     const created = await notionClient.pages.create({
       parent: { database_id: databaseId },
       properties: {
