@@ -201,15 +201,9 @@ const processOrbitChainsConcurrently = async () => {
   // keep running the script until we get resolution (success or error) for all the chains
   await Promise.allSettled(promises)
 
-  // if Notion-sync is on in continuous mode, at the end
   // once we process all the chains go through the Notion database once to alert on any `Unresolved` tickets found
-  if (options.writeToNotion && options.continuous) {
-    const ALERT_INTERVAL = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
-    const lastAlertTime = Date.now()
-
-    if (Date.now() - lastAlertTime >= ALERT_INTERVAL) {
-      await alertUntriagedNotionRetryables()
-    }
+  if (options.writeToNotion) {
+    await alertUntriagedNotionRetryables()
   }
 }
 
