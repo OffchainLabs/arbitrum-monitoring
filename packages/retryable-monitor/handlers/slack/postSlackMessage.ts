@@ -1,4 +1,4 @@
-import { postSlackMessage as commonPostSlackMessage } from 'utils/postSlackMessage'
+import { postSlackMessage as commonPostSlackMessage } from '../../../utils/postSlackMessage'
 
 const slackToken = process.env.RETRYABLE_MONITORING_SLACK_TOKEN
 const slackChannel = process.env.RETRYABLE_MONITORING_SLACK_CHANNEL
