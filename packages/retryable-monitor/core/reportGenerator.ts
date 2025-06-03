@@ -45,7 +45,7 @@ export const getChildChainRetryableReport = async ({
     id: retryableMessage.retryableCreationId,
     retryTxHash: (await retryableMessage.getAutoRedeemAttempt())
       ?.transactionHash,
-    createdAtTimestamp: String(timestamp),
+    createdAtTimestamp: String(timestamp * 1000),
     createdAtBlockNumber: childChainTxReceipt.blockNumber,
     timeoutTimestamp: String(Number(timestamp) + SEVEN_DAYS_IN_SECONDS),
     deposit: String(retryableMessage.messageData.l2CallValue), // eth amount

@@ -5,16 +5,6 @@ import { OnRetryableFoundParams } from '../../core/types'
 
 const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!
 
-/**
- * Syncs a retryable ticket to the Notion database.
- *
- * If the ticket already exists, updates the status and other properties.
- * If the ticket doesn't exist, creates a new entry.
- *
- * @param input - The Retryable ticket data to sync to Notion
- * @returns The ID of the synced ticket and its new status
- */
-
 export async function syncRetryableToNotion(
   input: OnRetryableFoundParams
 ): Promise<{ id: string; status: string; isNew: boolean } | undefined> {
@@ -45,11 +35,13 @@ export async function syncRetryableToNotion(
       CreatedAt: { date: { start: new Date(createdAt).toISOString() } },
       Priority: { select: { name: priority } },
     }
+
     if (input.timeout) {
       notionProps['timeoutTimestamp'] = {
         date: { start: new Date(input.timeout * 1000).toISOString() },
       }
     }
+
     if (metadata) {
       notionProps['GasPriceProvided'] = {
         rich_text: [{ text: { content: metadata.gasPriceProvided } }],
@@ -90,6 +82,22 @@ export async function syncRetryableToNotion(
         currentStatus = statusProp.select.name
       }
 
+      // If the new status is 'Resolved', only update Status, don't touch metadata
+      if (status === 'Resolved') {
+        return await notionClient.pages
+          .update({
+            page_id: page.id,
+            properties: {
+              Status: { select: { name: 'Resolved' } },
+            },
+          })
+          .then(() => ({
+            id: page.id,
+            status: 'Resolved',
+            isNew: false,
+          }))
+      }
+
       // Only overwrite status if still Untriaged or missing
       if (currentStatus === 'Untriaged' || !currentStatus) {
         notionProps['Status'] = { select: { name: status } }
@@ -104,11 +112,11 @@ export async function syncRetryableToNotion(
     }
 
     if (!isRetryableFoundInNotion && status === 'Resolved') {
-      // if the retryable is resolved, we don't need to do anything
+      // Resolved but not found—skip
       return undefined
     }
 
-    // For Unresolved retryables, we need to create a new entry in the Notion database
+    // Retryable is new and unresolved—create full entry
     const created = await notionClient.pages.create({
       parent: { database_id: databaseId },
       properties: {
