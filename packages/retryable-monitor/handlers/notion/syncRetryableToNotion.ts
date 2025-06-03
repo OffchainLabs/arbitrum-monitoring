@@ -18,6 +18,8 @@ const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!
 export async function syncRetryableToNotion(
   input: OnRetryableFoundParams
 ): Promise<{ id: string; status: string; isNew: boolean } | undefined> {
+  console.log('xxxxx', input, input.status)
+
   const {
     ChildTx,
     ParentTx,

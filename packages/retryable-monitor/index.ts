@@ -10,12 +10,7 @@ import {
   checkRetryablesContinuous,
 } from './core/retryableCheckerMode'
 import { postSlackMessage } from './handlers/slack/postSlackMessage'
-import { syncRetryableToNotion } from './handlers/notion/syncRetryableToNotion'
 import { alertUntriagedNotionRetryables } from './handlers/notion/alertUntriagedRetraybles'
-import {
-  OnFailedRetryableFoundParams,
-  OnRetryableFoundParams,
-} from './core/types'
 import { handleFailedRetryablesFound } from './handlers/handleFailedRetryablesFound'
 import { handleRedeemedRetryablesFound } from './handlers/handleRedeemedRetryablesFound'
 
@@ -76,11 +71,7 @@ const processChildChain = async (
   fromBlock: number,
   toBlock: number,
   enableAlerting: boolean,
-  continuous: boolean,
-  onFailedRetryableFound: (
-    ticket: OnFailedRetryableFoundParams
-  ) => Promise<void>,
-  onRedeemedRetryableFound: (ticket: OnRetryableFoundParams) => Promise<void>
+  continuous: boolean
 ) => {
   const writeToNotion = config.notion?.enabled ?? false
 
@@ -103,7 +94,6 @@ const processChildChain = async (
         )
       },
       onRedeemedRetryableFound: async ticket => {
-        await onRedeemedRetryableFound(ticket)
         await handleRedeemedRetryablesFound(ticket, writeToNotion)
       },
     })
@@ -133,7 +123,6 @@ const processChildChain = async (
         )
       },
       onRedeemedRetryableFound: async ticket => {
-        await onRedeemedRetryableFound(ticket)
         await handleRedeemedRetryablesFound(ticket, writeToNotion)
       },
     })
@@ -172,20 +161,7 @@ const processOrbitChainsConcurrently = async () => {
         options.fromBlock,
         options.toBlock,
         options.enableAlerting,
-        options.continuous,
-        async ticket => {
-          await handleFailedRetryablesFound(
-            ticket,
-            childChain,
-            childChainProvider,
-            options.writeToNotion
-          )
-        },
-        async ticket => {
-          if (options.writeToNotion) {
-            await syncRetryableToNotion(ticket)
-          }
-        }
+        options.continuous
       )
     } catch (e) {
       const errorStr = `Retryable monitor - Error processing chain [${childChain.name}]: ${e.message}`
