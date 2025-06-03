@@ -77,8 +77,8 @@ export const handleFailedRetryablesFound = async (
       getExplorerUrlPrefixes(childChain)
 
     await syncRetryableToNotion({
-      ChildTx: `${CHILD_CHAIN_TX_PREFIX}${childChainRetryableReport.id}`,
-      ParentTx: `${PARENT_CHAIN_TX_PREFIX}${parentChainRetryableReport.transactionHash}`,
+      ChildTx: `${CHILD_CHAIN_TX_PREFIX}/${childChainRetryableReport.id}`,
+      ParentTx: `${PARENT_CHAIN_TX_PREFIX}/${parentChainRetryableReport.transactionHash}`,
       createdAt: Number(childChainRetryableReport.createdAtTimestamp) * 1000,
       timeout: Number(childChainRetryableReport.timeoutTimestamp) * 1000,
       status: 'Untriaged',
