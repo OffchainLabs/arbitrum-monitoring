@@ -1,4 +1,5 @@
 import { ChildNetwork } from '../../utils'
+import { providers } from 'ethers'
 
 // Type for options passed to findRetryables function
 export interface FindRetryablesOptions {
@@ -8,6 +9,22 @@ export interface FindRetryablesOptions {
   configPath: string
   enableAlerting: boolean
   writeToNotion: boolean
+}
+
+export interface CheckRetryablesOneOffParams {
+  parentChainProvider: providers.Provider
+  childChainProvider: providers.Provider
+  childChain: ChildNetwork
+  fromBlock: number
+  toBlock: number
+  enableAlerting: boolean
+  onFailedRetryableFound: OnFailedRetryableFound
+  onRedeemedRetryableFound: OnRedeemedRetryableFound
+}
+
+export interface CheckRetryablesContinuousParams
+  extends CheckRetryablesOneOffParams {
+  continuous: boolean
 }
 
 export interface ParentChainTicketReport {
@@ -42,9 +59,38 @@ export interface TokenDepositData {
   }
 }
 
-export type OnFailedRetryableFound = (params: {
+export interface OnRetryableFoundParams {
+  ChildTx: string
+  ParentTx: string
+  createdAt: number
+  timeout?: number
+  status?:
+    | 'Untriaged'
+    | 'Investigating'
+    | 'Resolved'
+    | 'False Positive'
+    | 'Expired'
+  priority?: 'High' | 'Medium' | 'Low' | 'Unset'
+  metadata?: {
+    tokensDeposited?: string
+    gasPriceProvided: string
+    gasPriceAtCreation?: string
+    gasPriceNow: string
+    l2CallValue: string
+  }
+}
+
+export interface OnFailedRetryableFoundParams {
   parentChainRetryableReport: ParentChainTicketReport
   childChainRetryableReport: ChildChainTicketReport
   tokenDepositData?: TokenDepositData
   childChain: ChildNetwork
-}) => Promise<void>
+}
+
+export type OnFailedRetryableFound = (
+  params: OnFailedRetryableFoundParams
+) => Promise<void>
+
+export type OnRedeemedRetryableFound = (
+  params: OnRetryableFoundParams
+) => Promise<void>

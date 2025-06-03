@@ -7,9 +7,11 @@ You can check retryables in two modes:
 
 */
 
-import { providers } from 'ethers'
 import { SEVEN_DAYS_IN_SECONDS } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
-import { OnFailedRetryableFound } from './types'
+import {
+  CheckRetryablesOneOffParams,
+  CheckRetryablesContinuousParams,
+} from './types'
 import { ChildNetwork } from '../../utils'
 import { checkRetryables } from './retryableChecker'
 
@@ -34,15 +36,16 @@ export const getParentChainBlockTime = (childChain: ChildNetwork) => {
   return 2 // ARB_MINIMUM_BLOCK_TIME_IN_SECONDS
 }
 
-export const checkRetryablesOneOff = async (
-  parentChainProvider: providers.Provider,
-  childChainProvider: providers.Provider,
-  childChain: ChildNetwork,
-  fromBlock: number,
-  toBlock: number,
-  enableAlerting: boolean,
-  onFailedRetryableFound: OnFailedRetryableFound
-): Promise<number> => {
+export const checkRetryablesOneOff = async ({
+  parentChainProvider,
+  childChainProvider,
+  childChain,
+  fromBlock,
+  toBlock,
+  enableAlerting,
+  onFailedRetryableFound,
+  onRedeemedRetryableFound,
+}: CheckRetryablesOneOffParams): Promise<number> => {
   if (toBlock === 0) {
     try {
       const currentBlock = await parentChainProvider.getBlockNumber()
@@ -90,38 +93,41 @@ export const checkRetryablesOneOff = async (
         range[0],
         range[1],
         enableAlerting,
-        onFailedRetryableFound
+        onFailedRetryableFound,
+        onRedeemedRetryableFound
       )) || retryablesFound // the final `retryablesFound` value is the OR of all the `retryablesFound` for ranges
   }
 
   return toBlock
 }
 
-export const checkRetryablesContinuous = async (
-  parentChainProvider: providers.Provider,
-  childChainProvider: providers.Provider,
-  childChain: ChildNetwork,
-  fromBlock: number,
-  toBlock: number,
-  enableAlerting: boolean,
-  continuous: boolean,
-  onFailedRetryableFound: OnFailedRetryableFound
-) => {
+export const checkRetryablesContinuous = async ({
+  parentChainProvider,
+  childChainProvider,
+  childChain,
+  fromBlock,
+  toBlock,
+  enableAlerting,
+  continuous,
+  onFailedRetryableFound,
+  onRedeemedRetryableFound,
+}: CheckRetryablesContinuousParams) => {
   const processingDurationInSeconds = 180
   let isContinuous = continuous
   const startTime = Date.now()
 
   // Function to process blocks and check for retryables
   const processBlocks = async () => {
-    const lastBlockChecked = await checkRetryablesOneOff(
+    const lastBlockChecked = await checkRetryablesOneOff({
       parentChainProvider,
       childChainProvider,
       childChain,
       fromBlock,
       toBlock,
       enableAlerting,
-      onFailedRetryableFound
-    )
+      onFailedRetryableFound,
+      onRedeemedRetryableFound,
+    })
     console.log('Check completed for block:', lastBlockChecked)
     fromBlock = lastBlockChecked + 1
     console.log('Continuing from block:', fromBlock)

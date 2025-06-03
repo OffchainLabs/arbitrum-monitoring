@@ -17,8 +17,9 @@ import {
   getChildChainRetryableReport,
 } from './reportGenerator'
 import { getExplorerUrlPrefixes } from '../../utils'
-import { OnFailedRetryableFound } from './types'
+import { OnFailedRetryableFound, OnRedeemedRetryableFound } from './types'
 import { getTokenDepositData } from './tokenDataFetcher'
+import { SEVEN_DAYS_IN_SECONDS } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 
 export const checkRetryables = async (
   parentChainProvider: providers.Provider,
@@ -28,7 +29,8 @@ export const checkRetryables = async (
   fromBlock: number,
   toBlock: number,
   enableAlerting: boolean,
-  onFailedRetryableFound?: OnFailedRetryableFound
+  onFailedRetryableFound?: OnFailedRetryableFound,
+  onRedeemedRetryableFound?: OnRedeemedRetryableFound
 ): Promise<boolean> => {
   let retryablesFound = false
 
@@ -87,7 +89,28 @@ export const checkRetryables = async (
         const retryableTicketId = retryableMessage.retryableCreationId
         let status = await retryableMessage.status()
 
-        // if a Retryable is not in a successful state, extract it's details
+        // if we find a successful Retryable, call `onRedeemedRetryableFound()`
+        if (status === ParentToChildMessageStatus.REDEEMED) {
+          if (enableAlerting && onRedeemedRetryableFound) {
+            await onRedeemedRetryableFound({
+              ChildTx: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
+              ParentTx: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
+              createdAt: Date.now(), // fallback; won't overwrite real one
+              timeout: Date.now() + SEVEN_DAYS_IN_SECONDS * 1000,
+              status: 'Resolved',
+              priority: 'Unset',
+              metadata: {
+                tokensDeposited: undefined,
+                gasPriceProvided: '-',
+                gasPriceAtCreation: undefined,
+                gasPriceNow: '-',
+                l2CallValue: '-',
+              },
+            })
+          }
+        }
+
+        // if a Retryable is not in a successful state, extract it's details and call `onFailedRetryableFound()`
         if (status !== ParentToChildMessageStatus.REDEEMED) {
           const childChainTx = await childChainProvider.getTransaction(
             retryableTicketId

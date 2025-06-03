@@ -2,22 +2,22 @@ import * as fs from 'fs'
 import yargs from 'yargs'
 import winston from 'winston'
 import { providers } from 'ethers'
-import {
-  getArbitrumNetwork,
-  registerCustomArbitrumNetwork,
-} from '@arbitrum/sdk'
+import { getArbitrumNetwork } from '@arbitrum/sdk'
 import { FindRetryablesOptions } from './core/types'
 import { ChildNetwork, DEFAULT_CONFIG_PATH, getConfig } from '../utils'
 import {
   checkRetryablesOneOff,
   checkRetryablesContinuous,
 } from './core/retryableCheckerMode'
-import { reportFailedRetryables } from './handlers/failedRetryableHandler'
 import { postSlackMessage } from './handlers/postSlackMessage'
+import { syncRetryableToNotion } from './handlers/notion/syncRetryableToNotion'
+import { alertUntriagedNotionRetryables } from './handlers/notion/alertUntriagedRetraybles'
 import {
-  syncRetryableToNotion,
-  sweepNotionDatabase,
-} from './handlers/notionHandler'
+  OnFailedRetryableFoundParams,
+  OnRetryableFoundParams,
+} from './core/types'
+import { handleFailedRetryablesFound } from './handlers/handleFailedRetryablesFound'
+import { handleRedeemedRetryablesFound } from './handlers/handleRedeemedRetryablesFound'
 
 // Path for the log file
 const logFilePath = 'logfile.log'
@@ -70,72 +70,76 @@ const config = getConfig({ configPath: options.configPath })
 
 // Function to process a child chain and check for retryable transactions
 const processChildChain = async (
+  parentChainProvider: providers.Provider,
+  childChainProvider: providers.Provider,
   childChain: ChildNetwork,
-  options: FindRetryablesOptions
+  fromBlock: number,
+  toBlock: number,
+  enableAlerting: boolean,
+  continuous: boolean,
+  onFailedRetryableFound: (
+    ticket: OnFailedRetryableFoundParams
+  ) => Promise<void>,
+  onRedeemedRetryableFound: (ticket: OnRetryableFoundParams) => Promise<void>
 ) => {
-  console.log('----------------------------------------------------------')
-  console.log(`Running for Chain: ${childChain.name}`)
-  console.log('----------------------------------------------------------')
-  if (!networkIsRegistered(childChain.chainId)) {
-    registerCustomArbitrumNetwork(childChain)
-  }
+  const writeToNotion = config.notion?.enabled ?? false
 
-  const parentChainProvider = new providers.JsonRpcProvider(
-    String(childChain.parentRpcUrl)
-  )
-
-  const childChainProvider = new providers.JsonRpcProvider(
-    String(childChain.orbitRpcUrl)
-  )
-
-  if (options.continuous) {
-    console.log('Continuous mode activated.')
-    await checkRetryablesContinuous(
+  if (continuous) {
+    console.log('Activating continuous check for retryables...')
+    await checkRetryablesContinuous({
       parentChainProvider,
       childChainProvider,
       childChain,
-      options.fromBlock,
-      options.toBlock,
-      options.enableAlerting,
-      options.continuous,
-      async ticket => {
-        await reportFailedRetryables(ticket)
-        if (options.writeToNotion) {
-          await syncRetryableToNotion(ticket)
-        }
-      }
-    )
+      fromBlock,
+      toBlock,
+      enableAlerting,
+      continuous,
+      onFailedRetryableFound: async ticket => {
+        await handleFailedRetryablesFound(
+          ticket,
+          childChain,
+          childChainProvider,
+          writeToNotion
+        )
+      },
+      onRedeemedRetryableFound: async ticket => {
+        await onRedeemedRetryableFound(ticket)
+        await handleRedeemedRetryablesFound(ticket, writeToNotion)
+      },
+    })
 
-    // If in continuous mode and Notion is enabled, run the sweep every 24 hours
-    if (options.writeToNotion) {
+    // todo: get closure on this - will it even be called
+    if (writeToNotion) {
+      console.log('Activating continuous sweep of Notion database...')
       setInterval(async () => {
-        try {
-          await sweepNotionDatabase()
-        } catch (error) {
-          console.error('Error running Notion sweep:', error)
-        }
-      }, 24 * 60 * 60 * 1000) // 24 hours
+        await alertUntriagedNotionRetryables()
+      }, 1000 * 60 * 60) // Run every hour
     }
   } else {
-    console.log('One-off mode activated.')
-    const retryablesFound = await checkRetryablesOneOff(
+    console.log('Activating one-off check for retryables...')
+    const retryablesFound = await checkRetryablesOneOff({
       parentChainProvider,
       childChainProvider,
       childChain,
-      options.fromBlock,
-      options.toBlock,
-      options.enableAlerting,
-      async ticket => {
-        await reportFailedRetryables(ticket)
-        if (options.writeToNotion) {
-          await syncRetryableToNotion(ticket)
-        }
-      }
-    )
-    // Log a message if no retryables were found for the child chain
-    if (!retryablesFound) {
-      console.log(`No retryables found for ${childChain.name}`)
-      console.log('----------------------------------------------------------')
+      fromBlock,
+      toBlock,
+      enableAlerting,
+      onFailedRetryableFound: async ticket => {
+        await handleFailedRetryablesFound(
+          ticket,
+          childChain,
+          childChainProvider,
+          writeToNotion
+        )
+      },
+      onRedeemedRetryableFound: async ticket => {
+        await onRedeemedRetryableFound(ticket)
+        await handleRedeemedRetryablesFound(ticket, writeToNotion)
+      },
+    })
+
+    if (retryablesFound === 0) {
+      console.log('No retryables found in the specified block range.')
     }
   }
 }
@@ -155,7 +159,34 @@ const processOrbitChainsConcurrently = async () => {
 
   const promises = config.childChains.map(async (childChain: ChildNetwork) => {
     try {
-      return await processChildChain(childChain, options)
+      const parentChainProvider = new providers.JsonRpcProvider(
+        String(childChain.parentRpcUrl)
+      )
+      const childChainProvider = new providers.JsonRpcProvider(
+        String(childChain.orbitRpcUrl)
+      )
+      return await processChildChain(
+        parentChainProvider,
+        childChainProvider,
+        childChain,
+        options.fromBlock,
+        options.toBlock,
+        options.enableAlerting,
+        options.continuous,
+        async ticket => {
+          await handleFailedRetryablesFound(
+            ticket,
+            childChain,
+            childChainProvider,
+            options.writeToNotion
+          )
+        },
+        async ticket => {
+          if (options.writeToNotion) {
+            await syncRetryableToNotion(ticket)
+          }
+        }
+      )
     } catch (e) {
       const errorStr = `Retryable monitor - Error processing chain [${childChain.name}]: ${e.message}`
       if (options.enableAlerting) {
@@ -169,6 +200,17 @@ const processOrbitChainsConcurrently = async () => {
 
   // keep running the script until we get resolution (success or error) for all the chains
   await Promise.allSettled(promises)
+
+  // if Notion-sync is on in continuous mode, at the end
+  // once we process all the chains go through the Notion database once to alert on any `Unresolved` tickets found
+  if (options.writeToNotion && options.continuous) {
+    const ALERT_INTERVAL = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+    const lastAlertTime = Date.now()
+
+    if (Date.now() - lastAlertTime >= ALERT_INTERVAL) {
+      await alertUntriagedNotionRetryables()
+    }
+  }
 }
 
 // Start processing child chains concurrently
