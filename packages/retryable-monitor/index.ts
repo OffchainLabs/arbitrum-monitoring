@@ -85,12 +85,7 @@ const processChildChain = async (
       enableAlerting,
       continuous,
       onFailedRetryableFound: async ticket => {
-        await handleFailedRetryablesFound(
-          ticket,
-          childChain,
-          childChainProvider,
-          writeToNotion
-        )
+        await handleFailedRetryablesFound(ticket, writeToNotion)
       },
       onRedeemedRetryableFound: async ticket => {
         await handleRedeemedRetryablesFound(ticket, writeToNotion)
@@ -114,12 +109,7 @@ const processChildChain = async (
       toBlock,
       enableAlerting,
       onFailedRetryableFound: async ticket => {
-        await handleFailedRetryablesFound(
-          ticket,
-          childChain,
-          childChainProvider,
-          writeToNotion
-        )
+        await handleFailedRetryablesFound(ticket, writeToNotion)
       },
       onRedeemedRetryableFound: async ticket => {
         await handleRedeemedRetryablesFound(ticket, writeToNotion)
