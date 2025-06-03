@@ -1,6 +1,6 @@
 import { notionClient } from './createNotionClient'
 import { PageObjectResponse } from '@notionhq/client/build/src/api-endpoints'
-import { postSlackMessage } from '../postSlackMessage'
+import { postSlackMessage } from '../slack/postSlackMessage'
 import { OnRetryableFoundParams } from '../../core/types'
 
 const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!

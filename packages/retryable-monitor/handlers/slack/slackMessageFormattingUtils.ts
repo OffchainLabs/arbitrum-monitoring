@@ -13,8 +13,8 @@ import {
   ChildChainTicketReport,
   ParentChainTicketReport,
   TokenDepositData,
-} from '../core/types'
-import { ChildNetwork, getExplorerUrlPrefixes } from '../../utils'
+} from '../../core/types'
+import { ChildNetwork, getExplorerUrlPrefixes } from '../../../utils'
 
 /**
  *

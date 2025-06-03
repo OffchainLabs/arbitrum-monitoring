@@ -9,7 +9,7 @@ import {
   checkRetryablesOneOff,
   checkRetryablesContinuous,
 } from './core/retryableCheckerMode'
-import { postSlackMessage } from './handlers/postSlackMessage'
+import { postSlackMessage } from './handlers/slack/postSlackMessage'
 import { syncRetryableToNotion } from './handlers/notion/syncRetryableToNotion'
 import { alertUntriagedNotionRetryables } from './handlers/notion/alertUntriagedRetraybles'
 import {

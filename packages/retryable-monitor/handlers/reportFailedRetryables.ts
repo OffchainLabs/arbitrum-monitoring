@@ -5,8 +5,8 @@ import {
   ParentChainTicketReport,
   TokenDepositData,
 } from '../core/types'
-import { postSlackMessage } from './postSlackMessage'
-import { generateFailedRetryableSlackMessage } from './slackMessageGenerator'
+import { postSlackMessage } from './slack/postSlackMessage'
+import { generateFailedRetryableSlackMessage } from './slack/slackMessageGenerator'
 
 export const reportFailedRetryables = async ({
   parentChainRetryableReport,

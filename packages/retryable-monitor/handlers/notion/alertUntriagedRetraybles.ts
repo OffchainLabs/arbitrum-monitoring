@@ -1,5 +1,5 @@
 import { notionClient, databaseId } from './createNotionClient'
-import { postSlackMessage } from '../postSlackMessage'
+import { postSlackMessage } from '../slack/postSlackMessage'
 
 /**
  * Queries the Notion database for untriaged retryable tickets and sends Slack alerts for each one.

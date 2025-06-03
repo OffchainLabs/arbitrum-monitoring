@@ -1,10 +1,10 @@
 import { providers } from 'ethers'
-import { ChildNetwork } from '../../utils'
+import { ChildNetwork } from '../../../utils'
 import {
   ChildChainTicketReport,
   ParentChainTicketReport,
   TokenDepositData,
-} from '../core/types'
+} from '../../core/types'
 import {
   formatPrefix,
   formatInitiator,
