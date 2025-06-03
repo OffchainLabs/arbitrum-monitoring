@@ -71,10 +71,9 @@ const processChildChain = async (
   fromBlock: number,
   toBlock: number,
   enableAlerting: boolean,
-  continuous: boolean
+  continuous: boolean,
+  writeToNotion: boolean
 ) => {
-  const writeToNotion = config.notion?.enabled ?? false
-
   if (continuous) {
     console.log('Activating continuous check for retryables...')
     await checkRetryablesContinuous({
@@ -161,7 +160,8 @@ const processOrbitChainsConcurrently = async () => {
         options.fromBlock,
         options.toBlock,
         options.enableAlerting,
-        options.continuous
+        options.continuous,
+        options.writeToNotion
       )
     } catch (e) {
       const errorStr = `Retryable monitor - Error processing chain [${childChain.name}]: ${e.message}`

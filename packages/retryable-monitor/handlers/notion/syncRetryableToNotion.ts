@@ -18,8 +18,6 @@ const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!
 export async function syncRetryableToNotion(
   input: OnRetryableFoundParams
 ): Promise<{ id: string; status: string; isNew: boolean } | undefined> {
-  console.log('xxxxx', input, input.status)
-
   const {
     ChildTx,
     ParentTx,
@@ -105,7 +103,7 @@ export async function syncRetryableToNotion(
       return { id: page.id, status: currentStatus ?? status, isNew: false }
     }
 
-    if (isRetryableFoundInNotion && status === 'Resolved') {
+    if (!isRetryableFoundInNotion && status === 'Resolved') {
       // if the retryable is resolved, we don't need to do anything
       return undefined
     }
