@@ -35,10 +35,9 @@ export async function syncRetryableToNotion(
       CreatedAt: { date: { start: new Date(createdAt).toISOString() } },
       Priority: { select: { name: priority } },
     }
-
     if (input.timeout) {
       notionProps['timeoutTimestamp'] = {
-        date: { start: new Date(input.timeout * 1000).toISOString() },
+        date: { start: new Date(input.timeout).toISOString() },
       }
     }
 
@@ -82,14 +81,21 @@ export async function syncRetryableToNotion(
         currentStatus = statusProp.select.name
       }
 
-      // If the new status is 'Resolved', only update Status, don't touch metadata
       if (status === 'Resolved') {
+        const resolvedProps: Record<string, any> = {
+          Status: { select: { name: 'Resolved' } },
+        }
+
+        if (input.timeout) {
+          resolvedProps['timeoutTimestamp'] = {
+            date: { start: new Date(input.timeout).toISOString() },
+          }
+        }
+
         return await notionClient.pages
           .update({
             page_id: page.id,
-            properties: {
-              Status: { select: { name: 'Resolved' } },
-            },
+            properties: resolvedProps,
           })
           .then(() => ({
             id: page.id,
