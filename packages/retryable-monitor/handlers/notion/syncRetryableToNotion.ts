@@ -30,9 +30,21 @@ export async function syncRetryableToNotion(
 
     const isRetryableFoundInNotion = search.results.length > 0
 
+    const rawCreatedAt = metadata?.createdAt ?? createdAt
+
+    const normalizedCreatedAtMs =
+      rawCreatedAt > 1e14
+        ? rawCreatedAt / 1000 / 1000 // microseconds → ms
+        : rawCreatedAt > 1e12
+        ? rawCreatedAt / 1000 // milliseconds → ms
+        : rawCreatedAt * 1000
     const notionProps: Record<string, any> = {
       ParentTx: { rich_text: [{ text: { content: ParentTx } }] },
-      CreatedAt: { date: { start: new Date(createdAt).toISOString() } },
+      CreatedAt: {
+        date: {
+          start: new Date(normalizedCreatedAtMs).toISOString(),
+        },
+      },
       Priority: { select: { name: priority } },
     }
     if (input.timeout) {
