@@ -2,7 +2,10 @@ import * as fs from 'fs'
 import yargs from 'yargs'
 import winston from 'winston'
 import { providers } from 'ethers'
-import { getArbitrumNetwork } from '@arbitrum/sdk'
+import {
+  getArbitrumNetwork,
+  registerCustomArbitrumNetwork,
+} from '@arbitrum/sdk'
 import { FindRetryablesOptions } from './core/types'
 import { ChildNetwork, DEFAULT_CONFIG_PATH, getConfig } from '../utils'
 import {
@@ -137,12 +140,17 @@ const processOrbitChainsConcurrently = async () => {
 
   const promises = config.childChains.map(async (childChain: ChildNetwork) => {
     try {
+      if (!networkIsRegistered(childChain.chainId)) {
+        registerCustomArbitrumNetwork(childChain)
+      }
+
       const parentChainProvider = new providers.JsonRpcProvider(
         String(childChain.parentRpcUrl)
       )
       const childChainProvider = new providers.JsonRpcProvider(
         String(childChain.orbitRpcUrl)
       )
+
       return await processChildChain(
         parentChainProvider,
         childChainProvider,
