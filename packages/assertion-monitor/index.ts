@@ -8,7 +8,7 @@ import {
 import {
   createChildChainClient,
   fetchChainState,
-  isBoldEnabled
+  isBoldEnabled,
 } from './blockchain'
 import { getBlockTimeForChain, getChainFromId } from './chains'
 import {
@@ -26,6 +26,7 @@ export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
     .options({
       configPath: { type: 'string', default: configPath },
       enableAlerting: { type: 'boolean', default: false },
+      writeToNotion: { type: 'boolean', default: false },
     })
     .strict()
     .parseSync()
