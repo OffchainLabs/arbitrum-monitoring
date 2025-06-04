@@ -32,17 +32,27 @@ export async function syncRetryableToNotion(
 
     const rawCreatedAt = metadata?.createdAt ?? createdAt
 
-    const normalizedCreatedAtMs =
-      rawCreatedAt > 1e14
-        ? rawCreatedAt / 1000 / 1000 // microseconds → ms
-        : rawCreatedAt > 1e12
-        ? rawCreatedAt / 1000 // milliseconds → ms
-        : rawCreatedAt * 1000
+    // Normalize to milliseconds (ms) — only if needed
+    let createdAtMs: number
+
+    if (rawCreatedAt > 1e14) {
+      // Too big: microseconds → convert to ms
+      createdAtMs = Math.floor(rawCreatedAt / 1000)
+    } else if (rawCreatedAt > 1e12) {
+      // Still too big: milliseconds → use as-is
+      createdAtMs = rawCreatedAt
+    } else if (rawCreatedAt > 1e10) {
+
+      createdAtMs = rawCreatedAt
+    } else {
+      // Normal seconds → convert to ms
+      createdAtMs = rawCreatedAt * 1000
+    }
     const notionProps: Record<string, any> = {
       ParentTx: { rich_text: [{ text: { content: ParentTx } }] },
       CreatedAt: {
         date: {
-          start: new Date(normalizedCreatedAtMs).toISOString(),
+          start: new Date(createdAtMs).toISOString(),
         },
       },
       Priority: { select: { name: priority } },
