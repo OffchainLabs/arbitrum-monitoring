@@ -41,6 +41,7 @@ const options: BatchPosterMonitorOptions = yargs(process.argv.slice(2))
   .options({
     configPath: { type: 'string', default: DEFAULT_CONFIG_PATH },
     enableAlerting: { type: 'boolean', default: false },
+    writeToNotion: { type: 'boolean', default: false },
   })
   .strict()
   .parseSync() as BatchPosterMonitorOptions
