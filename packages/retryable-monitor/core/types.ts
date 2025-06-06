@@ -64,12 +64,7 @@ export interface OnRetryableFoundParams {
   ParentTx: string
   createdAt: number
   timeout?: number
-  status?:
-    | 'Untriaged'
-    | 'Investigating'
-    | 'Resolved'
-    | 'False Positive'
-    | 'Expired'
+  status?:string
   priority?: 'High' | 'Medium' | 'Low' | 'Unset'
   metadata?: {
     tokensDeposited?: string
