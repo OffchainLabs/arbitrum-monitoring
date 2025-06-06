@@ -97,7 +97,7 @@ export const checkRetryables = async (
               ParentTx: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
               createdAt: Date.now(), // fallback; won't overwrite real one
               timeout: Date.now() + SEVEN_DAYS_IN_SECONDS * 1000,
-              status: 'Resolved',
+              status: 'Executed',
               priority: 'Unset',
               metadata: {
                 tokensDeposited: undefined,

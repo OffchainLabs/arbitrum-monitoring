@@ -31,22 +31,18 @@ export async function syncRetryableToNotion(
     const isRetryableFoundInNotion = search.results.length > 0
 
     const rawCreatedAt = metadata?.createdAt ?? createdAt
-
-    // Normalize to milliseconds (ms) — only if needed
     let createdAtMs: number
 
     if (rawCreatedAt > 1e14) {
-      // Too big: microseconds → convert to ms
       createdAtMs = Math.floor(rawCreatedAt / 1000)
     } else if (rawCreatedAt > 1e12) {
-      // Still too big: milliseconds → use as-is
       createdAtMs = rawCreatedAt
     } else if (rawCreatedAt > 1e10) {
       createdAtMs = rawCreatedAt
     } else {
-      // Normal seconds → convert to ms
       createdAtMs = rawCreatedAt * 1000
     }
+
     const notionProps: Record<string, any> = {
       ParentTx: { rich_text: [{ text: { content: ParentTx } }] },
       CreatedAt: {
@@ -56,6 +52,7 @@ export async function syncRetryableToNotion(
       },
       Priority: { select: { name: priority } },
     }
+
     if (input.timeout) {
       notionProps['timeoutTimestamp'] = {
         date: { start: new Date(input.timeout).toISOString() },
@@ -67,9 +64,7 @@ export async function syncRetryableToNotion(
         rich_text: [{ text: { content: metadata.gasPriceProvided } }],
       }
       notionProps['GasPriceAtCreation'] = {
-        rich_text: [
-          { text: { content: metadata.gasPriceAtCreation ?? 'N/A' } },
-        ],
+        rich_text: [{ text: { content: metadata.gasPriceAtCreation ?? 'N/A' } }],
       }
       notionProps['GasPriceNow'] = {
         rich_text: [{ text: { content: metadata.gasPriceNow } }],
@@ -107,30 +102,37 @@ export async function syncRetryableToNotion(
         currentStatus = statusProp.select.name
       }
 
-      if (status === 'Resolved') {
-        const resolvedProps: Record<string, any> = {
-          Status: { select: { name: 'Resolved' } },
+      // ✅ Handle Executed updates
+      if (status === 'Executed') {
+        const executedProps: Record<string, any> = {
+          Status: { select: { name: 'Executed' } },
         }
 
         if (input.timeout) {
-          resolvedProps['timeoutTimestamp'] = {
+          executedProps['timeoutTimestamp'] = {
             date: { start: new Date(input.timeout).toISOString() },
+          }
+        }
+
+        if (metadata?.decision) {
+          executedProps['Decision'] = {
+            select: { name: metadata.decision },
           }
         }
 
         return await notionClient.pages
           .update({
             page_id: page.id,
-            properties: resolvedProps,
+            properties: executedProps,
           })
           .then(() => ({
             id: page.id,
-            status: 'Resolved',
+            status: 'Executed',
             isNew: false,
           }))
       }
 
-      // Only overwrite status if still Untriaged or missing
+      // Overwrite status only if it's Untriaged or missing
       if (currentStatus === 'Untriaged' || !currentStatus) {
         notionProps['Status'] = { select: { name: status } }
       }
@@ -143,20 +145,32 @@ export async function syncRetryableToNotion(
       return { id: page.id, status: currentStatus ?? status, isNew: false }
     }
 
-    if (!isRetryableFoundInNotion && status === 'Resolved') {
-      // Resolved but not found—skip
-      return undefined
-    }
+    if (!isRetryableFoundInNotion) {
+  if (status === 'Executed') {
+    return undefined // Skip creating Executed-only entries
+  }
 
-    // Retryable is new and unresolved—create full entry
+  const created = await notionClient.pages.create({
+    parent: { database_id: databaseId },
+    properties: {
+      ChildTx: { title: [{ text: { content: ChildTx } }] },
+      Status: { select: { name: status } },
+      ...notionProps,
+    },
+  })
+
+  return { id: created.id, status, isNew: true }
+}
+
+    // Create new entry
     const created = await notionClient.pages.create({
-  parent: { database_id: databaseId },
-  properties: {
-    ChildTx: { title: [{ text: { content: ChildTx } }] },
-    Status: { select: { name: status } },
-    ...notionProps,
-  },
-})
+      parent: { database_id: databaseId },
+      properties: {
+        ChildTx: { title: [{ text: { content: ChildTx } }] },
+        Status: { select: { name: status } },
+        ...notionProps,
+      },
+    })
 
     return { id: created.id, status, isNew: true }
   } catch (err) {
