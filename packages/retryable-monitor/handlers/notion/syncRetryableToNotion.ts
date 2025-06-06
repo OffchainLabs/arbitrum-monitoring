@@ -42,7 +42,6 @@ export async function syncRetryableToNotion(
       // Still too big: milliseconds → use as-is
       createdAtMs = rawCreatedAt
     } else if (rawCreatedAt > 1e10) {
-
       createdAtMs = rawCreatedAt
     } else {
       // Normal seconds → convert to ms
@@ -81,6 +80,11 @@ export async function syncRetryableToNotion(
       if (metadata.tokensDeposited) {
         notionProps['TokensDeposited'] = {
           rich_text: [{ text: { content: metadata.tokensDeposited } }],
+        }
+      }
+      if (metadata.decision) {
+        notionProps['Decision'] = {
+          select: { name: metadata.decision },
         }
       }
     }
@@ -150,6 +154,7 @@ export async function syncRetryableToNotion(
       properties: {
         ChildTx: { title: [{ text: { content: ChildTx } }] },
         Status: { select: { name: status } },
+        Decision: { select: { name: 'Triage' } },
         ...notionProps,
       },
     })

@@ -78,6 +78,7 @@ export interface OnRetryableFoundParams {
     gasPriceNow: string
     l2CallValue: string
     createdAt?: number
+    decision?: string
   }
 }
 
