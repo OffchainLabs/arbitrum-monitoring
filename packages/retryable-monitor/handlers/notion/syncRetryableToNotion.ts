@@ -150,14 +150,13 @@ export async function syncRetryableToNotion(
 
     // Retryable is new and unresolved—create full entry
     const created = await notionClient.pages.create({
-      parent: { database_id: databaseId },
-      properties: {
-        ChildTx: { title: [{ text: { content: ChildTx } }] },
-        Status: { select: { name: status } },
-        Decision: { select: { name: 'Triage' } },
-        ...notionProps,
-      },
-    })
+  parent: { database_id: databaseId },
+  properties: {
+    ChildTx: { title: [{ text: { content: ChildTx } }] },
+    Status: { select: { name: status } },
+    ...notionProps,
+  },
+})
 
     return { id: created.id, status, isNew: true }
   } catch (err) {

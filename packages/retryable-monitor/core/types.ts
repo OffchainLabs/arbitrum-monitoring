@@ -66,6 +66,7 @@ export interface OnRetryableFoundParams {
   timeout?: number
   status?:string
   priority?: 'High' | 'Medium' | 'Low' | 'Unset'
+  decision?: string
   metadata?: {
     tokensDeposited?: string
     gasPriceProvided: string
@@ -74,6 +75,7 @@ export interface OnRetryableFoundParams {
     l2CallValue: string
     createdAt?: number
     decision?: string
+    
   }
 }
 

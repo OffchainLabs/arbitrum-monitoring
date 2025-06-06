@@ -89,6 +89,7 @@ export const handleFailedRetryablesFound = async (
         gasPriceAtCreation,
         gasPriceNow,
         l2CallValue: l2CallValueFormatted,
+        decision: 'Triage'
       },
     })
   }
