@@ -81,7 +81,7 @@ export const handleFailedRetryablesFound = async (
       ParentTx: `${PARENT_CHAIN_TX_PREFIX}${parentChainRetryableReport.transactionHash}`,
       createdAt: Number(childChainRetryableReport.createdAtTimestamp) * 1000,
       timeout: Number(childChainRetryableReport.timeoutTimestamp) * 1000,
-      status: 'Untriaged',
+      status: childChainRetryableReport.status,
       priority: 'Unset',
       metadata: {
         tokensDeposited: formattedTokenString,

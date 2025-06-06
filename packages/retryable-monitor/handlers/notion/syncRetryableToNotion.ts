@@ -12,7 +12,7 @@ export async function syncRetryableToNotion(
     ChildTx,
     ParentTx,
     createdAt,
-    status = 'Untriaged',
+    status,
     priority = 'Unset',
     metadata,
   } = input
@@ -31,25 +31,18 @@ export async function syncRetryableToNotion(
     const isRetryableFoundInNotion = search.results.length > 0
 
     const rawCreatedAt = metadata?.createdAt ?? createdAt
-    let createdAtMs: number
-
-    if (rawCreatedAt > 1e14) {
-      createdAtMs = Math.floor(rawCreatedAt / 1000)
-    } else if (rawCreatedAt > 1e12) {
-      createdAtMs = rawCreatedAt
-    } else if (rawCreatedAt > 1e10) {
-      createdAtMs = rawCreatedAt
-    } else {
-      createdAtMs = rawCreatedAt * 1000
-    }
+    const createdAtMs =
+      rawCreatedAt > 1e14
+        ? Math.floor(rawCreatedAt / 1000)
+        : rawCreatedAt > 1e12
+        ? rawCreatedAt
+        : rawCreatedAt > 1e10
+        ? rawCreatedAt
+        : rawCreatedAt * 1000
 
     const notionProps: Record<string, any> = {
       ParentTx: { rich_text: [{ text: { content: ParentTx } }] },
-      CreatedAt: {
-        date: {
-          start: new Date(createdAtMs).toISOString(),
-        },
-      },
+      CreatedAt: { date: { start: new Date(createdAtMs).toISOString() } },
       Priority: { select: { name: priority } },
     }
 
@@ -77,11 +70,6 @@ export async function syncRetryableToNotion(
           rich_text: [{ text: { content: metadata.tokensDeposited } }],
         }
       }
-      if (metadata.decision) {
-        notionProps['Decision'] = {
-          select: { name: metadata.decision },
-        }
-      }
     }
 
     if (isRetryableFoundInNotion) {
@@ -96,11 +84,16 @@ export async function syncRetryableToNotion(
 
       const props = (page as PageObjectResponse).properties
       const statusProp = props?.Status
+      const decisionProp = props?.Decision
 
-      let currentStatus: string | undefined = undefined
-      if (statusProp && statusProp.type === 'select' && statusProp.select) {
-        currentStatus = statusProp.select.name
-      }
+      const currentStatus =
+        statusProp?.type === 'select' && statusProp.select
+          ? statusProp.select.name
+          : undefined
+      const currentDecision =
+        decisionProp?.type === 'select' && decisionProp.select
+          ? decisionProp.select.name
+          : undefined
 
       // ✅ Handle Executed updates
       if (status === 'Executed') {
@@ -114,27 +107,27 @@ export async function syncRetryableToNotion(
           }
         }
 
-        if (metadata?.decision) {
+        if (!currentDecision && metadata?.decision) {
           executedProps['Decision'] = {
             select: { name: metadata.decision },
           }
         }
 
-        return await notionClient.pages
-          .update({
-            page_id: page.id,
-            properties: executedProps,
-          })
-          .then(() => ({
-            id: page.id,
-            status: 'Executed',
-            isNew: false,
-          }))
+        await notionClient.pages.update({
+          page_id: page.id,
+          properties: executedProps,
+        })
+
+        return { id: page.id, status: 'Executed', isNew: false }
       }
 
-      // Overwrite status only if it's Untriaged or missing
-      if (currentStatus === 'Untriaged' || !currentStatus) {
-        notionProps['Status'] = { select: { name: status } }
+      notionProps['Status'] = { select: { name: status } }
+
+      // Only set Decision if it's missing
+      if (!currentDecision && metadata?.decision) {
+        notionProps['Decision'] = {
+          select: { name: metadata.decision },
+        }
       }
 
       await notionClient.pages.update({
@@ -145,29 +138,17 @@ export async function syncRetryableToNotion(
       return { id: page.id, status: currentStatus ?? status, isNew: false }
     }
 
-    if (!isRetryableFoundInNotion) {
-  if (status === 'Executed') {
-    return undefined // Skip creating Executed-only entries
-  }
+    // If not found and Executed, skip creation
+    if (!isRetryableFoundInNotion && status === 'Executed') {
+      return undefined
+    }
 
-  const created = await notionClient.pages.create({
-    parent: { database_id: databaseId },
-    properties: {
-      ChildTx: { title: [{ text: { content: ChildTx } }] },
-      Status: { select: { name: status } },
-      ...notionProps,
-    },
-  })
-
-  return { id: created.id, status, isNew: true }
-}
-
-    // Create new entry
     const created = await notionClient.pages.create({
       parent: { database_id: databaseId },
       properties: {
         ChildTx: { title: [{ text: { content: ChildTx } }] },
         Status: { select: { name: status } },
+        ...(metadata?.decision ? { Decision: { select: { name: metadata.decision } } } : {}),
         ...notionProps,
       },
     })

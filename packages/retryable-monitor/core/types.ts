@@ -64,7 +64,7 @@ export interface OnRetryableFoundParams {
   ParentTx: string
   createdAt: number
   timeout?: number
-  status?:string
+  status:string
   priority?: 'High' | 'Medium' | 'Low' | 'Unset'
   decision?: string
   metadata?: {
