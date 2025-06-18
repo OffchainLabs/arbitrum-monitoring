@@ -45,25 +45,31 @@ export const alertUntriagedNotionRetryables = async () => {
   })
 
   for (const page of response.results) {
-  const props = (page as any).properties
-  const timeoutRaw = props?.timeoutTimestamp?.date?.start
-  const timeoutStr = formatDate(timeoutRaw)
-  const retryableUrl =
-    props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
-  const decision = props?.Decision?.select?.name || '(unknown)'
+    const props = (page as any).properties
+    const timeoutRaw = props?.timeoutTimestamp?.date?.start
+    const timeoutStr = formatDate(timeoutRaw)
+    const retryableUrl = props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
+    const decision = props?.Decision?.select?.name || '(unknown)'
 
-  let message = ''
+    const expiryTime = timeoutRaw ? new Date(timeoutRaw).getTime() : Infinity
+    const now = Date.now()
+    const hoursLeft = (expiryTime - now) / (1000 * 60 * 60)
 
-  if (decision === 'Triage') {
-    message = `⚠️ Retryable ticket needs triage:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n→ Please review and decide whether to redeem or ignore.`
-  } else if (decision === 'Should Redeem') {
-    if (!isNearExpiry(timeoutRaw)) continue // Skip if not near expiry
-    message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n→ Check why it hasn't been executed.`
-  } else {
-    continue // skip unexpected decisions
+    let message = ''
+
+    if (decision === 'Triage') {
+      if (hoursLeft <= 72) {
+        message = `🚨🚨 Retryable ticket needs **IMMEDIATE** triage (expires soon!):\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n→ Please triage urgently.`
+      } else {
+        message = `⚠️ Retryable ticket needs triage:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n→ Please review and decide whether to redeem or ignore.`
+      }
+    } else if (decision === 'Should Redeem') {
+      if (!isNearExpiry(timeoutRaw)) continue // Skip if not near expiry
+      message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n→ Check why it hasn't been executed.`
+    } else {
+      continue // skip unexpected decisions
+    }
+
+    await postSlackMessage({ message })
   }
-
-  await postSlackMessage({ message })
-}
-
 }
