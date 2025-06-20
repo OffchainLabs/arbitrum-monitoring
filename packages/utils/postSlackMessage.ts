@@ -25,3 +25,28 @@ export const postSlackMessage = ({
     unfurl_links: false,
   })
 }
+
+export const postSlackBlocks = ({
+  slackToken,
+  slackChannel,
+  blocks,
+  text = 'New notification',
+}: {
+  slackToken: string
+  slackChannel: string
+  blocks: any[]
+  text?: string
+}) => {
+  const web = new WebClient(slackToken)
+
+  console.log(
+    `>>> Posting blocks to Slack -> ${JSON.stringify(blocks, null, 2)}`
+  )
+
+  return web.chat.postMessage({
+    text: text, // Fallback text for notifications
+    channel: slackChannel,
+    blocks: blocks,
+    unfurl_links: false,
+  })
+}

@@ -1,18 +1,38 @@
-import { postSlackMessage as commonPostSlackMessage } from '../../../utils/postSlackMessage'
+import {
+  postSlackMessage as commonPostSlackMessage,
+  postSlackBlocks as commonPostSlackBlocks,
+} from '../../../utils/postSlackMessage'
 
 const slackToken = process.env.RETRYABLE_MONITORING_SLACK_TOKEN
 const slackChannel = process.env.RETRYABLE_MONITORING_SLACK_CHANNEL
 
-export const postSlackMessage = ({ message }: { message: string }) => {
+export const postSlackMessage = ({
+  message,
+  blocks,
+}: {
+  message?: string
+  blocks?: any[]
+}) => {
   if (!slackToken) throw new Error(`Slack token is required.`)
   if (!slackChannel) throw new Error(`Slack channel is required.`)
 
   if (process.env.NODE_ENV === 'DEV') return
   if (process.env.NODE_ENV === 'CI' && message === 'success') return
 
-  commonPostSlackMessage({
-    slackToken,
-    slackChannel,
-    message,
-  })
+  if (blocks) {
+    return commonPostSlackBlocks({
+      slackToken,
+      slackChannel,
+      blocks,
+      text: message || 'Failed Retryable Alert',
+    })
+  } else if (message) {
+    return commonPostSlackMessage({
+      slackToken,
+      slackChannel,
+      message,
+    })
+  } else {
+    throw new Error('Either message or blocks must be provided')
+  }
 }
