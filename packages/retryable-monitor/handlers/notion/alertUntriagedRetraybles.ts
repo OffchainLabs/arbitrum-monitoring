@@ -13,7 +13,7 @@ const formatDate = (iso: string | undefined) => {
     hour12: false,
     timeZone: 'UTC',
     timeZoneName: 'short',
-  }).format(date) // e.g. "Jun 6, 2025, 04:51 UTC"
+  }).format(date)
 }
 
 const isNearExpiry = (iso: string | undefined, hours = 24) => {
@@ -21,7 +21,7 @@ const isNearExpiry = (iso: string | undefined, hours = 24) => {
   const expiry = new Date(iso).getTime()
   const now = Date.now()
   const timeLeftMs = expiry - now
-  return timeLeftMs <= hours * 60 * 60 * 1000
+  return timeLeftMs > 0 && timeLeftMs <= hours * 60 * 60 * 1000
 }
 
 export const alertUntriagedNotionRetryables = async () => {
@@ -46,6 +46,9 @@ export const alertUntriagedNotionRetryables = async () => {
 
   for (const page of response.results) {
     const props = (page as any).properties
+    const status = props?.Status?.select?.name || '(unknown)'
+    if (status === 'Expired') continue
+
     const timeoutRaw = props?.timeoutTimestamp?.date?.start
     const timeoutStr = formatDate(timeoutRaw)
     const retryableUrl = props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
@@ -53,8 +56,8 @@ export const alertUntriagedNotionRetryables = async () => {
     const deposit = props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || '(unknown)'
     const decision = props?.Decision?.select?.name || '(unknown)'
 
-    const expiryTime = timeoutRaw ? new Date(timeoutRaw).getTime() : Infinity
     const now = Date.now()
+    const expiryTime = timeoutRaw ? new Date(timeoutRaw).getTime() : Infinity
     const hoursLeft = (expiryTime - now) / (1000 * 60 * 60)
 
     let message = ''
