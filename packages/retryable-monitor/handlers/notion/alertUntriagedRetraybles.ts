@@ -49,6 +49,8 @@ export const alertUntriagedNotionRetryables = async () => {
     const timeoutRaw = props?.timeoutTimestamp?.date?.start
     const timeoutStr = formatDate(timeoutRaw)
     const retryableUrl = props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
+    const parentTx = props?.ParentTx?.rich_text?.[0]?.text?.content || '(unknown)'
+    const deposit = props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || '(unknown)'
     const decision = props?.Decision?.select?.name || '(unknown)'
 
     const expiryTime = timeoutRaw ? new Date(timeoutRaw).getTime() : Infinity
@@ -59,15 +61,15 @@ export const alertUntriagedNotionRetryables = async () => {
 
     if (decision === 'Triage') {
       if (hoursLeft <= 72) {
-        message = `🚨🚨 Retryable ticket needs **IMMEDIATE** triage (expires soon!):\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n→ Please triage urgently.`
+        message = `🚨🚨 Retryable ticket needs IMMEDIATE triage (expires soon!):\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Deposit: ${deposit}\n→ Please triage urgently.`
       } else {
-        message = `⚠️ Retryable ticket needs triage:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n→ Please review and decide whether to redeem or ignore.`
+        message = `⚠️ Retryable ticket needs triage:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Deposit: ${deposit}\n→ Please review and decide whether to redeem or ignore.`
       }
     } else if (decision === 'Should Redeem') {
-      if (!isNearExpiry(timeoutRaw)) continue // Skip if not near expiry
-      message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n→ Check why it hasn't been executed.`
+      if (!isNearExpiry(timeoutRaw)) continue
+      message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Deposit: ${deposit}\n→ Check why it hasn't been executed.`
     } else {
-      continue // skip unexpected decisions
+      continue
     }
 
     await postSlackMessage({ message })
