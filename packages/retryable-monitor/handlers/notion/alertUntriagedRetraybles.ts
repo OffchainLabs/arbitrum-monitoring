@@ -48,15 +48,16 @@ export const alertUntriagedNotionRetryables = async () => {
   for (const page of response.results) {
     const props = (page as any).properties
     const status = props?.Status?.select?.name || '(unknown)'
+    if (status === 'Expired') continue
 
     const timeoutRaw = props?.timeoutTimestamp?.date?.start
-    const isExpired = timeoutRaw && new Date(timeoutRaw).getTime() < Date.now()
-    if (status === 'Expired' || isExpired) continue
-
     const timeoutStr = formatDate(timeoutRaw)
-    const retryableUrl = props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
-    const parentTx = props?.ParentTx?.rich_text?.[0]?.text?.content || '(unknown)'
-    const deposit = props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || '(unknown)'
+    const retryableUrl =
+      props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
+    const parentTx =
+      props?.ParentTx?.rich_text?.[0]?.text?.content || '(unknown)'
+    const deposit =
+      props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || '(unknown)'
     const decision = props?.Decision?.select?.name || '(unknown)'
 
     const now = Date.now()
@@ -80,22 +81,12 @@ export const alertUntriagedNotionRetryables = async () => {
       } else if (isOver4DaysLeft) {
         try {
           await redeemRetryable(parentTx)
-          await notionClient.pages.update({
-            page_id: page.id,
-            properties: {
-              Decision: {
-                select: {
-                  name: 'Ignore',
-                },
-              },
-            },
-          })
         } catch (err) {
-          // silently skip on failure
+          // silently skip
         }
-        continue // skip Slack message
+        continue // no Slack message
       } else {
-        continue // in-between window, do nothing
+        continue // not under 24h or over 4d, skip
       }
     }
 
