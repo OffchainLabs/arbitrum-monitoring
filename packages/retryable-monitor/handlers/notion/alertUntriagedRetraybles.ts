@@ -52,12 +52,9 @@ export const alertUntriagedNotionRetryables = async () => {
 
     const timeoutRaw = props?.timeoutTimestamp?.date?.start
     const timeoutStr = formatDate(timeoutRaw)
-    const retryableUrl =
-      props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
-    const parentTx =
-      props?.ParentTx?.rich_text?.[0]?.text?.content || '(unknown)'
-    const deposit =
-      props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || '(unknown)'
+    const retryableUrl = props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
+    const parentTx = props?.ParentTx?.rich_text?.[0]?.text?.content || '(unknown)'
+    const deposit = props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || '(unknown)'
     const decision = props?.Decision?.select?.name || '(unknown)'
 
     const now = Date.now()
@@ -81,8 +78,24 @@ export const alertUntriagedNotionRetryables = async () => {
       } else if (isOver4DaysLeft) {
         try {
           await redeemRetryable(parentTx)
+
+          await notionClient.pages.update({
+            page_id: page.id,
+            properties: {
+              State: {
+                select: { name: 'Bot Success' },
+              },
+            },
+          })
         } catch (err) {
-          // silently skip
+          await notionClient.pages.update({
+            page_id: page.id,
+            properties: {
+              State: {
+                select: { name: 'Bot Failed' },
+              },
+            },
+          })
         }
         continue // no Slack message
       } else {
