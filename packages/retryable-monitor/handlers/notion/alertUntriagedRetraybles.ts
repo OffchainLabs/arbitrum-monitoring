@@ -1,5 +1,6 @@
 import { notionClient, databaseId } from './createNotionClient'
 import { postSlackMessage } from '../slack/postSlackMessage'
+import { redeemRetryable } from '../../core/redeemRetryable'
 
 const formatDate = (iso: string | undefined) => {
   if (!iso) return '(unknown)'
@@ -51,9 +52,12 @@ export const alertUntriagedNotionRetryables = async () => {
 
     const timeoutRaw = props?.timeoutTimestamp?.date?.start
     const timeoutStr = formatDate(timeoutRaw)
-    const retryableUrl = props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
-    const parentTx = props?.ParentTx?.rich_text?.[0]?.text?.content || '(unknown)'
-    const deposit = props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || '(unknown)'
+    const retryableUrl =
+      props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
+    const parentTx =
+      props?.ParentTx?.rich_text?.[0]?.text?.content || '(unknown)'
+    const deposit =
+      props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || '(unknown)'
     const decision = props?.Decision?.select?.name || '(unknown)'
 
     const now = Date.now()
@@ -69,10 +73,21 @@ export const alertUntriagedNotionRetryables = async () => {
         message = `⚠️ Retryable ticket needs triage:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Deposit: ${deposit}\n→ Please review and decide whether to redeem or ignore.`
       }
     } else if (decision === 'Should Redeem') {
-      if (!isNearExpiry(timeoutRaw)) continue
-      message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Deposit: ${deposit}\n→ Check why it hasn't been executed.`
-    } else {
-      continue
+      const isUnder24h = isNearExpiry(timeoutRaw, 24)
+      const isOver4DaysLeft = hoursLeft > 96
+
+      if (isUnder24h) {
+        message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Deposit: ${deposit}\n→ Check why it hasn't been executed.`
+      } else if (isOver4DaysLeft) {
+        try {
+          await redeemRetryable(parentTx)
+        } catch (err) {
+          // silently skip
+        }
+        continue // no Slack message
+      } else {
+        continue // not under 24h or over 4d, skip
+      }
     }
 
     await postSlackMessage({ message })
