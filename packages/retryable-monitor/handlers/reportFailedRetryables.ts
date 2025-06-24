@@ -6,7 +6,7 @@ import {
   TokenDepositData,
 } from '../core/types'
 import { postSlackMessage } from './slack/postSlackMessage'
-import { generateRetryableSlackBlocks } from './slack/slackBlockMessageGenerator'
+import { generateRetryableSlackBlocks } from './slack/slackMessageFormattingUtils'
 
 export const reportFailedRetryables = async ({
   parentChainRetryableReport,
