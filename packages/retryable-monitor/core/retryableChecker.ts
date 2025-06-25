@@ -99,6 +99,7 @@ export const checkRetryables = async (
               timeout: Date.now() + SEVEN_DAYS_IN_SECONDS * 1000,
               status: 'Executed',
               priority: 'Unset',
+              chainId: childChain.chainId,
               metadata: {
                 tokensDeposited: undefined,
                 gasPriceProvided: '-',

@@ -24,7 +24,7 @@ const isNearExpiry = (iso: string | undefined, hours = 24) => {
   return timeLeftMs > 0 && timeLeftMs <= hours * 60 * 60 * 1000
 }
 
-export const alertUntriagedNotionRetryables = async () => {
+export const alertUntriagedNotionRetryables = async (allowedChainIds: number[] = []) => {
   const response = await notionClient.databases.query({
     database_id: databaseId,
     page_size: 100,
@@ -46,17 +46,21 @@ export const alertUntriagedNotionRetryables = async () => {
 
   for (const page of response.results) {
     const props = (page as any).properties
+
+    // skip if chainId not in allowed list
+    const chainIdRaw = props?.ChainID?.number
+    if (allowedChainIds.length > 0 && !allowedChainIds.includes(chainIdRaw)) {
+      continue
+    }
+
     const status = props?.Status?.select?.name || '(unknown)'
     if (status?.toLowerCase() === 'expired') continue
 
     const timeoutRaw = props?.timeoutTimestamp?.date?.start
     const timeoutStr = formatDate(timeoutRaw)
-    const retryableUrl =
-      props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
-    const parentTx =
-      props?.ParentTx?.rich_text?.[0]?.text?.content || '(unknown)'
-    const deposit =
-      props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || '(unknown)'
+    const retryableUrl = props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
+    const parentTx = props?.ParentTx?.rich_text?.[0]?.text?.content || '(unknown)'
+    const deposit = props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || '(unknown)'
     const decision = props?.Decision?.select?.name || '(unknown)'
 
     const now = Date.now()
