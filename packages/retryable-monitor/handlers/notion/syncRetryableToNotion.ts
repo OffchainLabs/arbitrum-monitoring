@@ -45,6 +45,7 @@ export async function syncRetryableToNotion(
       CreatedAt: { date: { start: new Date(createdAtMs).toISOString() } },
       Priority: { select: { name: priority } },
       ChainID: { number: input.chainId },
+      Chain: { rich_text: [{ text: { content: input.chain } }] },
     }
 
     if (input.timeout) {

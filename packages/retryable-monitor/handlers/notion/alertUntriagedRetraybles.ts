@@ -1,5 +1,7 @@
 import { notionClient, databaseId } from './createNotionClient'
 import { postSlackMessage } from '../slack/postSlackMessage'
+import { ChildNetwork} from '../../../utils'
+
 
 const formatDate = (iso: string | undefined) => {
   if (!iso) return '(unknown)'
@@ -24,7 +26,8 @@ const isNearExpiry = (iso: string | undefined, hours = 24) => {
   return timeLeftMs > 0 && timeLeftMs <= hours * 60 * 60 * 1000
 }
 
-export const alertUntriagedNotionRetryables = async (allowedChainIds: number[] = []) => {
+export const alertUntriagedNotionRetryables = async (childChains: ChildNetwork[] = []) => {
+  const allowedChainIds = childChains.map(c => c.chainId)
   const response = await notionClient.databases.query({
     database_id: databaseId,
     page_size: 100,

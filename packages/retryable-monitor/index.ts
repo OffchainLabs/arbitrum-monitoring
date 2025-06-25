@@ -177,8 +177,8 @@ const processOrbitChainsConcurrently = async () => {
 
   // once we process all the chains go through the Notion database once to alert on any `Unresolved` tickets found
   if (options.writeToNotion) {
-    const allowedChainIds = config.childChains.map((c: ChildNetwork) => c.chainId)
-    await alertUntriagedNotionRetryables(allowedChainIds)
+    await alertUntriagedNotionRetryables(config.childChains)
+
   }
 }
 

@@ -68,6 +68,7 @@ export interface OnRetryableFoundParams {
   priority?: 'High' | 'Medium' | 'Low' | 'Unset'
   decision?: string
   chainId: number
+  chain: string
   metadata?: {
     tokensDeposited?: string
     gasPriceProvided: string

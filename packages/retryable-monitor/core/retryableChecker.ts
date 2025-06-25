@@ -100,6 +100,7 @@ export const checkRetryables = async (
               status: 'Executed',
               priority: 'Unset',
               chainId: childChain.chainId,
+              chain: childChain.name,
               metadata: {
                 tokensDeposited: undefined,
                 gasPriceProvided: '-',
