@@ -6,7 +6,8 @@
     "lint": "eslint .",
     "build": "rm -rf ./dist && tsc",
     "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "dev": "yarn build && node ./dist/batch-poster-monitor/index.js"
+    "dev": "yarn build && node ./dist/batch-poster-monitor/index.js",
+    "test": "vitest"
   },
   "dependencies": {
     "@arbitrum/orbit-sdk": "^0.23.1",
