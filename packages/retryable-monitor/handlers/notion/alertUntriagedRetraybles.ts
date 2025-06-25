@@ -47,13 +47,16 @@ export const alertUntriagedNotionRetryables = async () => {
   for (const page of response.results) {
     const props = (page as any).properties
     const status = props?.Status?.select?.name || '(unknown)'
-    if (status === 'Expired') continue
+    if (status?.toLowerCase() === 'expired') continue
 
     const timeoutRaw = props?.timeoutTimestamp?.date?.start
     const timeoutStr = formatDate(timeoutRaw)
-    const retryableUrl = props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
-    const parentTx = props?.ParentTx?.rich_text?.[0]?.text?.content || '(unknown)'
-    const deposit = props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || '(unknown)'
+    const retryableUrl =
+      props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
+    const parentTx =
+      props?.ParentTx?.rich_text?.[0]?.text?.content || '(unknown)'
+    const deposit =
+      props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || '(unknown)'
     const decision = props?.Decision?.select?.name || '(unknown)'
 
     const now = Date.now()
