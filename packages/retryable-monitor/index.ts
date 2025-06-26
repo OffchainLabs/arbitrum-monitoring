@@ -99,7 +99,7 @@ const processChildChain = async (
     if (writeToNotion) {
       console.log('Activating continuous sweep of Notion database...')
       setInterval(async () => {
-        await alertUntriagedNotionRetryables()
+        await alertUntriagedNotionRetryables(config.childChains)
       }, 1000 * 60 * 60) // Run every hour
     }
   } else {
