@@ -127,6 +127,7 @@ describe('Ignore System', () => {
 
     // Mock decodeFunctionData for non-ignored transaction
     vi.mocked(await import('viem')).decodeFunctionData.mockReturnValue({
+      functionName: 'addSequencerL2BatchFromOrigin',
       args: [
         0n,
         '0x00' + '0'.repeat(100), // data starting with 0x00 (should trigger alert)
