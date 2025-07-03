@@ -13,7 +13,6 @@ export async function syncRetryableToNotion(
     ParentTx,
     createdAt,
     status,
-    priority = 'Unset',
     metadata,
   } = input
 
@@ -43,7 +42,6 @@ export async function syncRetryableToNotion(
     const notionProps: Record<string, any> = {
       ParentTx: { rich_text: [{ text: { content: ParentTx } }] },
       CreatedAt: { date: { start: new Date(createdAtMs).toISOString() } },
-      Priority: { select: { name: priority } },
       ChainID: { number: input.chainId },
       Chain: { rich_text: [{ text: { content: input.chain } }] },
     }

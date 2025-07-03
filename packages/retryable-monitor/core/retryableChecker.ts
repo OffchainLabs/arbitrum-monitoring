@@ -98,7 +98,6 @@ export const checkRetryables = async (
               createdAt: Date.now(), // fallback; won't overwrite real one
               timeout: Date.now() + SEVEN_DAYS_IN_SECONDS * 1000,
               status: 'Executed',
-              priority: 'Unset',
               chainId: childChain.chainId,
               chain: childChain.name,
               metadata: {

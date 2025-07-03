@@ -82,7 +82,6 @@ export const handleFailedRetryablesFound = async (
       createdAt: Number(childChainRetryableReport.createdAtTimestamp) * 1000,
       timeout: Number(childChainRetryableReport.timeoutTimestamp) * 1000,
       status: childChainRetryableReport.status,
-      priority: 'Unset',
       chainId: childChain.chainId,
       chain: childChain.name,
       metadata: {

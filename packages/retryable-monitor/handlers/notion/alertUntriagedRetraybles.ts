@@ -1,7 +1,6 @@
 import { notionClient, databaseId } from './createNotionClient'
 import { postSlackMessage } from '../slack/postSlackMessage'
-import { ChildNetwork} from '../../../utils'
-
+import { ChildNetwork } from '../../../utils'
 
 const formatDate = (iso: string | undefined) => {
   if (!iso) return '(unknown)'
@@ -26,7 +25,9 @@ const isNearExpiry = (iso: string | undefined, hours = 24) => {
   return timeLeftMs > 0 && timeLeftMs <= hours * 60 * 60 * 1000
 }
 
-export const alertUntriagedNotionRetryables = async (childChains: ChildNetwork[] = []) => {
+export const alertUntriagedNotionRetryables = async (
+  childChains: ChildNetwork[] = []
+) => {
   const allowedChainIds = childChains.map(c => c.chainId)
   const response = await notionClient.databases.query({
     database_id: databaseId,
@@ -61,9 +62,20 @@ export const alertUntriagedNotionRetryables = async (childChains: ChildNetwork[]
 
     const timeoutRaw = props?.timeoutTimestamp?.date?.start
     const timeoutStr = formatDate(timeoutRaw)
-    const retryableUrl = props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
-    const parentTx = props?.ParentTx?.rich_text?.[0]?.text?.content || '(unknown)'
-    const deposit = props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || '(unknown)'
+    const retryableUrl =
+      props?.ChildTx?.title?.[0]?.text?.content || '(unknown)'
+    const parentTx =
+      props?.ParentTx?.rich_text?.[0]?.text?.content || '(unknown)'
+
+    const ethDeposit =
+      props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || ''
+    const tokenDeposit =
+      props?.TokensDeposited?.rich_text?.[0]?.text?.content || ''
+    const deposit =
+      [ethDeposit, tokenDeposit]
+        .filter(s => s && s !== '0.0 ETH ($0.00)')
+        .join(' and ') || '(unknown)'
+
     const decision = props?.Decision?.select?.name || '(unknown)'
 
     const now = Date.now()
@@ -74,13 +86,13 @@ export const alertUntriagedNotionRetryables = async (childChains: ChildNetwork[]
 
     if (decision === 'Triage') {
       if (hoursLeft <= 72) {
-        message = `🚨🚨 Retryable ticket needs IMMEDIATE triage (expires soon!):\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Deposit: ${deposit}\n→ Please triage urgently.`
+        message = `🚨🚨 Retryable ticket needs IMMEDIATE triage (expires soon!):\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Please triage urgently.`
       } else {
-        message = `⚠️ Retryable ticket needs triage:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Deposit: ${deposit}\n→ Please review and decide whether to redeem or ignore.`
+        message = `⚠️ Retryable ticket needs triage:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Please review and decide whether to redeem or ignore.`
       }
     } else if (decision === 'Should Redeem') {
       if (!isNearExpiry(timeoutRaw)) continue
-      message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Deposit: ${deposit}\n→ Check why it hasn't been executed.`
+      message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Check why it hasn't been executed.`
     } else {
       continue
     }

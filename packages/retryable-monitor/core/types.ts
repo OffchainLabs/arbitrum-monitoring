@@ -65,7 +65,6 @@ export interface OnRetryableFoundParams {
   createdAt: number
   timeout?: number
   status:string
-  priority?: 'High' | 'Medium' | 'Low' | 'Unset'
   decision?: string
   chainId: number
   chain: string
