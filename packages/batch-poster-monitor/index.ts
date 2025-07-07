@@ -35,7 +35,10 @@ import {
   getConfig,
   getExplorerUrlPrefixes,
 } from '../utils'
-import { shouldIgnoreFunctionSelector } from './ignoreList'
+import {
+  shouldIgnoreFunctionSelector,
+  isIgnoredSelectorError,
+} from './ignoreList'
 
 // Parsing command line arguments using yargs
 let options: BatchPosterMonitorOptions = {
@@ -682,6 +685,18 @@ const main = async () => {
       console.log('>>>>> Processing chain: ', childChain.name)
       await monitorBatchPoster(childChain)
     } catch (e) {
+      // Check if this is an ignored selector error
+      const { isIgnored, selector } = isIgnoredSelectorError(
+        e,
+        childChain.chainId
+      )
+      if (isIgnored) {
+        console.log(
+          `Chain [${childChain.name}]: Skipping - uses ignored function selector ${selector}`
+        )
+        continue
+      }
+
       const errorStr = `Batch Posting alert on [${childChain.name}]:\nError processing chain: ${e.message}`
       if (options.enableAlerting) {
         await reportBatchPosterErrorToSlack({

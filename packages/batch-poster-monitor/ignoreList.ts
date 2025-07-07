@@ -14,6 +14,27 @@ export const shouldIgnoreFunctionSelector = (
   return ignoreList[chainId]?.includes(functionSelector) || false
 }
 
+// Helper to check if an error is due to an ignored function selector
+export const isIgnoredSelectorError = (
+  error: any,
+  chainId: number
+): { isIgnored: boolean; selector?: string } => {
+  if (!error?.message) {
+    return { isIgnored: false }
+  }
+  
+  // Extract function selector from error message
+  const selectorMatch = error.message.match(/0x[a-fA-F0-9]{8}/)
+  if (!selectorMatch) {
+    return { isIgnored: false }
+  }
+  
+  const selector = selectorMatch[0]
+  const isIgnored = shouldIgnoreFunctionSelector(chainId, selector)
+  
+  return { isIgnored, selector }
+}
+
 // Function to set custom ignore list (mainly for testing)
 export const setIgnoreList = (customIgnoreList: Record<number, string[]>) => {
   ignoreList = customIgnoreList
