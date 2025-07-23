@@ -78,7 +78,8 @@ export const handleFailedRetryablesFound = async (
 
     await syncRetryableToNotion({
       ChildTx: `${CHILD_CHAIN_TX_PREFIX}${childChainRetryableReport.id}`,
-      ParentTx: `${PARENT_CHAIN_TX_PREFIX}${parentChainRetryableReport.transactionHash}`,
+      ParentTx: parentChainRetryableReport.transactionHash,
+      ParentTxUrl: `${PARENT_CHAIN_TX_PREFIX}${parentChainRetryableReport.transactionHash}`,
       createdAt: Number(childChainRetryableReport.createdAtTimestamp) * 1000,
       timeout: Number(childChainRetryableReport.timeoutTimestamp) * 1000,
       status: childChainRetryableReport.status,
@@ -90,7 +91,7 @@ export const handleFailedRetryablesFound = async (
         gasPriceAtCreation,
         gasPriceNow,
         l2CallValue: l2CallValueFormatted,
-        decision: 'Triage'
+        decision: 'Triage',
       },
     })
   }
