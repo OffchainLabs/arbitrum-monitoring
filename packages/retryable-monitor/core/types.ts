@@ -61,7 +61,8 @@ export interface TokenDepositData {
 
 export interface OnRetryableFoundParams {
   ChildTx: string
-  ParentTx: string
+  ParentTx: string // raw hash
+  ParentTxUrl: string // full explorer URL
   createdAt: number
   timeout?: number
   status:string
