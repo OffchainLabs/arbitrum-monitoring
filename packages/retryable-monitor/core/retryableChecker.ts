@@ -154,7 +154,7 @@ export const checkRetryables = async (
           })
 
           // Call the provided callback if it exists
-          if (onFailedRetryableFound) {
+          if (enableAlerting && onFailedRetryableFound) {
             await onFailedRetryableFound({
               parentChainRetryableReport,
               childChainRetryableReport,
