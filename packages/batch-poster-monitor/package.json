@@ -10,7 +10,7 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@arbitrum/orbit-sdk": "^0.23.1",
+    "@arbitrum/orbit-sdk": "^0.23.5",
     "abitype": "^1.0.5",
     "typescript": "^5.4.5",
     "utils": "*",
