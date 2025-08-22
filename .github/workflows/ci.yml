@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+        package:
+          - assertion-monitor
+          - batch-poster-monitor
+          - retryable-monitor
+          - utils
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'yarn'
+        
+    - name: Install dependencies
+      run: yarn install --frozen-lockfile
+      
+    - name: Type check package
+      run: |
+        cd packages/${{ matrix.package }}
+        if [ -f "tsconfig.json" ]; then
+          echo "Type checking ${{ matrix.package }}..."
+          npx tsc --noEmit
+        else
+          echo "No tsconfig.json found for ${{ matrix.package }}, skipping type check"
+        fi
+    
+    - name: Build package
+      run: |
+        cd packages/${{ matrix.package }}
+        if [ -f "package.json" ] && grep -q '"build"' package.json; then
+          echo "Building ${{ matrix.package }}..."
+          yarn build
+        else
+          echo "No build script found for ${{ matrix.package }}, skipping build step"
+        fi
+      
+    - name: Run tests
+      run: |
+        cd packages/${{ matrix.package }}
+        if [ -f "package.json" ] && grep -q '"test"' package.json; then
+          echo "Testing ${{ matrix.package }}..."
+          yarn test
+        else
+          echo "No test script found for ${{ matrix.package }}, skipping test step"
+        fi
+
+  # Run root level tests as well
+  root-tests:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'yarn'
+        
+    - name: Install dependencies
+      run: yarn install --frozen-lockfile
+      
+    - name: Run all tests
+      run: yarn test
+
+  # Lint check for code quality
+  lint:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'yarn'
+        
+    - name: Install dependencies
+      run: yarn install --frozen-lockfile
+      
+    - name: Run lint
+      run: |
+        if [ -f "package.json" ] && grep -q '"lint"' package.json; then
+          yarn lint
+        else
+          echo "No lint script found at root level"
+        fi

@@ -78,6 +78,31 @@ The monitor generates alerts in these critical scenarios:
 - Invalid response formats
 - Rate limiting errors
 
+## Configuration
+
+### Ignore List
+
+The monitor can ignore specific transaction types based on their function selectors. This is configured in `packages/batch-poster-monitor/ignoreList.ts`:
+
+```typescript
+const defaultIgnoreList: Record<number, string[]> = {
+  51828: ['0x8d80ff0a'], // ChainBounty - ignores multiSend(bytes) transactions
+}
+```
+
+The ignore system works by:
+- Checking the first 4 bytes (function selector) of each transaction
+- Skipping monitoring if the selector is in the ignore list for that chain
+- Logging when transactions are ignored: `Chain [ChainName]: Ignoring transaction with function selector 0x...`
+
+Common function selectors:
+- `0x8d80ff0a` - multiSend(bytes) - Used by multi-signature wallets for batch transactions
+
+This is useful for:
+- Chains using multi-sig wallets for batch posting
+- Ignoring specific transaction types that don't require monitoring
+- Reducing false positive alerts from expected transaction patterns
+
 Each alert includes:
 - Chain name and ID
 - Relevant contract addresses

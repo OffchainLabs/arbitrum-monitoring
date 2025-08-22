@@ -35,18 +35,28 @@ import {
   getConfig,
   getExplorerUrlPrefixes,
 } from '../utils'
+import {
+  shouldIgnoreFunctionSelector,
+  isIgnoredSelectorError,
+} from './ignoreList'
 
 // Parsing command line arguments using yargs
-const options: BatchPosterMonitorOptions = yargs(process.argv.slice(2))
-  .options({
-    configPath: { type: 'string', default: DEFAULT_CONFIG_PATH },
-    enableAlerting: { type: 'boolean', default: false },
-    writeToNotion: { type: 'boolean', default: false },
-  })
-  .strict()
-  .parseSync() as BatchPosterMonitorOptions
+let options: BatchPosterMonitorOptions = {
+  configPath: DEFAULT_CONFIG_PATH,
+  enableAlerting: false,
+  writeToNotion: false,
+}
 
-const config = getConfig({ configPath: options.configPath })
+const parseOptions = () => {
+  options = yargs(process.argv.slice(2))
+    .options({
+      configPath: { type: 'string', default: DEFAULT_CONFIG_PATH },
+      enableAlerting: { type: 'boolean', default: false },
+      writeToNotion: { type: 'boolean', default: false },
+    })
+    .strict()
+    .parseSync() as BatchPosterMonitorOptions
+}
 
 const sequencerBatchDeliveredEventAbi: AbiEvent = {
   anonymous: false,
@@ -656,6 +666,9 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
 }
 
 const main = async () => {
+  parseOptions()
+  const config = getConfig({ configPath: options.configPath })
+
   // log the chains being processed for better debugging in github actions
   console.log(
     '>>>>>> Processing chains: ',
@@ -672,6 +685,18 @@ const main = async () => {
       console.log('>>>>> Processing chain: ', childChain.name)
       await monitorBatchPoster(childChain)
     } catch (e) {
+      // Check if this is an ignored selector error
+      const { isIgnored, selector } = isIgnoredSelectorError(
+        e,
+        childChain.chainId
+      )
+      if (isIgnored) {
+        console.log(
+          `Chain [${childChain.name}]: Skipping - uses ignored function selector ${selector}`
+        )
+        continue
+      }
+
       const errorStr = `Batch Posting alert on [${childChain.name}]:\nError processing chain: ${e.message}`
       if (options.enableAlerting) {
         await reportBatchPosterErrorToSlack({
@@ -705,13 +730,27 @@ const checkIfAnyTrustRevertedToPostDataOnChain = async ({
     | Log<bigint, number, false, AbiEvent, undefined, [AbiEvent], string>
     | undefined
 }): Promise<string[]> => {
-  const alerts = []
+  const alerts: string[] = []
 
   try {
     // Get the transaction that emitted `lastSequencerInboxLog`
     const transaction = await parentChainClient.getTransaction({
       hash: lastSequencerInboxLog?.transactionHash as `0x${string}`,
     })
+
+    // Check if this function selector should be ignored
+    const functionSelector = transaction.input.slice(0, 10) // 0x + 8 chars
+    if (
+      shouldIgnoreFunctionSelector(
+        childChainInformation.chainId,
+        functionSelector
+      )
+    ) {
+      console.log(
+        `Chain [${childChainInformation.name}]: Ignoring transaction with function selector ${functionSelector}`
+      )
+      return alerts
+    }
 
     const { args } = decodeFunctionData({
       abi: sequencerInboxAbi,
@@ -746,9 +785,15 @@ const checkIfAnyTrustRevertedToPostDataOnChain = async ({
   return alerts
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch(error => {
-    console.error(error)
-    process.exit(1)
-  })
+// Export for testing
+export { checkIfAnyTrustRevertedToPostDataOnChain }
+
+// Only run main if this is the entry point
+if (require.main === module) {
+  main()
+    .then(() => process.exit(0))
+    .catch(error => {
+      console.error(error)
+      process.exit(1)
+    })
+}

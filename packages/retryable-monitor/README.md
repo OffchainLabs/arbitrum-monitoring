@@ -128,7 +128,6 @@ The Notion database should be configured with the following columns:
 | `CreatedAt`          | Date     | Timestamp (ms) when the retryable was created                             |
 | `Timeout`            | Number   | Expiration timestamp in milliseconds                                      |
 | `Status`             | Select   | Workflow status (`Untriaged`, `Investigating`, `Expired`, `Resolved`.)    |
-| `Priority`           | Select   | Optional manual priority (`High`, `Medium`, `Low`, `Unset`)               |
 | `TokensDeposited`    | Text     | Amount, symbol, and token address (e.g. `1.23 USDC ($1.23) (0xToken...)`) |
 | `GasPriceProvided`   | Text     | Gas price submitted when the ticket was created                           |
 | `GasPriceAtCreation` | Text     | L2 gas price at the time of ticket creation                               |

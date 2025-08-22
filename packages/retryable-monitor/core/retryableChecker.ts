@@ -94,11 +94,13 @@ export const checkRetryables = async (
           if (enableAlerting && onRedeemedRetryableFound) {
             await onRedeemedRetryableFound({
               ChildTx: `${CHILD_CHAIN_TX_PREFIX}${retryableMessage.retryableCreationId}`,
-              ParentTx: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`,
+              ParentTx: parentTxHash,
+              ParentTxUrl: `${PARENT_CHAIN_TX_PREFIX}${parentTxHash}`, 
               createdAt: Date.now(), // fallback; won't overwrite real one
               timeout: Date.now() + SEVEN_DAYS_IN_SECONDS * 1000,
               status: 'Executed',
-              priority: 'Unset',
+              chainId: childChain.chainId,
+              chain: childChain.name,
               metadata: {
                 tokensDeposited: undefined,
                 gasPriceProvided: '-',

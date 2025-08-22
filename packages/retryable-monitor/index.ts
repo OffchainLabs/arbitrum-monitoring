@@ -99,7 +99,7 @@ const processChildChain = async (
     if (writeToNotion) {
       console.log('Activating continuous sweep of Notion database...')
       setInterval(async () => {
-        await alertUntriagedNotionRetryables()
+        await alertUntriagedNotionRetryables(config.childChains)
       }, 1000 * 60 * 60) // Run every hour
     }
   } else {
@@ -177,9 +177,11 @@ const processOrbitChainsConcurrently = async () => {
 
   // once we process all the chains go through the Notion database once to alert on any `Unresolved` tickets found
   if (options.writeToNotion) {
-    await alertUntriagedNotionRetryables()
+    await alertUntriagedNotionRetryables(config.childChains)
+
   }
 }
+
 
 // Start processing child chains concurrently
 processOrbitChainsConcurrently()

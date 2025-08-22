@@ -8,14 +8,7 @@ const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!
 export async function syncRetryableToNotion(
   input: OnRetryableFoundParams
 ): Promise<{ id: string; status: string; isNew: boolean } | undefined> {
-  const {
-    ChildTx,
-    ParentTx,
-    createdAt,
-    status,
-    priority = 'Unset',
-    metadata,
-  } = input
+  const { ChildTx, ParentTx, ParentTxUrl, createdAt, status, metadata } = input
 
   try {
     const search = await notionClient.databases.query({
@@ -41,9 +34,13 @@ export async function syncRetryableToNotion(
         : rawCreatedAt * 1000
 
     const notionProps: Record<string, any> = {
-      ParentTx: { rich_text: [{ text: { content: ParentTx } }] },
+      ParentTx: { rich_text: [{ text: { content: ParentTxUrl } }] },
+      RetryableDashboard: {
+        url: `https://retryable-dashboard.arbitrum.io/tx/${ParentTx}`,
+      },
       CreatedAt: { date: { start: new Date(createdAtMs).toISOString() } },
-      Priority: { select: { name: priority } },
+      ChainID: { number: input.chainId },
+      Chain: { rich_text: [{ text: { content: input.chain } }] },
     }
 
     if (input.timeout) {
@@ -57,7 +54,9 @@ export async function syncRetryableToNotion(
         rich_text: [{ text: { content: metadata.gasPriceProvided } }],
       }
       notionProps['GasPriceAtCreation'] = {
-        rich_text: [{ text: { content: metadata.gasPriceAtCreation ?? 'N/A' } }],
+        rich_text: [
+          { text: { content: metadata.gasPriceAtCreation ?? 'N/A' } },
+        ],
       }
       notionProps['GasPriceNow'] = {
         rich_text: [{ text: { content: metadata.gasPriceNow } }],
@@ -148,7 +147,9 @@ export async function syncRetryableToNotion(
       properties: {
         ChildTx: { title: [{ text: { content: ChildTx } }] },
         Status: { select: { name: status } },
-        ...(metadata?.decision ? { Decision: { select: { name: metadata.decision } } } : {}),
+        ...(metadata?.decision
+          ? { Decision: { select: { name: metadata.decision } } }
+          : {}),
         ...notionProps,
       },
     })
