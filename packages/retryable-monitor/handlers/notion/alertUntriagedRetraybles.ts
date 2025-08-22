@@ -71,7 +71,7 @@ export const alertUntriagedNotionRetryables = async () => {
       }
     } else if (decision === 'Should Redeem') {
       const isUnder24h = isNearExpiry(timeoutRaw, 24)
-      const isOver4DaysLeft = hoursLeft > 96
+      const areMoreThan4DaysLeftToExpire = hoursLeft > 96
 
       if (isUnder24h) {
         message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Deposit: ${deposit}\n→ Check why it hasn't been executed.`
