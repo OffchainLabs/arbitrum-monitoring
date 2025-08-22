@@ -11,33 +11,67 @@ dotenv.config()
 export const redeemRetryable = async (parentTxHash: string): Promise<string> => {
   const config = getConfig({ configPath: DEFAULT_CONFIG_PATH })
 
+  const pk = process.env.PRIVATE_KEY
+  if (!pk) {
+    throw new Error('PRIVATE_KEY env var is required for redeemRetryable')
+  }
+
+  let lastError: unknown
+
   for (const childChain of config.childChains) {
     try {
-      const parentChainProvider = new providers.JsonRpcProvider(childChain.parentRpcUrl)
-      const receipt = await parentChainProvider.getTransactionReceipt(parentTxHash)
-      if (!receipt) continue // not found on this chain
+      // 1) Check parent chain for the tx
+      const parentChainProvider = new providers.JsonRpcProvider(
+        childChain.parentRpcUrl
+      )
+      const receipt = await parentChainProvider.getTransactionReceipt(
+        parentTxHash
+      )
+      if (!receipt) {
+        // not on this parent chain; try the next one
+        continue
+      }
 
-      // If we found the receipt, this is our matching chain
-      const childChainProvider = new providers.JsonRpcProvider(childChain.orbitRpcUrl)
-      const wallet = new Wallet(process.env.PRIVATE_KEY!, childChainProvider)
+      // 2) We found the parent receipt -> attempt on its configured child
+      const childChainProvider = new providers.JsonRpcProvider(
+        childChain.orbitRpcUrl
+      )
+      const wallet = new Wallet(pk, childChainProvider)
 
       const parentReceipt = new ParentTransactionReceipt(receipt)
       const messages = await parentReceipt.getParentToChildMessages(wallet)
-      const message = messages[0]
 
-      const result = await message.getSuccessfulRedeem()
-      if (result.status === ParentToChildMessageStatus.REDEEMED) {
-        return result.childTxReceipt.transactionHash
+      if (!messages || messages.length === 0) {
+        // no L1->L2 messages associated; try next chain
+        continue
       }
 
+      // If multiple, redeem the first (adjust selection logic if needed)
+      const message = messages[0]
+
+      // 3) If already redeemed, return its tx hash instead of throwing
+      const already = await message.getSuccessfulRedeem().catch(() => null)
+      if (already && already.status === ParentToChildMessageStatus.REDEEMED) {
+        const existingHash =
+          (already as any)?.childTxReceipt?.transactionHash ??
+          (already as any)?.txHash
+        if (existingHash) return existingHash
+      }
+
+      // 4) Otherwise redeem now
       const tx = await message.redeem()
       const redeemReceipt = await tx.waitForRedeem()
       return redeemReceipt.transactionHash
     } catch (err) {
-      // Catch and move to next chain silently
+      // Record and continue probing other configured (parent, child) pairs
+      lastError = err
       continue
     }
   }
 
-  throw new Error(`❌ Parent tx ${parentTxHash} not found on any known parent chain.`)
+  const suffix =
+    lastError instanceof Error ? ` Last error: ${lastError.message}` : ''
+  throw new Error(
+    `❌ Parent tx ${parentTxHash} not found/redeemable on any configured chain.${suffix}`
+  )
 }
