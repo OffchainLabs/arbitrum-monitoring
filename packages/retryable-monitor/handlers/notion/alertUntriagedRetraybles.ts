@@ -70,7 +70,7 @@ export const alertUntriagedNotionRetryables = async () => {
         message = `⚠️ Retryable ticket needs triage:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Deposit: ${deposit}\n→ Please review and decide whether to redeem or ignore.`
       }
     } else if (decision === 'Should Redeem') {
-      const isUnder24h = isNearExpiry(timeoutRaw, 24)
+      const under24HoursLeftToExpire = isNearExpiry(timeoutRaw, 24)
       const areMoreThan4DaysLeftToExpire = hoursLeft > 96
 
       if (isUnder24h) {
