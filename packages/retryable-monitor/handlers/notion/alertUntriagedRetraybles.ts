@@ -92,8 +92,8 @@ export const alertUntriagedNotionRetryables = async (
         message = `⚠️ Retryable ticket needs triage:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Please review and decide whether to redeem or ignore.`
       }
     } else if (decision === 'Should Redeem') {
-      const isUnder24h = isNearExpiry(timeoutRaw, 24)
-      const isOver4DaysLeft = hoursLeft > 96
+      const under24HoursLeftToExpire = isNearExpiry(timeoutRaw, 24)
+      const areMoreThan4DaysLeftToExpire = hoursLeft > 96
 
       if (isUnder24h) {
         message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Deposit: ${deposit}\n→ Check why it hasn't been executed.`
