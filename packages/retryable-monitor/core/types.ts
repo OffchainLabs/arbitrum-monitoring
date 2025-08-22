@@ -77,6 +77,7 @@ export interface OnRetryableFoundParams {
     l2CallValue: string
     createdAt?: number
     decision?: string
+    botRedemptionStatus?: string
     
   }
 }
