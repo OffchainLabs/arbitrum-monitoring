@@ -26,6 +26,8 @@ const isNearExpiry = (iso: string | undefined, hours = 24) => {
   return timeLeftMs > 0 && timeLeftMs <= hours * 60 * 60 * 1000
 }
 
+type NotionQueryResp = Awaited<ReturnType<typeof notionClient.databases.query>>
+
 export const alertUntriagedNotionRetryables = async (
   childChains: ChildNetwork[] = []
 ) => {
@@ -33,7 +35,7 @@ export const alertUntriagedNotionRetryables = async (
 
   let startCursor: string | undefined = undefined
   do {
-    const response = await notionClient.databases.query({
+    const response: NotionQueryResp = await notionClient.databases.query({
       database_id: databaseId,
       page_size: 100,
       start_cursor: startCursor,
