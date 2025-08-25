@@ -69,7 +69,7 @@ export async function syncRetryableToNotion(
           rich_text: [{ text: { content: metadata.tokensDeposited } }],
         }
       }
-      // NEW: support verbose column for bot redemption outcome if provided
+      // support verbose column for bot redemption outcome if provided
       if (metadata.botRedemptionStatus) {
         notionProps['Bot Redemption Status'] = {
           select: { name: metadata.botRedemptionStatus },
@@ -118,7 +118,7 @@ export async function syncRetryableToNotion(
           }
         }
 
-        // NEW: carry Bot Redemption Status if present on this update
+        // carry Bot Redemption Status if present on this update
         if (metadata?.botRedemptionStatus) {
           executedProps['Bot Redemption Status'] = {
             select: { name: metadata.botRedemptionStatus },
@@ -163,7 +163,6 @@ export async function syncRetryableToNotion(
         ...(metadata?.decision
           ? { Decision: { select: { name: metadata.decision } } }
           : {}),
-        // NEW: include Bot Redemption Status on creation when provided
         ...(metadata?.botRedemptionStatus
           ? {
               'Bot Redemption Status': {
