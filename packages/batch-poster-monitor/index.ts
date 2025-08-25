@@ -38,6 +38,7 @@ import {
 import {
   shouldIgnoreFunctionSelector,
   isIgnoredSelectorError,
+  shouldIgnoreChain,
 } from './ignoreList'
 
 // Parsing command line arguments using yargs
@@ -682,6 +683,14 @@ const main = async () => {
   // process each chain sequentially to avoid RPC rate limiting
   for (const childChain of config.childChains) {
     try {
+      // Check if entire chain should be ignored (configured with 'all' in ignore list)
+      if (shouldIgnoreChain(childChain.chainId)) {
+        console.log(
+          `Chain [${childChain.name}]: Skipping - configured with 'all' in ignore list`
+        )
+        continue
+      }
+
       console.log('>>>>> Processing chain: ', childChain.name)
       await monitorBatchPoster(childChain)
     } catch (e) {

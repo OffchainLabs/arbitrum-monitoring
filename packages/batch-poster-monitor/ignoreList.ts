@@ -1,17 +1,20 @@
-// Default ignore list configuration - maps chainId to function selectors
+// Default ignore list configuration - maps chainId to function selectors or 'all' for entire chain
 const defaultIgnoreList: Record<number, string[]> = {
   51828: ['0x8d80ff0a'], // ChainBounty - multiSend(bytes)
+  421614: ['all'], // Data Lake - ignore entire chain
 }
 
-// Allow override for testing
 let ignoreList: Record<number, string[]> = defaultIgnoreList
 
-// Helper to check if a chain+function selector should be ignored
 export const shouldIgnoreFunctionSelector = (
   chainId: number,
   functionSelector: string
 ): boolean => {
-  return ignoreList[chainId]?.includes(functionSelector) || false
+  return ignoreList[chainId]?.includes(functionSelector) || ignoreList[chainId]?.includes('all') || false
+}
+
+export const shouldIgnoreChain = (chainId: number): boolean => {
+  return shouldIgnoreFunctionSelector(chainId, 'all')
 }
 
 // Helper to check if an error is due to an ignored function selector
