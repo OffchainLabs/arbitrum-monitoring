@@ -9,6 +9,7 @@ export interface FindRetryablesOptions {
   configPath: string
   enableAlerting: boolean
   writeToNotion: boolean
+  autoRedeem?: boolean
 }
 
 export interface CheckRetryablesOneOffParams {
