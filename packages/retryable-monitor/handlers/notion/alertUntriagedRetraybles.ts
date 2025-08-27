@@ -28,7 +28,7 @@ const isNearExpiry = (iso: string | undefined, hours = 24) => {
 
 export const alertUntriagedNotionRetryables = async (
   childChains: ChildNetwork[] = [],
-  enableAutoRedeem = false 
+  enableAutoRedeem = false // controls >96h silent redemption
 ) => {
   const allowedChainIds = childChains.map(c => c.chainId)
   const response = await notionClient.databases.query({
@@ -102,12 +102,13 @@ export const alertUntriagedNotionRetryables = async (
       const moreThan4DaysLeftToExpire = timeoutRaw ? hoursLeft > 96 : false
 
       if (under24HoursLeftToExpire) {
+        // urgent alert path
         message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Check why it hasn't been executed.`
+      } else if (!enableAutoRedeem && hoursLeft <= 72) {
+        // NEW: early alert when auto-redeem is disabled
+        message = `⚠️ Retryable marked for redemption, approaching window (auto-redeem disabled):\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Consider redeeming ahead of time.`
       } else if (moreThan4DaysLeftToExpire) {
-        if (!enableAutoRedeem) {
-          // skip silently if auto-redeem not enabled
-          continue
-        }
+        if (!enableAutoRedeem) continue
         try {
           await redeemRetryable(parentTx)
           await notionClient.pages.update({
@@ -118,7 +119,7 @@ export const alertUntriagedNotionRetryables = async (
               },
             },
           })
-        } catch (err) {
+        } catch {
           await notionClient.pages.update({
             page_id: page.id,
             properties: {
@@ -128,9 +129,9 @@ export const alertUntriagedNotionRetryables = async (
             },
           })
         }
-        continue // no Slack message
+        continue // no Slack message for auto-redeem path
       } else {
-        continue // between 24h and 96h → skip
+        continue // between 72h–96h (or >96h with auto-redeem off) → no action
       }
     }
 
