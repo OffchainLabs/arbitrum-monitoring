@@ -1,7 +1,7 @@
 // Default ignore list configuration - maps chainId to function selectors or 'all' for entire chain
 const defaultIgnoreList: Record<number, string[]> = {
   51828: ['0x8d80ff0a'], // ChainBounty - multiSend(bytes)
-  421614: ['all'], // Data Lake - ignore entire chain
+  140: ['all'], // Data Lake - ignore entire chain
 }
 
 let ignoreList: Record<number, string[]> = defaultIgnoreList
