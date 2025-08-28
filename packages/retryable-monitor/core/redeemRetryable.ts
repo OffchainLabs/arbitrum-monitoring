@@ -11,9 +11,9 @@ dotenv.config()
 export const redeemRetryable = async (parentTxHash: string): Promise<string> => {
   const config = getConfig({ configPath: DEFAULT_CONFIG_PATH })
 
-  const pk = process.env.PRIVATE_KEY
+  const pk = process.env.RETRYABLE_MONITORING_PRIVATE_KEY
   if (!pk) {
-    throw new Error('PRIVATE_KEY env var is required for redeemRetryable')
+    throw new Error('RETRYABLE_MONITORING_PRIVATE_KEY env var is required for redeemRetryable')
   }
 
   let lastError: unknown
