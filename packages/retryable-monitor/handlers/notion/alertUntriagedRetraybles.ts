@@ -1,6 +1,7 @@
 import { notionClient, databaseId } from './createNotionClient'
 import { postSlackMessage } from '../slack/postSlackMessage'
-import { ChildNetwork } from '../../../utils'
+import { redeemRetryable } from '../../core/redeemRetryable'
+import type { ChildNetwork } from '../../../utils'
 
 const formatDate = (iso: string | undefined) => {
   if (!iso) return '(unknown)'
@@ -26,7 +27,8 @@ const isNearExpiry = (iso: string | undefined, hours = 24) => {
 }
 
 export const alertUntriagedNotionRetryables = async (
-  childChains: ChildNetwork[] = []
+  childChains: ChildNetwork[] = [],
+  enableAutoRedeem = false // controls >96h silent redemption
 ) => {
   const allowedChainIds = childChains.map(c => c.chainId)
   const response = await notionClient.databases.query({
@@ -82,6 +84,9 @@ export const alertUntriagedNotionRetryables = async (
     const expiryTime = timeoutRaw ? new Date(timeoutRaw).getTime() : Infinity
     const hoursLeft = (expiryTime - now) / (1000 * 60 * 60)
 
+    // If a timeout exists and it's already past, skip
+    if (Number.isFinite(hoursLeft) && hoursLeft < 0) continue
+
     let message = ''
 
     if (decision === 'Triage') {
@@ -91,12 +96,50 @@ export const alertUntriagedNotionRetryables = async (
         message = `⚠️ Retryable ticket needs triage:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Please review and decide whether to redeem or ignore.`
       }
     } else if (decision === 'Should Redeem') {
-      if (!isNearExpiry(timeoutRaw)) continue
-      message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Check why it hasn't been executed.`
-    } else {
-      continue
+      const under24HoursLeftToExpire = timeoutRaw
+        ? isNearExpiry(timeoutRaw, 24)
+        : false
+      const moreThan4DaysLeftToExpire = timeoutRaw ? hoursLeft > 96 : false
+
+      if (under24HoursLeftToExpire) {
+        // urgent alert path
+        message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Check why it hasn't been executed.`
+      } else if (!enableAutoRedeem && hoursLeft <= 72) {
+        // NEW: early alert when auto-redeem is disabled
+        message = `⚠️ Retryable marked for redemption, approaching window (auto-redeem disabled):\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Consider redeeming ahead of time.`
+      } else if (moreThan4DaysLeftToExpire) {
+        if (!enableAutoRedeem) continue
+        try {
+          await redeemRetryable(parentTx)
+          await notionClient.pages.update({
+            page_id: page.id,
+            properties: {
+              'Bot Redemption Status': {
+                select: { name: 'Bot Success' },
+              },
+            },
+          })
+        } catch {
+          await notionClient.pages.update({
+            page_id: page.id,
+            properties: {
+              'Bot Redemption Status': {
+                select: { name: 'Bot Failed' },
+              },
+            },
+          })
+        }
+        continue // no Slack message for auto-redeem path
+      } else {
+        continue // between 72h–96h (or >96h with auto-redeem off) → no action
+      }
     }
 
-    await postSlackMessage({ message })
+    if (!message) continue
+    try {
+      await postSlackMessage({ message })
+    } catch {
+      // swallow Slack errors to keep loop running
+    }
   }
 }

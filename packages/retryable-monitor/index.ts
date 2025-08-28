@@ -60,9 +60,17 @@ const options: FindRetryablesOptions = yargs(process.argv.slice(2))
     configPath: { type: 'string', default: DEFAULT_CONFIG_PATH },
     enableAlerting: { type: 'boolean', default: false },
     writeToNotion: { type: 'boolean', default: false },
+    autoRedeem: { type: 'boolean', default: false },
   })
   .strict()
   .parseSync() as FindRetryablesOptions
+
+if (options.autoRedeem && !options.writeToNotion) {
+  console.warn(
+    '[retryable-monitor] --autoRedeem has no effect unless the Notion sweep runs. ' +
+      'You can enable it with --writeToNotion.'
+  )
+}
 
 const config = getConfig({ configPath: options.configPath })
 
@@ -99,7 +107,10 @@ const processChildChain = async (
     if (writeToNotion) {
       console.log('Activating continuous sweep of Notion database...')
       setInterval(async () => {
-        await alertUntriagedNotionRetryables(config.childChains)
+        await alertUntriagedNotionRetryables(
+          config.childChains,
+          options.autoRedeem
+        )
       }, 1000 * 60 * 60) // Run every hour
     }
   } else {
@@ -177,11 +188,9 @@ const processOrbitChainsConcurrently = async () => {
 
   // once we process all the chains go through the Notion database once to alert on any `Unresolved` tickets found
   if (options.writeToNotion) {
-    await alertUntriagedNotionRetryables(config.childChains)
-
+    await alertUntriagedNotionRetryables(config.childChains, options.autoRedeem)
   }
 }
-
 
 // Start processing child chains concurrently
 processOrbitChainsConcurrently()

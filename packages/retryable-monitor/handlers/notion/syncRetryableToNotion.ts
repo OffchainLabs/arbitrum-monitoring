@@ -69,6 +69,12 @@ export async function syncRetryableToNotion(
           rich_text: [{ text: { content: metadata.tokensDeposited } }],
         }
       }
+      // support verbose column for bot redemption outcome if provided
+      if (metadata.botRedemptionStatus) {
+        notionProps['Bot Redemption Status'] = {
+          select: { name: metadata.botRedemptionStatus },
+        }
+      }
     }
 
     if (isRetryableFoundInNotion) {
@@ -112,6 +118,13 @@ export async function syncRetryableToNotion(
           }
         }
 
+        // carry Bot Redemption Status if present on this update
+        if (metadata?.botRedemptionStatus) {
+          executedProps['Bot Redemption Status'] = {
+            select: { name: metadata.botRedemptionStatus },
+          }
+        }
+
         await notionClient.pages.update({
           page_id: page.id,
           properties: executedProps,
@@ -149,6 +162,13 @@ export async function syncRetryableToNotion(
         Status: { select: { name: status } },
         ...(metadata?.decision
           ? { Decision: { select: { name: metadata.decision } } }
+          : {}),
+        ...(metadata?.botRedemptionStatus
+          ? {
+              'Bot Redemption Status': {
+                select: { name: metadata.botRedemptionStatus },
+              },
+            }
           : {}),
         ...notionProps,
       },
