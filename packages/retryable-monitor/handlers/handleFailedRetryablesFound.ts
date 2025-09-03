@@ -13,10 +13,12 @@ export const handleFailedRetryablesFound = async (
   ticket: OnFailedRetryableFoundParams,
   writeToNotion: boolean
 ) => {
-  // report the Retryable in Slack
-  await reportFailedRetryables(ticket)
+  // 1) Ops Slack alert: only when NOT writing to Notion
+  if (!writeToNotion) {
+    await reportFailedRetryables(ticket)
+  }
 
-  // sync the Retryable to Notion
+  // 2) Notion sync: only when writing to Notion (unchanged behavior)
   if (writeToNotion) {
     const {
       tokenDepositData,
@@ -28,7 +30,6 @@ export const handleFailedRetryablesFound = async (
     const childChainProvider = new providers.JsonRpcProvider(
       String(childChain.orbitRpcUrl)
     )
-
     const parentChainProvider = new providers.JsonRpcProvider(
       String(childChain.parentRpcUrl)
     )
@@ -38,7 +39,6 @@ export const handleFailedRetryablesFound = async (
       childChain,
       parentChainProvider
     )
-
     const l2CallValueFormatted = formattedCallValueFull
       .replace('\n\t *Child chain callvalue:* ', '')
       .trim()
@@ -58,6 +58,7 @@ export const handleFailedRetryablesFound = async (
         6
       )} ${symbol} ($${usdValue.toFixed(2)}) (${address})`
     }
+
     const { l2GasPrice, l2GasPriceAtCreation } = await getGasInfo(
       childChainRetryableReport.createdAtBlockNumber,
       childChainRetryableReport.id,
