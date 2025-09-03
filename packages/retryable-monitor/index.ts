@@ -96,9 +96,11 @@ const processChildChain = async (
       enableAlerting,
       continuous,
       onFailedRetryableFound: async ticket => {
+        if (writeToNotion) return; // skip old alerts if writeToNotion is enabled
         await handleFailedRetryablesFound(ticket, writeToNotion)
       },
       onRedeemedRetryableFound: async ticket => {
+        if (writeToNotion) return; // skip old alerts if writeToNotion is enabled
         await handleRedeemedRetryablesFound(ticket, writeToNotion)
       },
     })
@@ -123,9 +125,11 @@ const processChildChain = async (
       toBlock,
       enableAlerting,
       onFailedRetryableFound: async ticket => {
+        if (writeToNotion) return; // skip old alerts if writeToNotion is enabled
         await handleFailedRetryablesFound(ticket, writeToNotion)
       },
       onRedeemedRetryableFound: async ticket => {
+        if (writeToNotion) return; // skip old alerts if writeToNotion is enabled
         await handleRedeemedRetryablesFound(ticket, writeToNotion)
       },
     })
