@@ -8,12 +8,16 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
-export const redeemRetryable = async (parentTxHash: string): Promise<string> => {
+export const redeemRetryable = async (
+  parentTxHash: string
+): Promise<string> => {
   const config = getConfig({ configPath: DEFAULT_CONFIG_PATH })
 
   const pk = process.env.RETRYABLE_MONITORING_PRIVATE_KEY
   if (!pk) {
-    throw new Error('RETRYABLE_MONITORING_PRIVATE_KEY env var is required for redeemRetryable')
+    throw new Error(
+      'RETRYABLE_MONITORING_PRIVATE_KEY env var is required for redeemRetryable'
+    )
   }
 
   let lastError: unknown
@@ -27,10 +31,7 @@ export const redeemRetryable = async (parentTxHash: string): Promise<string> => 
       const receipt = await parentChainProvider.getTransactionReceipt(
         parentTxHash
       )
-      if (!receipt) {
-        // not on this parent chain; try the next one
-        continue
-      }
+      if (!receipt) continue
 
       // 2) We found the parent receipt -> attempt on its configured child
       const childChainProvider = new providers.JsonRpcProvider(
@@ -40,11 +41,7 @@ export const redeemRetryable = async (parentTxHash: string): Promise<string> => 
 
       const parentReceipt = new ParentTransactionReceipt(receipt)
       const messages = await parentReceipt.getParentToChildMessages(wallet)
-
-      if (!messages || messages.length === 0) {
-        // no L1->L2 messages associated; try next chain
-        continue
-      }
+      if (!messages || messages.length === 0) continue // no L1->L2 messages associated; try next chain
 
       // If multiple, redeem the first (adjust selection logic if needed)
       const message = messages[0]
@@ -58,12 +55,33 @@ export const redeemRetryable = async (parentTxHash: string): Promise<string> => 
         if (existingHash) return existingHash
       }
 
-      // 4) Otherwise redeem now
-      const tx = await message.redeem()
-      const redeemReceipt = await tx.waitForRedeem()
-      return redeemReceipt.transactionHash
+      // 4) Redeem with error logging
+      try {
+        const tx = await message.redeem()
+        console.log(
+          `Sent redeem tx on childChain ${childChain.chainId}: ${tx.hash}`
+        )
+        const redeemReceipt = await tx.waitForRedeem()
+        console.log(
+          `Redeem successful on childChain ${childChain.chainId}: ${redeemReceipt.transactionHash}`
+        )
+        return redeemReceipt.transactionHash
+      } catch (redeemErr) {
+        console.error(
+          `Redeem failed on childChain ${childChain.chainId}. ` +
+            `Check tx hash if available: ${
+              (redeemErr as any)?.transactionHash || 'N/A'
+            }`,
+          redeemErr
+        )
+        lastError = redeemErr
+        continue
+      }
     } catch (err) {
-      // Record and continue probing other configured (parent, child) pairs
+      console.error(
+        `Error while processing parentTx ${parentTxHash} on chain ${childChain.chainId}:`,
+        err
+      )
       lastError = err
       continue
     }
@@ -72,6 +90,6 @@ export const redeemRetryable = async (parentTxHash: string): Promise<string> => 
   const suffix =
     lastError instanceof Error ? ` Last error: ${lastError.message}` : ''
   throw new Error(
-    `❌ Parent tx ${parentTxHash} not found/redeemable on any configured chain.${suffix}`
+    `Parent tx ${parentTxHash} not found/redeemable on any configured chain.${suffix}`
   )
 }
