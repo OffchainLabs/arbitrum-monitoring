@@ -13,7 +13,7 @@ export const handleFailedRetryablesFound = async (
   ticket: OnFailedRetryableFoundParams,
   writeToNotion: boolean
 ) => {
-  //old lack alert: only when not writing to Notion
+  //old slack alert: only when not writing to Notion
   if (!writeToNotion) {
     await reportFailedRetryables(ticket)
   }
