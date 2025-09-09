@@ -99,16 +99,10 @@ export const alertUntriagedNotionRetryables = async (
       const under24HoursLeftToExpire = timeoutRaw
         ? isNearExpiry(timeoutRaw, 24)
         : false
-      const moreThan4DaysLeftToExpire = timeoutRaw ? hoursLeft > 96 : false
 
       if (under24HoursLeftToExpire) {
-        // urgent alert path
         message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Check why it hasn't been executed.`
-      } else if (!enableAutoRedeem && hoursLeft <= 72) {
-        // NEW: early alert when auto-redeem is disabled
-        message = `⚠️ Retryable marked for redemption, approaching window (auto-redeem disabled):\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Consider redeeming ahead of time.`
-      } else if (moreThan4DaysLeftToExpire) {
-        if (!enableAutoRedeem) continue
+      } else if (hoursLeft <= 96) {
         try {
           await redeemRetryable(parentTx)
           await notionClient.pages.update({
@@ -129,9 +123,9 @@ export const alertUntriagedNotionRetryables = async (
             },
           })
         }
-        continue // no Slack message for auto-redeem path
+        continue
       } else {
-        continue // between 72h–96h (or >96h with auto-redeem off) → no action
+        continue
       }
     }
 
