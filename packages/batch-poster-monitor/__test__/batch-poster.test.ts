@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect, test, vi } from 'vitest'
-import { setIgnoreList, shouldIgnoreFunctionSelector, isIgnoredSelectorError } from '../ignoreList'
+import { beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
+import { setIgnoreList, shouldIgnoreFunctionSelector, isIgnoredSelectorError, shouldIgnoreChain } from '../ignoreList'
 import { createTestChainConfig } from './testConfigs'
 
 const VIEM_DECODE_ERROR_MESSAGE = (selector: string) => 
@@ -70,5 +70,36 @@ describe('Ignore List System', () => {
     })
     
     expect(alerts).toEqual([])
+  })
+})
+
+describe('Chain-level Ignore with "all"', () => {
+  beforeEach(() => {
+    setIgnoreList({})
+  })
+
+  test('should ignore entire chains configured with "all"', () => {
+    setIgnoreList({
+      12345: ['all'],
+      67890: ['0x12345678'],
+    })
+    
+    expect(shouldIgnoreChain(12345)).toBe(true)   // Has 'all'
+    expect(shouldIgnoreChain(67890)).toBe(false)  // Doesn't have 'all'
+    expect(shouldIgnoreFunctionSelector(12345, 'any-selector')).toBe(true)  // Any selector ignored
+  })
+
+  test('should work alongside function selector ignores', () => {
+    setIgnoreList({
+      42161: ['0x8d80ff0a'],  // Function selector only
+      421614: ['all'],        // Entire chain
+    })
+    
+    expect(shouldIgnoreChain(42161)).toBe(false)
+    expect(shouldIgnoreFunctionSelector(42161, '0x8d80ff0a')).toBe(true)
+    expect(shouldIgnoreFunctionSelector(42161, '0xother')).toBe(false)
+    
+    expect(shouldIgnoreChain(421614)).toBe(true)
+    expect(shouldIgnoreFunctionSelector(421614, 'any-selector')).toBe(true)
   })
 })
