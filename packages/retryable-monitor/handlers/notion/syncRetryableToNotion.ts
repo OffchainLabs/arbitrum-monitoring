@@ -2,8 +2,38 @@ import { notionClient } from './createNotionClient'
 import { PageObjectResponse } from '@notionhq/client/build/src/api-endpoints'
 import { postSlackMessage } from '../slack/postSlackMessage'
 import { OnRetryableFoundParams } from '../../core/types'
+import { ethers } from 'ethers'
+import { getTokenPrice } from '../slack/slackMessageFormattingUtils'
 
 const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!
+
+async function buildTokensDepositedDisplay(metadata: any): Promise<string> {
+  if (
+    !metadata?.tokenAmountRaw ||
+    metadata?.tokenDecimals === undefined ||
+    !metadata?.l1TokenAddress ||
+    !metadata?.tokenSymbol
+  ) {
+    return metadata?.tokensDeposited ?? '-'
+  }
+
+  const amountStr = ethers.utils.formatUnits(
+    metadata.tokenAmountRaw,
+    metadata.tokenDecimals
+  )
+  const amountNum = Number(amountStr)
+
+  const price = await getTokenPrice(
+    String(metadata.l1TokenAddress).toLowerCase()
+  )
+
+  if (price !== undefined) {
+    const usd = (amountNum * price).toFixed(2)
+    return `${amountStr} ${metadata.tokenSymbol} ($${usd}) (${metadata.l1TokenAddress})`
+  }
+
+  return `${amountStr} ${metadata.tokenSymbol} (${metadata.l1TokenAddress})`
+}
 
 export async function syncRetryableToNotion(
   input: OnRetryableFoundParams
@@ -64,11 +94,12 @@ export async function syncRetryableToNotion(
       notionProps['TotalRetryableDeposit'] = {
         rich_text: [{ text: { content: metadata.l2CallValue } }],
       }
-      if (metadata.tokensDeposited) {
-        notionProps['TokensDeposited'] = {
-          rich_text: [{ text: { content: metadata.tokensDeposited } }],
-        }
+
+      const tokensDepositedDisplay = await buildTokensDepositedDisplay(metadata)
+      notionProps['TokensDeposited'] = {
+        rich_text: [{ text: { content: tokensDepositedDisplay } }],
       }
+
       // support verbose column for bot redemption outcome if provided
       if (metadata.botRedemptionStatus) {
         notionProps['Bot Redemption Status'] = {
