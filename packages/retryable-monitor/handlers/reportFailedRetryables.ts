@@ -6,7 +6,7 @@ import {
   TokenDepositData,
 } from '../core/types'
 import { postSlackMessage } from './slack/postSlackMessage'
-import { generateFailedRetryableSlackMessage } from './slack/slackMessageGenerator'
+import { generateRetryableSlackBlocks } from './slack/slackMessageFormattingUtils'
 
 export const reportFailedRetryables = async ({
   parentChainRetryableReport,
@@ -49,7 +49,7 @@ export const reportFailedRetryables = async ({
   )
 
   try {
-    const reportStr = await generateFailedRetryableSlackMessage({
+    const blocks = await generateRetryableSlackBlocks({
       parentChainRetryableReport,
       childChainRetryableReport,
       tokenDepositData,
@@ -58,7 +58,10 @@ export const reportFailedRetryables = async ({
       childChainProvider,
     })
 
-    postSlackMessage({ message: reportStr })
+    await postSlackMessage({
+      blocks,
+      message: `Failed Retryable Alert - [${childChain.name}] ${t.status}`,
+    })
   } catch (e) {
     console.log('Could not send slack message', e)
   }

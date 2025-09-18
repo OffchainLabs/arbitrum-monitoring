@@ -25,6 +25,8 @@ import { ChildNetwork, getExplorerUrlPrefixes } from '../../../utils'
  *
  */
 
+type Priority = 'Critical' | 'High' | 'Medium' | 'Low'
+
 let ethPriceCache: number
 let tokenPriceCache: { [key: string]: number } = {}
 
@@ -48,121 +50,16 @@ export const getTimeDifference = (timestampInSeconds: number) => {
   }
 }
 
-export const formatPrefix = (
-  ticket: ChildChainTicketReport,
-  childChainName: string
-) => {
-  const now = Math.floor(new Date().getTime() / 1000) // now in s
-
-  let prefix
-  switch (ticket.status) {
-    case ParentToChildMessageStatus[
-      ParentToChildMessageStatus.FUNDS_DEPOSITED_ON_CHILD
-    ]:
-      prefix = `*[${childChainName}] Redeem failed for ticket:*`
-      break
-    case ParentToChildMessageStatus[ParentToChildMessageStatus.EXPIRED]:
-      prefix = `*[${childChainName}] Retryable ticket expired:*`
-      break
-    case ParentToChildMessageStatus[ParentToChildMessageStatus.NOT_YET_CREATED]:
-      prefix = `*[${childChainName}] Retryable ticket hasn't been scheduled:*`
-      break
-    default:
-      prefix = `*[${childChainName}] Found retryable ticket in unrecognized state:*`
-  }
-
-  // if ticket is about to expire in less than 48h make it a bit dramatic
-  if (ticket.status == 'RedeemFailed' || ticket.status == 'Created') {
-    const criticalSoonToExpirePeriod = 2 * 24 * 60 * 60 // 2 days in s
-    const expiresIn = +ticket.timeoutTimestamp - now
-    if (expiresIn < criticalSoonToExpirePeriod) {
-      prefix = `🆘📣 ${prefix} 📣🆘`
-    }
-  }
-
-  return prefix
+export const timestampToDate = (timestampInSeconds: number) => {
+  const date = new Date(timestampInSeconds * 1000)
+  return date.toUTCString()
 }
 
-export const formatInitiator = async (
-  deposit: TokenDepositData | undefined,
-  l1Report: ParentChainTicketReport | undefined,
-  childChain: ChildNetwork
-) => {
-  const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(childChain)
-
-  if (deposit !== undefined) {
-    let msg = '\n\t *Deposit initiated by:* '
-    // let text = await getContractName(Chain.ETHEREUM, deposit.sender)
-    return `${msg}<${PARENT_CHAIN_ADDRESS_PREFIX + deposit.sender}|${
-      deposit.sender
-    }>`
-  }
-
-  if (l1Report !== undefined) {
-    let msg = '\n\t *Retryable sender:* '
-    // let text = await getContractName(Chain.ETHEREUM, l1Report.sender)
-    return `${msg}<${PARENT_CHAIN_ADDRESS_PREFIX + l1Report.sender}|${
-      l1Report.sender
-    }>`
-  }
-
-  return ''
-}
-
-export const formatId = (
-  ticket: ChildChainTicketReport,
-  childChain: ChildNetwork
-) => {
-  let msg = '\n\t *Child chain ticket creation TX:* '
-
-  if (ticket.id == null) {
-    return msg + '-'
-  }
-
-  const { CHILD_CHAIN_TX_PREFIX } = getExplorerUrlPrefixes(childChain)
-
-  return `${msg}<${CHILD_CHAIN_TX_PREFIX + ticket.id}|${ticket.id}>`
-}
-
-export const formatL1TX = (
-  l1Report: ParentChainTicketReport | undefined,
-  childChain: ChildNetwork
-) => {
-  let msg = '\n\t *Parent Chain TX:* '
-
-  if (l1Report == undefined) {
-    return msg + '-'
-  }
-
-  const { PARENT_CHAIN_TX_PREFIX } = getExplorerUrlPrefixes(childChain)
-
-  return `${msg}<${PARENT_CHAIN_TX_PREFIX + l1Report.transactionHash}|${
-    l1Report.transactionHash
-  }>`
-}
-
-export const formatL2ExecutionTX = (
-  ticket: ChildChainTicketReport,
-  childChain: ChildNetwork
-) => {
-  let msg = '\n\t *Child chain execution TX:* '
-
-  if (!ticket.retryTxHash) {
-    return msg + ': No auto-redeem attempt found'
-  }
-
-  const { CHILD_CHAIN_TX_PREFIX } = getExplorerUrlPrefixes(childChain)
-
-  return `${msg}<${CHILD_CHAIN_TX_PREFIX + ticket.retryTxHash}|${
-    ticket.retryTxHash
-  }>`
-}
-
-export const formatL2Callvalue = async (
+export const getCallValueInfo = async (
   ticket: ChildChainTicketReport,
   childChain: ChildNetwork,
   parentChainProvider: Provider
-) => {
+): Promise<{ valueText: string; valueUsd: number }> => {
   if (childChain.nativeToken) {
     const erc20 = ERC20__factory.connect(
       childChain.nativeToken,
@@ -173,107 +70,42 @@ export const formatL2Callvalue = async (
       erc20.decimals(),
     ])
 
-    const nativeTokenAmount = ethers.utils.formatUnits(ticket.deposit, decimals)
-    return `\n\t *Child chain callvalue:* ${nativeTokenAmount} ${symbol} (Gas token: ${symbol})`
+    const amount = ethers.utils.formatUnits(ticket.deposit, decimals)
+    return {
+      valueText: `${parseFloat(amount).toFixed(4)} ${symbol}`,
+      valueUsd: 0, // Custom tokens don't have USD value by default
+    }
   } else {
     const ethAmount = ethers.utils.formatEther(ticket.deposit)
-    const depositWorthInUsd = (+ethAmount * (await getEthPrice())).toFixed(2)
-    return `\n\t *Child chain callvalue:* ${ethAmount} ETH ($${depositWorthInUsd})`
+    const ethPrice = await getEthPrice()
+    const valueUsd = +ethAmount * ethPrice
+    return {
+      valueText: `${parseFloat(ethAmount).toFixed(4)} ETH`,
+      valueUsd,
+    }
   }
 }
 
-export const formatTokenDepositData = async (
-  deposit: TokenDepositData | undefined
-) => {
-  let msg = '\n\t *Tokens deposited:* '
-
-  if (deposit === undefined) {
-    return msg + '-'
-  }
-
-  const amount = deposit.tokenAmount
-    ? ethers.utils.formatUnits(deposit.tokenAmount, deposit.l1Token.decimals)
-    : '-'
-
-  const tokenPriceInUSD = await getTokenPrice(deposit.l1Token.id)
-  if (tokenPriceInUSD !== undefined) {
-    const depositWorthInUSD = (+amount * tokenPriceInUSD).toFixed(2)
-    msg = `${msg} ${amount} ${deposit.l1Token.symbol} (\$${depositWorthInUSD}) (${deposit.l1Token.id})`
-  } else {
-    msg = `${msg} ${amount} ${deposit.l1Token.symbol} (${deposit.l1Token.id})`
-  }
-
-  return msg
-}
-
-export const formatDestination = async (
+export const formatL2Callvalue = async (
   ticket: ChildChainTicketReport,
-  childChain: ChildNetwork
+  childChain: ChildNetwork,
+  parentChainProvider: Provider
 ) => {
-  let msg = `\n\t *Destination:* `
-  const { CHILD_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(childChain)
-
-  return `${msg}<${CHILD_CHAIN_ADDRESS_PREFIX + ticket.retryTo}|${
-    ticket.retryTo
-  }>`
-}
-
-export const formatGasData = async (
-  ticket: ChildChainTicketReport,
-  childChainProvider: Provider
-) => {
-  const { l2GasPrice, l2GasPriceAtCreation, redeemEstimate } = await getGasInfo(
-    +ticket.createdAtBlockNumber,
-    ticket.id,
-    childChainProvider
+  const { valueText, valueUsd } = await getCallValueInfo(
+    ticket,
+    childChain,
+    parentChainProvider
   )
 
-  let msg = `\n\t *Gas params:* `
-  msg += `\n\t\t gas price provided: ${ethers.utils.formatUnits(
-    ticket.gasFeeCap,
-    'gwei'
-  )} gwei`
-
-  if (l2GasPriceAtCreation) {
-    msg += `\n\t\t gas price at ticket creation block: ${ethers.utils.formatUnits(
-      l2GasPriceAtCreation,
-      'gwei'
-    )} gwei`
+  if (childChain.nativeToken) {
+    const parts = valueText.split(' ')
+    const symbol = parts[1]
+    return `\n\t *Child chain callvalue:* ${valueText} (Gas token: ${symbol})`
   } else {
-    msg += `\n\t\t gas price at ticket creation block: unable to fetch (missing data)`
+    return `\n\t *Child chain callvalue:* ${valueText} ($${valueUsd.toFixed(
+      2
+    )})`
   }
-
-  msg += `\n\t\t gas price now: ${ethers.utils.formatUnits(
-    l2GasPrice,
-    'gwei'
-  )} gwei`
-  msg += `\n\t\t gas limit provided: ${ticket.gasLimit}`
-
-  if (redeemEstimate) {
-    msg += `\n\t\t redeem gas estimate: ${redeemEstimate} `
-  } else {
-    msg += `\n\t\t redeem gas estimate: estimateGas call reverted`
-  }
-
-  return msg
-}
-
-export const formatCreatedAt = (ticket: ChildChainTicketReport) => {
-  return `\n\t *Created at:* ${timestampToDate(+ticket.createdAtTimestamp)}`
-}
-
-export const formatExpiration = (ticket: ChildChainTicketReport) => {
-  let msg = `\n\t *${
-    ticket.status == 'Expired' ? `Expired` : `Expires`
-  } at:* ${timestampToDate(+ticket.timeoutTimestamp)}`
-
-  if (ticket.status == 'RedeemFailed' || ticket.status == 'Created') {
-    msg = `${msg} (that's ${getTimeDifference(
-      +ticket.timeoutTimestamp
-    )} from now)`
-  }
-
-  return msg
 }
 
 export const getEthPrice = async () => {
@@ -302,17 +134,6 @@ export const getTokenPrice = async (tokenAddress: string) => {
 
   tokenPriceCache[tokenAddress] = +response.data[tokenAddress].usd
   return tokenPriceCache[tokenAddress]
-}
-
-// Unix timestamp
-export const getPastTimestamp = (daysAgoInMs: number) => {
-  const now = new Date().getTime()
-  return Math.floor((now - daysAgoInMs) / 1000)
-}
-
-export const timestampToDate = (timestampInSeconds: number) => {
-  const date = new Date(timestampInSeconds * 1000)
-  return date.toUTCString()
 }
 
 /**
@@ -361,4 +182,192 @@ export async function getGasInfo(
   } catch {}
 
   return { l2GasPrice, l2GasPriceAtCreation, redeemEstimate }
+}
+
+export const generateRetryableSlackBlocks = async ({
+  parentChainRetryableReport,
+  childChainRetryableReport,
+  tokenDepositData,
+  childChain,
+  parentChainProvider,
+  childChainProvider,
+}: {
+  parentChainRetryableReport: ParentChainTicketReport
+  childChainRetryableReport: ChildChainTicketReport
+  tokenDepositData?: TokenDepositData
+  childChain: ChildNetwork
+  parentChainProvider: ethers.providers.Provider
+  childChainProvider: ethers.providers.Provider
+}): Promise<any[]> => {
+  const ticket = childChainRetryableReport
+
+  const { valueText: baseValueText, valueUsd } = await getCallValueInfo(
+    ticket,
+    childChain,
+    parentChainProvider
+  )
+  let valueText = baseValueText
+
+  if (tokenDepositData?.tokenAmount && tokenDepositData?.l1Token) {
+    const amount = ethers.utils.formatUnits(
+      tokenDepositData.tokenAmount,
+      tokenDepositData.l1Token.decimals
+    )
+    valueText += ` + ${parseFloat(amount).toFixed(2)} ${
+      tokenDepositData.l1Token.symbol
+    }`
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  const hoursLeft = (+ticket.timeoutTimestamp - now) / 3600
+  const priority = calculatePriority(valueUsd, hoursLeft)
+  const state = getSimpleState(ticket.status)
+  const timeLeft = formatTimeLeft(+ticket.timeoutTimestamp)
+  const ticketId = ticket.id.slice(-8).toUpperCase()
+
+  const priorityEmoji = {
+    Critical: '🚨',
+    High: '🔥',
+    Medium: '⚠️',
+    Low: '💡',
+  }[priority]
+
+  const blocks: any[] = [
+    {
+      type: 'header',
+      text: {
+        type: 'plain_text',
+        text: `${priorityEmoji} Retryable Alert`,
+      },
+    },
+
+    {
+      type: 'section',
+      fields: [
+        {
+          type: 'mrkdwn',
+          text: `*Ticket*\n\`${ticketId}\`\n\u00A0`,
+        },
+        {
+          type: 'mrkdwn',
+          text: `*Priority*\n${priority}\n\u00A0`,
+        },
+        {
+          type: 'mrkdwn',
+          text: `*State*\n${state}\n\u00A0`,
+        },
+        {
+          type: 'mrkdwn',
+          text: `*Value*\n${valueText}\n\u00A0`,
+        },
+        {
+          type: 'mrkdwn',
+          text: `*Network*\n${childChain.name}\n\u00A0`,
+        },
+        {
+          type: 'mrkdwn',
+          text: `*Time Left*\n${timeLeft}\n\u00A0`,
+        },
+      ],
+    },
+  ]
+
+  const actionElements: any[] = []
+
+  if (hoursLeft > 0) {
+    if (state === 'Pending') {
+      actionElements.push({
+        type: 'button',
+        action_id: 'redeem_now',
+        text: { type: 'plain_text', text: 'Redeem now' },
+        value: ticketId,
+        style: 'primary',
+      })
+    } else if (state === 'Failed') {
+      actionElements.push({
+        type: 'button',
+        action_id: 'retry_redeem',
+        text: { type: 'plain_text', text: 'Retry redeem' },
+        value: ticketId,
+        style: 'primary',
+      })
+    }
+  }
+
+  actionElements.push({
+    type: 'button',
+    text: { type: 'plain_text', text: 'Open dashboard' },
+    url: `https://retryable-dashboard.arbitrum.io/tx/${ticket.id}`,
+    action_id: 'open_dashboard',
+  })
+
+  const { PARENT_CHAIN_TX_PREFIX, CHILD_CHAIN_TX_PREFIX } =
+    getExplorerUrlPrefixes(childChain)
+
+  actionElements.push({
+    type: 'overflow',
+    action_id: `overflow_${ticketId}`,
+    options: [
+      {
+        text: { type: 'plain_text', text: 'Parent transaction' },
+        value: `parent_tx_${ticketId}`,
+        url: `${PARENT_CHAIN_TX_PREFIX}${parentChainRetryableReport.transactionHash}`,
+      },
+      {
+        text: { type: 'plain_text', text: 'Child transaction' },
+        value: `child_tx_${ticketId}`,
+        url: `${CHILD_CHAIN_TX_PREFIX}${ticket.id}`,
+      },
+      {
+        text: { type: 'plain_text', text: 'GitHub CI run' },
+        value: `github_ci_${ticketId}`,
+        url: 'https://github.com/OffchainLabs/arbitrum-monitoring/actions',
+      },
+    ],
+  })
+
+  if (actionElements.length > 0) {
+    blocks.push({
+      type: 'actions',
+      elements: actionElements,
+    })
+  }
+
+  return blocks
+}
+
+const calculatePriority = (valueUsd: number, hoursLeft: number): Priority => {
+  if (valueUsd >= 1000 || hoursLeft < 2) return 'Critical'
+  if (valueUsd >= 100 || hoursLeft < 24) return 'High'
+  if (hoursLeft < 72) return 'Medium'
+  return 'Low'
+}
+
+const getSimpleState = (status: string): string => {
+  switch (status) {
+    case ParentToChildMessageStatus[ParentToChildMessageStatus.NOT_YET_CREATED]:
+      return 'Pending'
+    case ParentToChildMessageStatus[
+      ParentToChildMessageStatus.FUNDS_DEPOSITED_ON_CHILD
+    ]:
+      return 'Failed'
+    case ParentToChildMessageStatus[ParentToChildMessageStatus.EXPIRED]:
+      return 'Expired'
+    default:
+      return 'Unknown'
+  }
+}
+
+const formatTimeLeft = (timestampInSeconds: number): string => {
+  const now = Math.floor(Date.now() / 1000)
+  const diff = timestampInSeconds - now
+
+  if (diff <= 0) return 'Expired'
+
+  const hours = Math.floor(diff / 3600)
+  const days = Math.floor(hours / 24)
+
+  if (days > 0) return `${days}d ${hours % 24}h`
+  if (hours > 0) return `${hours}h`
+  return '<1h'
 }
