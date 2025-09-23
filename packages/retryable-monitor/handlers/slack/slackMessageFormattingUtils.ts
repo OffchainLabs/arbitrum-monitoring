@@ -176,9 +176,19 @@ export const formatL2Callvalue = async (
     const nativeTokenAmount = ethers.utils.formatUnits(ticket.deposit, decimals)
     return `\n\t *Child chain callvalue:* ${nativeTokenAmount} ${symbol} (Gas token: ${symbol})`
   } else {
-    const ethAmount = ethers.utils.formatEther(ticket.deposit)
-    const depositWorthInUsd = (+ethAmount * (await getEthPrice())).toFixed(2)
-    return `\n\t *Child chain callvalue:* ${ethAmount} ETH ($${depositWorthInUsd})`
+    const ethAmountStr = ethers.utils.formatEther(ticket.deposit)
+    const ethPrice = await getEthPrice()
+
+    const ethAmountBN = ethers.utils.parseUnits(ethAmountStr, 18)
+    const usdValue =
+      ethAmountBN
+        .mul(Math.floor(ethPrice * 1e6))
+        .div(BigNumber.from(10).pow(18))
+        .toNumber() / 1e6
+
+    return `\n\t *Child chain callvalue:* ${ethAmountStr} ETH ($${usdValue.toFixed(
+      2
+    )})`
   }
 }
 
@@ -191,16 +201,28 @@ export const formatTokenDepositData = async (
     return msg + '-'
   }
 
-  const amount = deposit.tokenAmount
+  const amountStr = deposit.tokenAmount
     ? ethers.utils.formatUnits(deposit.tokenAmount, deposit.l1Token.decimals)
     : '-'
 
+  if (amountStr === '-') return msg + '-'
+
   const tokenPriceInUSD = await getTokenPrice(deposit.l1Token.id)
   if (tokenPriceInUSD !== undefined) {
-    const depositWorthInUSD = (+amount * tokenPriceInUSD).toFixed(2)
-    msg = `${msg} ${amount} ${deposit.l1Token.symbol} (\$${depositWorthInUSD}) (${deposit.l1Token.id})`
+    const amountBN = ethers.utils.parseUnits(
+      amountStr,
+      deposit.l1Token.decimals
+    )
+    const usdValue =
+      amountBN
+        .mul(Math.floor(tokenPriceInUSD * 1e6))
+        .div(BigNumber.from(10).pow(deposit.l1Token.decimals))
+        .toNumber() / 1e6
+
+    const depositWorthInUSD = usdValue.toFixed(2)
+    msg = `${msg} ${amountStr} ${deposit.l1Token.symbol} ($${depositWorthInUSD}) (${deposit.l1Token.id})`
   } else {
-    msg = `${msg} ${amount} ${deposit.l1Token.symbol} (${deposit.l1Token.id})`
+    msg = `${msg} ${amountStr} ${deposit.l1Token.symbol} (${deposit.l1Token.id})`
   }
 
   return msg
@@ -289,19 +311,20 @@ export const getEthPrice = async () => {
 }
 
 export const getTokenPrice = async (tokenAddress: string) => {
-  if (tokenPriceCache[tokenAddress] !== undefined) {
-    return tokenPriceCache[tokenAddress]
+  const addr = tokenAddress.toLowerCase()
+
+  if (tokenPriceCache[addr] !== undefined) {
+    return tokenPriceCache[addr]
   }
 
-  const url = `https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=${tokenAddress}&vs_currencies=usd`
+  const url = `https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=${addr}&vs_currencies=usd`
 
-  const response = await axios.get(url)
-  if (response.data[tokenAddress] == undefined) {
-    return undefined
-  }
+  const { data } = await axios.get(url)
+  const entry = data[addr]
+  if (entry == null || entry.usd == null) return undefined
 
-  tokenPriceCache[tokenAddress] = +response.data[tokenAddress].usd
-  return tokenPriceCache[tokenAddress]
+  tokenPriceCache[addr] = Number(entry.usd)
+  return tokenPriceCache[addr]
 }
 
 // Unix timestamp
