@@ -92,7 +92,10 @@ export const handleFailedRetryablesFound = async (
         gasPriceAtCreation,
         gasPriceNow,
         l2CallValue: l2CallValueFormatted,
-        
+        feeRefundAddress: childChainRetryableReport.feeRefundAddress,
+        beneficiary: childChainRetryableReport.beneficiary,
+        retryTo: childChainRetryableReport.retryTo,
+        retryData: childChainRetryableReport.retryData,
       },
     })
   }
