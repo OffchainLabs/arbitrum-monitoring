@@ -53,7 +53,7 @@ export async function syncRetryableToNotion(
 
     const isRetryableFoundInNotion = search.results.length > 0
 
-    const rawCreatedAt = metadata?.createdAt ?? createdAt
+    const rawCreatedAt = createdAt
     const createdAtMs =
       rawCreatedAt > 1e14
         ? Math.floor(rawCreatedAt / 1000)
@@ -91,8 +91,32 @@ export async function syncRetryableToNotion(
       notionProps['GasPriceNow'] = {
         rich_text: [{ text: { content: metadata.gasPriceNow } }],
       }
-      notionProps['TotalRetryableDeposit'] = {
-        rich_text: [{ text: { content: metadata.l2CallValue } }],
+
+      if (metadata.l2CallValue) {
+        notionProps['L2CallValue'] = {
+          rich_text: [{ text: { content: metadata.l2CallValue } }],
+        }
+      }
+
+      if (metadata.feeRefundAddress) {
+        notionProps['FeeRefundAddress'] = {
+          rich_text: [{ text: { content: metadata.feeRefundAddress } }],
+        }
+      }
+      if (metadata.beneficiary) {
+        notionProps['Beneficiary'] = {
+          rich_text: [{ text: { content: metadata.beneficiary } }],
+        }
+      }
+      if (metadata.retryTo) {
+        notionProps['RetryTo'] = {
+          rich_text: [{ text: { content: metadata.retryTo } }],
+        }
+      }
+      if (metadata.retryData) {
+        notionProps['RetryData'] = {
+          rich_text: [{ text: { content: metadata.retryData } }],
+        }
       }
 
       const tokensDepositedDisplay = await buildTokensDepositedDisplay(metadata)
@@ -143,9 +167,9 @@ export async function syncRetryableToNotion(
           }
         }
 
-        if (!currentDecision && metadata?.decision) {
+        if (!currentDecision && input.decision) {
           executedProps['Decision'] = {
-            select: { name: metadata.decision },
+            select: { name: input.decision },
           }
         }
 
@@ -167,9 +191,9 @@ export async function syncRetryableToNotion(
       notionProps['Status'] = { select: { name: status } }
 
       // Only set Decision if it's missing
-      if (!currentDecision && metadata?.decision) {
+      if (!currentDecision && input.decision) {
         notionProps['Decision'] = {
-          select: { name: metadata.decision },
+          select: { name: input.decision },
         }
       }
 
@@ -191,8 +215,8 @@ export async function syncRetryableToNotion(
       properties: {
         ChildTx: { title: [{ text: { content: ChildTx } }] },
         Status: { select: { name: status } },
-        ...(metadata?.decision
-          ? { Decision: { select: { name: metadata.decision } } }
+        ...(input.decision
+          ? { Decision: { select: { name: input.decision } } }
           : {}),
         ...(metadata?.botRedemptionStatus
           ? {
