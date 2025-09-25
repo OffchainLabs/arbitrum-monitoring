@@ -54,6 +54,9 @@ export const getChildChainRetryableReport = async ({
     retryData: retryableMessage.messageData.data,
     gasFeeCap: (childChainTx.maxFeePerGas ?? BigNumber.from(0)).toNumber(),
     gasLimit: childChainTx.gasLimit.toNumber(),
+    feeRefundAddress: retryableMessage.messageData.excessFeeRefundAddress,
+    beneficiary: retryableMessage.messageData.callValueRefundAddress,
+    l2CallValue: retryableMessage.messageData.l2CallValue.toString(),
   }
 
   return childChainTicketReport

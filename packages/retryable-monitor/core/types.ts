@@ -47,6 +47,9 @@ export interface ChildChainTicketReport {
   retryData: string
   gasFeeCap: number
   gasLimit: number
+  l2CallValue?: string       
+  feeRefundAddress?: string  
+  beneficiary?: string 
 }
 
 export interface TokenDepositData {
@@ -75,9 +78,11 @@ export interface OnRetryableFoundParams {
     gasPriceProvided: string
     gasPriceAtCreation?: string
     gasPriceNow: string
-    l2CallValue: string
-    createdAt?: number
-    decision?: string
+    l2CallValue?: string 
+    feeRefundAddress?: string
+    beneficiary?: string
+    retryTo?: string
+    retryData?: string
     botRedemptionStatus?: string
     
   }
