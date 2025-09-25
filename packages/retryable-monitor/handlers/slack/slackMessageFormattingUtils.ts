@@ -15,6 +15,7 @@ import {
   TokenDepositData,
 } from '../../core/types'
 import { ChildNetwork, getExplorerUrlPrefixes } from '../../../utils'
+import { parseAmount } from '../../../utils/amountUtils'
 
 /**
  *
@@ -179,7 +180,7 @@ export const formatL2Callvalue = async (
     const ethAmountStr = ethers.utils.formatEther(ticket.deposit)
     const ethPrice = await getEthPrice()
 
-    const ethAmountBN = ethers.utils.parseUnits(ethAmountStr, 18)
+    const ethAmountBN = parseAmount(ethAmountStr, 18)
     const usdValue =
       ethAmountBN
         .mul(Math.floor(ethPrice * 1e6))
@@ -209,7 +210,7 @@ export const formatTokenDepositData = async (
 
   const tokenPriceInUSD = await getTokenPrice(deposit.l1Token.id)
   if (tokenPriceInUSD !== undefined) {
-    const amountBN = ethers.utils.parseUnits(
+    const amountBN = parseAmount(
       amountStr,
       deposit.l1Token.decimals
     )

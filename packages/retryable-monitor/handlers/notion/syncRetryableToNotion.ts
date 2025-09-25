@@ -4,6 +4,7 @@ import { postSlackMessage } from '../slack/postSlackMessage'
 import { OnRetryableFoundParams } from '../../core/types'
 import { ethers, BigNumber } from 'ethers'
 import { getTokenPrice } from '../slack/slackMessageFormattingUtils'
+import { parseAmount } from '../../../utils/amountUtils'
 
 const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!
 
@@ -27,7 +28,7 @@ async function buildTokensDepositedDisplay(metadata: any): Promise<string> {
   )
 
   if (price !== undefined) {
-    const amountBN = ethers.utils.parseUnits(amountStr, metadata.tokenDecimals)
+    const amountBN = parseAmount(amountStr, metadata.tokenDecimals)
     const usdValue =
       amountBN
         .mul(Math.floor(price * 1e6))
