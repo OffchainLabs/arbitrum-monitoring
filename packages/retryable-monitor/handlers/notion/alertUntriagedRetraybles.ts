@@ -69,12 +69,12 @@ export const alertUntriagedNotionRetryables = async (
     const parentTx =
       props?.ParentTx?.rich_text?.[0]?.text?.content || '(unknown)'
 
-    const ethDeposit =
-      props?.TotalRetryableDeposit?.rich_text?.[0]?.text?.content || ''
+    const l2CallValue = props?.L2CallValue?.rich_text?.[0]?.text?.content || ''
     const tokenDeposit =
       props?.TokensDeposited?.rich_text?.[0]?.text?.content || ''
+
     const deposit =
-      [ethDeposit, tokenDeposit]
+      [l2CallValue, tokenDeposit]
         .filter(s => s && s !== '0.0 ETH ($0.00)')
         .join(' and ') || '(unknown)'
 

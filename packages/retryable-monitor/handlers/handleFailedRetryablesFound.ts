@@ -85,13 +85,17 @@ export const handleFailedRetryablesFound = async (
       status: childChainRetryableReport.status,
       chainId: childChain.chainId,
       chain: childChain.name,
+      decision: 'Triage',
       metadata: {
         tokensDeposited: formattedTokenString,
         gasPriceProvided,
         gasPriceAtCreation,
         gasPriceNow,
         l2CallValue: l2CallValueFormatted,
-        decision: 'Triage',
+        feeRefundAddress: childChainRetryableReport.feeRefundAddress,
+        beneficiary: childChainRetryableReport.beneficiary,
+        retryTo: childChainRetryableReport.retryTo,
+        retryData: childChainRetryableReport.retryData,
       },
     })
   }
