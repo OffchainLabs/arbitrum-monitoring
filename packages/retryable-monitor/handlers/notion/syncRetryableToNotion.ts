@@ -6,6 +6,16 @@ import { ethers } from 'ethers'
 import { getTokenPrice } from '../slack/slackMessageFormattingUtils'
 
 const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!
+const NOTION_RICH_TEXT_MAX = 2000
+function truncateForNotion(
+  s: string,
+  max = NOTION_RICH_TEXT_MAX,
+  suffix = '...[truncated]'
+) {
+  if (!s) return s
+  const hard = max - suffix.length
+  return s.length > hard ? s.slice(0, hard) + suffix : s
+}
 
 async function buildTokensDepositedDisplay(metadata: any): Promise<string> {
   if (
@@ -115,7 +125,9 @@ export async function syncRetryableToNotion(
       }
       if (metadata.retryData) {
         notionProps['RetryData'] = {
-          rich_text: [{ text: { content: metadata.retryData } }],
+          rich_text: [
+            { text: { content: truncateForNotion(metadata.retryData, 1950) } },
+          ],
         }
       }
 
