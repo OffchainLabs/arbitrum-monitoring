@@ -457,10 +457,17 @@ const isAnyTrust = async (
     return anyTrustCoreChainIds.includes(chainId)
   }
 
-  return isAnyTrustOrbitChain({
-    publicClient: parentChainClient as any,
-    rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
-  })
+  try {
+    return await isAnyTrustOrbitChain({
+      publicClient: parentChainClient as any,
+      rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
+    })
+  } catch (e: any) {
+    console.warn(
+      `Warning: Failed to check AnyTrust status for chain [${childChainInformation.name}]: ${e?.message || e}`
+    )
+    return false
+  }
 }
 
 const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
