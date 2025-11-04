@@ -1,7 +1,10 @@
 // Default ignore list configuration - maps chainId to function selectors or 'all' for entire chain
 const defaultIgnoreList: Record<number, string[]> = {
   51828: ['0x8d80ff0a'], // ChainBounty - multiSend(bytes)
-  140: ['all'], // Data Lake - ignore entire chain
+  98867: ['all'], // Plume testnet - ignore entire chain
+  383353: ['all'], // Cheese Chain - ignore entire chain
+  668668: ['all'], // Conwai - ignore entire chain
+  2730: ['all'], // XR Sepolia - ignore entire chain
 }
 
 let ignoreList: Record<number, string[]> = defaultIgnoreList
@@ -10,7 +13,11 @@ export const shouldIgnoreFunctionSelector = (
   chainId: number,
   functionSelector: string
 ): boolean => {
-  return ignoreList[chainId]?.includes(functionSelector) || ignoreList[chainId]?.includes('all') || false
+  return (
+    ignoreList[chainId]?.includes(functionSelector) ||
+    ignoreList[chainId]?.includes('all') ||
+    false
+  )
 }
 
 export const shouldIgnoreChain = (chainId: number): boolean => {
@@ -25,16 +32,16 @@ export const isIgnoredSelectorError = (
   if (!error?.message) {
     return { isIgnored: false }
   }
-  
+
   // Extract function selector from error message
   const selectorMatch = error.message.match(/0x[a-fA-F0-9]{8}/)
   if (!selectorMatch) {
     return { isIgnored: false }
   }
-  
+
   const selector = selectorMatch[0]
   const isIgnored = shouldIgnoreFunctionSelector(chainId, selector)
-  
+
   return { isIgnored, selector }
 }
 
