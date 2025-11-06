@@ -8,11 +8,17 @@ import {
 import { ChainUptimeConfig, ChainUptimeResult } from './core/types'
 import { isChainRunning } from './core/uptimeChecker'
 import { reportUptimeAlertToSlack } from './handlers/slack/reportUptimeAlertToSlack'
+import {
+  initializeInfluxDB,
+  writeUptimeResultToInfluxDB,
+  closeInfluxDB,
+} from './handlers/influxdb/writeToInfluxDB'
 
 interface ChainUptimeMonitorOptions {
   configPath: string
   enableAlerting: boolean
   consolidateAlerts: boolean
+  writeToInfluxDB: boolean
 }
 
 const parseOptions = (): ChainUptimeMonitorOptions => {
@@ -21,6 +27,7 @@ const parseOptions = (): ChainUptimeMonitorOptions => {
       configPath: { type: 'string', default: DEFAULT_CONFIG_PATH },
       enableAlerting: { type: 'boolean', default: false },
       consolidateAlerts: { type: 'boolean', default: true },
+      writeToInfluxDB: { type: 'boolean', default: false },
     })
     .strict()
     .parseSync() as ChainUptimeMonitorOptions
@@ -30,8 +37,30 @@ export const monitorChainUptime = async () => {
   const options = parseOptions()
   const config = getConfig({ configPath: options.configPath })
 
+  // Slack tokens (optional - only needed if --enableAlerting is used)
   const slackToken = process.env.CHAIN_UPTIME_MONITORING_SLACK_TOKEN
   const slackChannel = process.env.CHAIN_UPTIME_MONITORING_SLACK_CHANNEL
+
+  // Initialize InfluxDB if enabled (independent of Slack functionality)
+  if (options.writeToInfluxDB) {
+    const influxUrl = process.env.INFLUXDB_URL
+    const influxToken = process.env.INFLUXDB_TOKEN
+    const influxOrg = process.env.INFLUXDB_ORG
+    const influxBucket = process.env.INFLUXDB_BUCKET
+
+    if (influxUrl && influxToken && influxOrg && influxBucket) {
+      initializeInfluxDB({
+        url: influxUrl,
+        token: influxToken,
+        org: influxOrg,
+        bucket: influxBucket,
+      })
+    } else {
+      console.warn(
+        '⚠️ InfluxDB enabled but missing environment variables (INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET)'
+      )
+    }
+  }
 
   console.log(
     '>>>>>> Processing chains: ',
@@ -63,6 +92,10 @@ export const monitorChainUptime = async () => {
           )
           upChains.push(result)
           // No alerts for up chains
+          // Write to InfluxDB if enabled
+          if (options.writeToInfluxDB) {
+            await writeUptimeResultToInfluxDB(result)
+          }
         },
         // onError callback
         async result => {
@@ -78,6 +111,11 @@ export const monitorChainUptime = async () => {
               slackToken,
               slackChannel,
             })
+          }
+
+          // Write to InfluxDB if enabled
+          if (options.writeToInfluxDB) {
+            await writeUptimeResultToInfluxDB(result)
           }
         }
       )
@@ -108,10 +146,20 @@ export const monitorChainUptime = async () => {
           slackChannel,
         })
       }
+
+      // Write to InfluxDB if enabled
+      if (options.writeToInfluxDB) {
+        await writeUptimeResultToInfluxDB(errorResult)
+      }
     }
   })
 
   await Promise.allSettled(promises)
+
+  // Close InfluxDB connection if enabled
+  if (options.writeToInfluxDB) {
+    await closeInfluxDB()
+  }
 
   // Summary
   const upCount = results.filter(r => r.isRunning).length

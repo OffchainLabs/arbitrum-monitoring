@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@influxdata/influxdb-client": "^1.35.0",
     "@types/yargs": "17.0.32",
     "typescript": "^5.4.5",
     "utils": "*",
