@@ -33,42 +33,6 @@ yarn chain-uptime-monitor --enableAlerting
 yarn chain-uptime-monitor --enableAlerting --no-consolidateAlerts
 ```
 
-### SDK-like Usage
-
-```typescript
-import { isChainRunning } from 'chain-uptime-monitor'
-import { ChainUptimeConfig } from 'chain-uptime-monitor'
-
-const config: ChainUptimeConfig = {
-  chain: {
-    name: 'My Chain',
-    chainId: 421614,
-    orbitRpcUrl: 'https://my-chain-rpc.com',
-    // ... other chain metadata
-  },
-  timeout: 10000, // optional, default 10s
-}
-
-// With callbacks
-const result = await isChainRunning(
-  config,
-  // onSuccess callback
-  async (result) => {
-    console.log(`Chain is up! Block: ${result.blockNumber}`)
-    // Log to database, etc.
-  },
-  // onError callback
-  async (result) => {
-    console.error(`Chain is down! Error: ${result.error}`)
-    // Send Slack alert, etc.
-  }
-)
-
-// Without callbacks
-const result = await isChainRunning(config)
-console.log(result.isRunning ? 'UP' : 'DOWN')
-```
-
 ## Configuration
 
 The monitor uses the same `config.json` format as other monitors:
@@ -98,21 +62,22 @@ The monitor uses the same `config.json` format as other monitors:
 - `--configPath`: Path to configuration file (default: "config.json")
 - `--enableAlerting`: Enable Slack alerts (default: false)
 - `--consolidateAlerts`: Consolidate all alerts into a single message (default: true)
-  - When `true`: Sends one consolidated summary message only if there are down chains
-  - When `false`: Sends individual messages for each down chain
+  - When `true` (default): Sends **one consolidated summary message** at the end with all down chains listed. No individual alerts are sent during chain checks.
+  - When `false` (`--no-consolidateAlerts`): Sends **individual Slack messages** immediately when each chain goes down. No consolidated summary is sent.
 
 ## Output
 
 The monitor provides:
+
 - Console logs for each chain check (both up and down)
 - Summary statistics (total, up, down)
 - Exit code 1 if any chains are down
 - Slack alerts (if enabled):
   - **Only alerts for down chains** - no alerts sent if all chains are up
-  - **Consolidated mode (default)**: Single summary message with down chains only
-  - **Individual mode**: Separate message for each down chain
-
-## Integration
-
-This monitor is designed to run via GitHub Actions every 4 hours, using the same config generation pattern as other monitors.
-
+  - **Consolidated mode (`--consolidateAlerts`, default)**:
+    - Waits until all chains are checked
+    - Sends **one summary message** with total chains, up/down counts, and list of all down chains
+    - Example: "❌ Chain Uptime Alert\n\nTotal Chains: 4\n✅ Up: 3\n❌ Down: 1\n\nDown Chains:\n - Chain 2 (1002): Connection timeout"
+  - **Individual mode (`--no-consolidateAlerts`)**:
+    - Sends **separate message for each down chain** immediately when detected
+    - Example: "❌ Chain Uptime Alert: Chain 2 (Chain ID: 1002) is DOWN\nError: Connection timeout\n..."
