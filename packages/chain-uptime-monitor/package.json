@@ -1,0 +1,26 @@
+{
+  "name": "chain-uptime-monitor",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@types/yargs": "17.0.32",
+    "typescript": "^5.4.5",
+    "utils": "*",
+    "viem": "^2.7.9",
+    "yargs": "17.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.1",
+    "ts-node": "^10.9.2",
+    "vitest": "^3.0.5"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "build": "rm -rf ./dist && tsc",
+    "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
+    "dev": "yarn build && node ./dist/chain-uptime-monitor/index.js",
+    "test": "vitest run __test__/*.test.ts",
+    "test:watch": "vitest watch __test__/*.test.ts"
+  }
+}
+
