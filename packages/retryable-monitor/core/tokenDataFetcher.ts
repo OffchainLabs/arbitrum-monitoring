@@ -81,7 +81,7 @@ export const getTokenDepositData = async ({
     }
   }
 
-  // If we successfully found a token deposit, fetch metadata (symbol & decimals)
+  // If we successfully found a token deposit, fetch metadata
   if (parentChainErc20Address) {
     try {
       const erc20 = ERC20__factory.connect(
@@ -93,7 +93,7 @@ export const getTokenDepositData = async ({
         erc20.decimals(),
       ])
       tokenDepositData = {
-        l2TicketId: retryableMessage.retryableCreationId, // display-friendly requestId
+        l2TicketId: retryableMessage.retryableCreationId,
         tokenAmount,
         sender: arbParentTxReceipt.from,
         l1Token: {
