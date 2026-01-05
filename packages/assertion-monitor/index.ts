@@ -167,9 +167,20 @@ export const main = async () => {
     console.log('Starting assertion monitoring...')
 
     for (const chainInfo of config.childChains) {
-      const result = await checkChainForAssertionIssues(chainInfo)
-      if (result) {
-        alerts.push(result)
+      try {
+        const result = await checkChainForAssertionIssues(chainInfo)
+        if (result) {
+          alerts.push(result)
+        }
+      } catch (error: unknown) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error)
+        const errorStr = `Error processing chain ${chainInfo.name} for assertion monitoring: ${errorMessage}`
+        const { options } = getMonitorConfig()
+        if (options.enableAlerting) {
+          await reportAssertionMonitorErrorToSlack({ message: errorStr })
+        }
+        console.error(errorStr)
       }
     }
 
