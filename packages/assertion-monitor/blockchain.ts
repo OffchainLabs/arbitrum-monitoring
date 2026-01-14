@@ -18,7 +18,6 @@ import {
   rollupABI,
 } from './abi'
 import { CHUNK_SIZE, MIN_BASE_STAKE_THRESHOLD } from './constants'
-import { AssertionDataError } from './errors'
 import { ChainState, ConfirmationEvent, CreationEvent } from './types'
 import { extractBoldBlockHash, extractClassicBlockHash } from './utils'
 
@@ -81,7 +80,7 @@ export async function getLatestCreationBlock(
   isBold: boolean
 ): Promise<Block | undefined> {
   if (!latestCreationLog) {
-    throw new AssertionDataError('No assertion logs found')
+    return undefined
   }
 
   const assertionData = latestCreationLog.args.assertion
@@ -398,6 +397,8 @@ export const fetchChainState = async ({
     recentConfirmationEvent,
     isValidatorWhitelistDisabled,
     isBaseStakeBelowThreshold,
+    searchFromBlock: fromBlock,
+    searchToBlock: toBlock,
   }
 
   console.log('Built chain state blocks:', {

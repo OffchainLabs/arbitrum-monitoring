@@ -15,8 +15,69 @@ import {
   RECENT_ACTIVITY_SECONDS,
   VALIDATOR_AFK_BLOCKS,
 } from './constants'
+import { getBlockTimeForChain, getChainFromId } from './chains'
 import type { ChainState } from './types'
 import { isEventRecent } from './utils'
+
+/**
+ * Formats duration in a human-readable format
+ */
+function formatDuration(seconds: number): string {
+  if (seconds < 60) {
+    return `${Math.round(seconds)}s`
+  } else if (seconds < 3600) {
+    return `${Math.round(seconds / 60)}m`
+  } else if (seconds < 86400) {
+    return `${Math.round(seconds / 3600)}h`
+  } else {
+    const days = Math.floor(seconds / 86400)
+    const hours = Math.round((seconds % 86400) / 3600)
+    return hours > 0 ? `${days}d ${hours}h` : `${days}d`
+  }
+}
+
+/**
+ * Creates a detailed alert message when no creation events are found in the search window
+ */
+function createNoCreationEventsAlert(
+  chainState: ChainState,
+  chainInfo: ChainInfo
+): string {
+  if (
+    chainState.searchFromBlock &&
+    chainState.searchToBlock &&
+    chainState.parentCurrentBlock
+  ) {
+    const parentChain = getChainFromId(chainInfo.parentChainId)
+    const blockTime = getBlockTimeForChain(parentChain)
+
+    if (blockTime > 0) {
+      const blocksSearched =
+        chainState.searchToBlock - chainState.searchFromBlock
+      const durationSeconds = Number(blocksSearched) * blockTime
+      const duration = formatDuration(durationSeconds)
+
+      // Check if chain is active (producing blocks recently)
+      // Use the same search window duration to check for activity
+      const currentTimeSeconds = Math.floor(Date.now() / 1000)
+      const hasChainActivity =
+        !!(
+          chainState.childCurrentBlock && chainState.childCurrentBlock.timestamp
+        ) &&
+        // Chain is active if child chain block is recent (within search window)
+        currentTimeSeconds - Number(chainState.childCurrentBlock.timestamp) <
+          durationSeconds
+
+      const activityFlag = hasChainActivity
+        ? 'Chain is active'
+        : 'Chain is inactive'
+
+      return `${activityFlag}, and No assertion creation events found in ~${duration} search window (blocks ${chainState.searchFromBlock} - ${chainState.searchToBlock}).`
+    }
+  }
+
+  return NO_CREATION_EVENTS_ALERT
+}
 
 /**
  * Analyzes chain state to detect assertion and confirmation issues
@@ -61,7 +122,7 @@ export const analyzeAssertionEvents = async (
   }
 
   if (!doesLatestChildCreatedBlockExist) {
-    alerts.push(NO_CREATION_EVENTS_ALERT)
+    alerts.push(createNoCreationEventsAlert(chainState, chainInfo))
   }
 
   if (!doesLatestChildConfirmedBlockExist) {
