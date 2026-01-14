@@ -61,4 +61,6 @@ export interface ChainState {
   recentConfirmationEvent: ConfirmationEvent | null
   isValidatorWhitelistDisabled: boolean
   isBaseStakeBelowThreshold: boolean
+  searchFromBlock?: bigint
+  searchToBlock?: bigint
 }

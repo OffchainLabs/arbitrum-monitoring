@@ -185,7 +185,9 @@ export const main = async () => {
     }
 
     if (alerts.length > 0) {
-      const alertMessage = `Assertion Monitor Alert Summary:\n\n${alerts}`
+      const alertMessage = `Assertion Monitor Alert Summary:\n\n${alerts.join(
+        '\n\n'
+      )}`
       console.log(alertMessage)
 
       if (options.enableAlerting) {
