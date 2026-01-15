@@ -1,12 +1,12 @@
 {
   "name": "batch-poster-monitor",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "dist/index.js",
   "scripts": {
     "lint": "eslint .",
-    "build": "rm -rf ./dist && tsc",
+    "build": "yarn workspace utils build && rm -rf ./dist && tsc",
     "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "dev": "yarn build && node ./dist/batch-poster-monitor/index.js",
+    "dev": "yarn build && node ./dist/index.js",
     "test": "vitest"
   },
   "dependencies": {
