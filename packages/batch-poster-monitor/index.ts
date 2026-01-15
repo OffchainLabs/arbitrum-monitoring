@@ -34,7 +34,7 @@ import {
   DEFAULT_CONFIG_PATH,
   getConfig,
   getExplorerUrlPrefixes,
-} from '../utils'
+} from 'utils'
 import {
   shouldIgnoreFunctionSelector,
   isIgnoredSelectorError,
@@ -464,7 +464,9 @@ const isAnyTrust = async (
     })
   } catch (e: any) {
     console.warn(
-      `Warning: Failed to check AnyTrust status for chain [${childChainInformation.name}]: ${e?.message || e}`
+      `Warning: Failed to check AnyTrust status for chain [${
+        childChainInformation.name
+      }]: ${e?.message || e}`
     )
     return false
   }

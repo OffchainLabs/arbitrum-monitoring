@@ -1,4 +1,4 @@
-import { ChildNetwork } from '../../utils'
+import { ChildNetwork } from 'utils'
 import { providers } from 'ethers'
 
 // Type for options passed to findRetryables function

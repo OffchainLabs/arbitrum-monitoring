@@ -7,7 +7,7 @@ import {
   ParentTransactionReceipt,
   ParentToChildMessageStatus,
 } from '@arbitrum/sdk'
-import { ChildNetwork } from '../../utils'
+import { ChildNetwork } from 'utils'
 import {
   getMessageDeliveredEventData,
   getDepositInitiatedLogs,

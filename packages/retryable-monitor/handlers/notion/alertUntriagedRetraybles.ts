@@ -1,7 +1,7 @@
 import { notionClient, databaseId } from './createNotionClient'
 import { postSlackMessage } from '../slack/postSlackMessage'
 import { redeemRetryable } from '../../core/redeemRetryable'
-import type { ChildNetwork } from '../../../utils'
+import type { ChildNetwork } from 'utils'
 
 const formatDate = (iso: string | undefined) => {
   if (!iso) return '(unknown)'
