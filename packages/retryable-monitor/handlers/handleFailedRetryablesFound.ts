@@ -1,5 +1,5 @@
 import { BigNumber, ethers, providers } from 'ethers'
-import { getExplorerUrlPrefixes } from '../../utils'
+import { getExplorerUrlPrefixes } from 'utils'
 import { OnFailedRetryableFoundParams } from '../core/types'
 import { reportFailedRetryables } from './reportFailedRetryables'
 import { syncRetryableToNotion } from './notion/syncRetryableToNotion'

@@ -7,7 +7,7 @@ import {
   registerCustomArbitrumNetwork,
 } from '@arbitrum/sdk'
 import { FindRetryablesOptions } from './core/types'
-import { ChildNetwork, DEFAULT_CONFIG_PATH, getConfig } from '../utils'
+import { ChildNetwork, DEFAULT_CONFIG_PATH, getConfig } from 'utils'
 import {
   checkRetryablesOneOff,
   checkRetryablesContinuous,

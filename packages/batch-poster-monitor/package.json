@@ -4,7 +4,7 @@
   "main": "index.ts",
   "scripts": {
     "lint": "eslint .",
-    "build": "rm -rf ./dist && tsc",
+    "build": "yarn workspace utils build && rm -rf ./dist && tsc",
     "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
     "dev": "yarn build && node ./dist/batch-poster-monitor/index.js",
     "test": "vitest"
