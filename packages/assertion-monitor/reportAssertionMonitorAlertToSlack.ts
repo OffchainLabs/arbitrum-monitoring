@@ -1,4 +1,4 @@
-import { createSlackPoster } from 'utils'
+import { createSlackPoster } from 'slack'
 
 export const reportAssertionMonitorErrorToSlack = createSlackPoster({
   tokenEnvVar: 'ASSERTION_MONITORING_SLACK_TOKEN',

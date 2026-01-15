@@ -1,4 +1,4 @@
-import { createSlackPoster } from 'utils'
+import { createSlackPoster } from 'slack'
 
 export const postSlackMessage = createSlackPoster({
   tokenEnvVar: 'RETRYABLE_MONITORING_SLACK_TOKEN',

@@ -1,0 +1,14 @@
+{
+  "name": "slack",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@slack/web-api": "^7.0.4",
+    "dotenv": "^16.0.3",
+    "utils": "*"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "test": "vitest run"
+  }
+}

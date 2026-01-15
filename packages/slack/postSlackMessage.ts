@@ -1,6 +1,6 @@
 import { WebClient } from '@slack/web-api'
+import { formatGitHubCIInfo } from 'utils'
 import { sanitizeSlackMessage } from './sanitizeSlackMessage'
-import { formatGitHubCIInfo } from './githubCIUtils'
 
 export const postSlackMessage = ({
   slackToken,
