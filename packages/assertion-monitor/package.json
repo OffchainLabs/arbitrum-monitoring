@@ -5,7 +5,7 @@
   "dependencies": {
     "@arbitrum/sdk": "^4.0.0",
     "@types/yargs": "17.0.32",
-    "slack": "*",
+    "@arbitrum-monitoring/slack": "*",
     "typescript": "^5.4.5",
     "utils": "*",
     "viem": "^2.7.9",

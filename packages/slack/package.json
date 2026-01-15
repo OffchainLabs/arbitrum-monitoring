@@ -1,5 +1,5 @@
 {
-  "name": "slack",
+  "name": "@arbitrum-monitoring/slack",
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
