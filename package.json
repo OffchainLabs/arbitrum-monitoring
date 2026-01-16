@@ -9,6 +9,7 @@
     "retryable-monitor": "yarn workspace retryable-monitor dev",
     "batch-poster-monitor": "yarn workspace batch-poster-monitor dev",
     "assertion-monitor": "yarn workspace assertion-monitor dev",
+    "chain-uptime-monitor": "yarn workspace chain-uptime-monitor dev",
     "test": "vitest"
   },
   "devDependencies": {
