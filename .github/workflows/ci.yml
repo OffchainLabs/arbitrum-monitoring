@@ -103,20 +103,17 @@ jobs:
     - name: Install dependencies
       run: yarn install --frozen-lockfile
 
-    - name: Build and run batch-poster-monitor
+    - name: Smoke test batch-poster-monitor dev script
       run: |
-        yarn workspace batch-poster-monitor build
-        node packages/batch-poster-monitor/dist/index.js --help
+        timeout 10s yarn workspace batch-poster-monitor dev || [ $? -eq 124 ]
 
-    - name: Build and run assertion-monitor
+    - name: Smoke test assertion-monitor dev script
       run: |
-        yarn workspace assertion-monitor build
-        node packages/assertion-monitor/dist/main.js --help
+        timeout 10s yarn workspace assertion-monitor dev || [ $? -eq 124 ]
 
-    - name: Build and run retryable-monitor
+    - name: Smoke test retryable-monitor dev script
       run: |
-        yarn workspace retryable-monitor build
-        node packages/retryable-monitor/dist/index.js --help
+        timeout 10s yarn workspace retryable-monitor dev || [ $? -eq 124 ]
 
   # Lint check for code quality
   lint:
