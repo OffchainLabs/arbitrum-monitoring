@@ -14,8 +14,7 @@ import {
   ParentChainTicketReport,
   TokenDepositData,
 } from '../../core/types'
-import { ChildNetwork, getExplorerUrlPrefixes } from '../../../utils'
-import { parseAmount } from '../../../utils/amountUtils'
+import { ChildNetwork, getExplorerUrlPrefixes, parseAmount } from 'utils'
 
 /**
  *

@@ -4,7 +4,6 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
 
 jobs:
   build-and-test:
@@ -83,6 +82,38 @@ jobs:
       
     - name: Run all tests
       run: yarn test
+
+  # Smoke test - verify built packages actually run
+  smoke-test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x, 22.x, latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'yarn'
+
+    - name: Install dependencies
+      run: yarn install --frozen-lockfile
+
+    - name: Smoke test batch-poster-monitor dev script
+      run: |
+        timeout 10s yarn workspace batch-poster-monitor dev || [ $? -eq 124 ]
+
+    - name: Smoke test assertion-monitor dev script
+      run: |
+        timeout 10s yarn workspace assertion-monitor dev || [ $? -eq 124 ]
+
+    - name: Smoke test retryable-monitor dev script
+      run: |
+        timeout 10s yarn workspace retryable-monitor dev || [ $? -eq 124 ]
 
   # Lint check for code quality
   lint:

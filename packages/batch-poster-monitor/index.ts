@@ -34,7 +34,7 @@ import {
   DEFAULT_CONFIG_PATH,
   getConfig,
   getExplorerUrlPrefixes,
-} from '../utils'
+} from 'utils'
 import {
   shouldIgnoreFunctionSelector,
   isIgnoredSelectorError,

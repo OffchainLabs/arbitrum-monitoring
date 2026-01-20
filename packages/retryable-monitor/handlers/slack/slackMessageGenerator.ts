@@ -1,5 +1,5 @@
 import { providers } from 'ethers'
-import { ChildNetwork } from '../../../utils'
+import { ChildNetwork } from 'utils'
 import {
   ChildChainTicketReport,
   ParentChainTicketReport,

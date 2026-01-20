@@ -12,7 +12,7 @@ import {
   CheckRetryablesOneOffParams,
   CheckRetryablesContinuousParams,
 } from './types'
-import { ChildNetwork } from '../../utils'
+import { ChildNetwork } from 'utils'
 import { checkRetryables } from './retryableChecker'
 
 export const getParentChainBlockTime = (childChain: ChildNetwork) => {

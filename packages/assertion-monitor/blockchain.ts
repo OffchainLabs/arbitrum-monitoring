@@ -8,7 +8,7 @@ import {
   type Block,
   type Log,
 } from 'viem'
-import { ChildNetwork as ChainInfo, sleep } from '../utils'
+import { ChildNetwork as ChainInfo, sleep } from 'utils'
 import {
   ASSERTION_CONFIRMED_EVENT,
   ASSERTION_CREATED_EVENT,

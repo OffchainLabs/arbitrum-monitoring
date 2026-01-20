@@ -3,7 +3,7 @@ import {
   ParentTransactionReceipt,
   ParentToChildMessageStatus,
 } from '@arbitrum/sdk'
-import { getConfig, DEFAULT_CONFIG_PATH } from '../../utils'
+import { getConfig, DEFAULT_CONFIG_PATH } from 'utils'
 import dotenv from 'dotenv'
 
 dotenv.config()
