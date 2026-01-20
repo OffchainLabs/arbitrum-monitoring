@@ -18,7 +18,7 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "build": "yarn workspace utils build && rm -rf ./dist && tsc",
+    "build": "yarn --cwd ../.. build:deps && rm -rf ./dist && tsc",
     "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
     "dev": "yarn build && node ./dist/main.js",
     "test": "vitest run __test__/*.test.ts",

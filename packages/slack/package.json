@@ -1,12 +1,14 @@
 {
   "name": "@arbitrum-monitoring/slack",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "dependencies": {
     "@slack/web-api": "^7.0.4",
     "dotenv": "^16.0.3"
   },
   "scripts": {
+    "build": "tsc",
     "lint": "eslint .",
     "test": "vitest run"
   }

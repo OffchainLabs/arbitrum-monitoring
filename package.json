@@ -6,10 +6,12 @@
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
+    "build:deps": "yarn workspace utils build && yarn workspace @arbitrum-monitoring/slack build",
+    "build": "yarn build:deps && yarn workspaces foreach run build",
     "retryable-monitor": "yarn workspace retryable-monitor dev",
     "batch-poster-monitor": "yarn workspace batch-poster-monitor dev",
     "assertion-monitor": "yarn workspace assertion-monitor dev",
-    "test": "yarn workspace utils build && vitest"
+    "test": "yarn build:deps && vitest"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
