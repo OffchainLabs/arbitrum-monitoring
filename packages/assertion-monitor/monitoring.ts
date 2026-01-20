@@ -1,4 +1,4 @@
-import { ChildNetwork as ChainInfo } from '../utils'
+import { ChildNetwork as ChainInfo } from 'utils'
 import {
   BOLD_LOW_BASE_STAKE_ALERT,
   CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT,

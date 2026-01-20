@@ -1,11 +1,13 @@
 {
   "name": "utils",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "dependencies": {
     "@slack/web-api": "^7.0.4"
   },
   "scripts": {
+    "build": "tsc",
     "lint": "eslint ."
   }
 }
