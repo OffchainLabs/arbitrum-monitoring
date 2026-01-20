@@ -18,8 +18,8 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "build": "rm -rf ./dist && tsc",
+    "build": "yarn workspace utils build && rm -rf ./dist && tsc",
     "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "dev": "yarn build && node ./dist/retryable-monitor/index.js"
+    "dev": "yarn build && node ./dist/index.js"
   }
 }

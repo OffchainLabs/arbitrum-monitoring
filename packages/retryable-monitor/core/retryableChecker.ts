@@ -7,7 +7,7 @@ import {
   ParentTransactionReceipt,
   ParentToChildMessageStatus,
 } from '@arbitrum/sdk'
-import { ChildNetwork } from '../../utils'
+import { ChildNetwork } from 'utils'
 import {
   getMessageDeliveredEventData,
   getDepositInitiatedLogs,
@@ -16,7 +16,7 @@ import {
   getParentChainRetryableReport,
   getChildChainRetryableReport,
 } from './reportGenerator'
-import { getExplorerUrlPrefixes } from '../../utils'
+import { getExplorerUrlPrefixes } from 'utils'
 import { OnFailedRetryableFound, OnRedeemedRetryableFound } from './types'
 import { getTokenDepositData } from './tokenDataFetcher'
 import { SEVEN_DAYS_IN_SECONDS } from '@arbitrum/sdk/dist/lib/dataEntities/constants'

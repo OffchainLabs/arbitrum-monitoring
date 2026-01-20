@@ -4,7 +4,7 @@ import {
   ChildNetwork as ChainInfo,
   DEFAULT_CONFIG_PATH,
   getConfig,
-} from '../utils'
+} from 'utils'
 import {
   createChildChainClient,
   fetchChainState,
