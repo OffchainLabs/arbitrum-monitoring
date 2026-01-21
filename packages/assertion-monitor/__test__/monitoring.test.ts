@@ -8,7 +8,6 @@ import {
   NO_CONFIRMATION_EVENTS_ALERT,
   CONFIRMATION_DELAY_ALERT,
   CREATION_EVENT_STUCK_ALERT,
-  NON_BOLD_NO_RECENT_CREATION_ALERT,
   VALIDATOR_WHITELIST_DISABLED_ALERT,
   NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT,
   BOLD_LOW_BASE_STAKE_ALERT,
@@ -92,7 +91,9 @@ describe('Assertion Health Monitoring', () => {
       recentCreationEvent: null,
       recentConfirmationEvent: null,
       isValidatorWhitelistDisabled: false,
-      isBaseStakeBelowThreshold: false
+      isBaseStakeBelowThreshold: false,
+      // By default, no batches posted (lastBlockIncludedInBatch <= childLatestCreatedBlock)
+      lastBlockIncludedInBatch: 800n,
     }
   }
 
@@ -141,13 +142,16 @@ describe('Assertion Health Monitoring', () => {
       expect(alerts[0]).toBe(NO_CREATION_EVENTS_ALERT)
     })
 
-    test('should alert when chain has activity but no recent creation events', async () => {
+    test('should alert when batches posted but no recent creation events', async () => {
       const chainState = createBaseChainState()
       // Set creation event to be older than the recent activity threshold (4 hours)
       chainState.childLatestCreatedBlock = {
         ...chainState.childLatestCreatedBlock!,
         timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
+        number: 900n,
       } as Block
+      // Set batches posted beyond the last asserted block
+      chainState.lastBlockIncludedInBatch = 1000n
 
       const alerts = await analyzeAssertionEvents(
         chainState,
@@ -160,6 +164,27 @@ describe('Assertion Health Monitoring', () => {
 
       // Check for expected alert
       expect(alerts).toContain(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
+    })
+
+    test('should NOT alert when no batches posted (low activity)', async () => {
+      const chainState = createBaseChainState()
+      // Set creation event to be older than the recent activity threshold (4 hours)
+      chainState.childLatestCreatedBlock = {
+        ...chainState.childLatestCreatedBlock!,
+        timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
+        number: 900n,
+      } as Block
+      // But no batches posted beyond the last asserted block
+      chainState.lastBlockIncludedInBatch = 800n
+
+      const alerts = await analyzeAssertionEvents(
+        chainState,
+        mockChainInfo,
+        true
+      )
+
+      // Should NOT alert - no batches posted means no activity requiring assertions
+      expect(alerts).not.toContain(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
     })
 
     test('should alert when no confirmation events exist', async () => {
@@ -288,12 +313,15 @@ describe('Assertion Health Monitoring', () => {
     test('should generate multiple alerts when multiple conditions are met', async () => {
       const chainState = createBaseChainState()
 
-      // Set creation event to be older than the recent activity threshold
+      // Set creation event to be older than the recent activity threshold (4 hours)
       chainState.childLatestCreatedBlock = {
         ...chainState.childLatestCreatedBlock!,
         timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
         number: 1800n,
       } as Block
+
+      // Set batches posted beyond the last asserted block
+      chainState.lastBlockIncludedInBatch = 1900n
 
       // Set values to trigger confirmation delay
       chainState.childCurrentBlock = {
@@ -531,13 +559,16 @@ describe('Assertion Health Monitoring', () => {
       expect(alerts[0]).toBe(NO_CREATION_EVENTS_ALERT)
     })
 
-    test('should alert when no recent creation events for non-BOLD chain', async () => {
+    test('should alert when batches posted but no recent creation events for non-BOLD chain', async () => {
       const chainState = createBaseChainState()
       // Set creation event to be older than the recent activity threshold (4 hours)
       chainState.childLatestCreatedBlock = {
         ...chainState.childLatestCreatedBlock!,
         timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
+        number: 900n,
       } as Block
+      // Set batches posted beyond the last asserted block
+      chainState.lastBlockIncludedInBatch = 1000n
 
       const alerts = await analyzeAssertionEvents(
         chainState,
@@ -548,8 +579,8 @@ describe('Assertion Health Monitoring', () => {
       // Check if alerts array exists and has at least one element
       expect(alerts.length).toBeGreaterThan(0)
 
-      // Check for expected alert
-      expect(alerts).toContain(NON_BOLD_NO_RECENT_CREATION_ALERT)
+      // Check for expected alert (same alert for both BOLD and non-BOLD)
+      expect(alerts).toContain(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
     })
 
     test('should alert when no confirmation events exist for non-BOLD chain', async () => {
@@ -610,7 +641,10 @@ describe('Assertion Health Monitoring', () => {
       chainState.childLatestCreatedBlock = {
         ...chainState.childLatestCreatedBlock!,
         timestamp: NOW - BigInt(7 * 24 * 60 * 60), // 7 days ago
+        number: 900n,
       } as Block
+      // Set batches posted beyond the last asserted block to trigger batch alert
+      chainState.lastBlockIncludedInBatch = 1000n
 
       const alerts = await analyzeAssertionEvents(
         chainState,
@@ -621,18 +655,21 @@ describe('Assertion Health Monitoring', () => {
       // The implementation will generate other alerts, but not CREATION_EVENT_STUCK_ALERT
       expect(alerts).not.toContain(CREATION_EVENT_STUCK_ALERT)
 
-      // But it should contain the NON_BOLD_NO_RECENT_CREATION_ALERT
-      expect(alerts).toContain(NON_BOLD_NO_RECENT_CREATION_ALERT)
+      // With batches posted, it should alert about batches without assertions
+      expect(alerts).toContain(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
     })
 
     test('should generate alerts when extreme conditions are met for non-BOLD chain', async () => {
       const chainState = createBaseChainState()
-      // Set creation event to be older than the recent activity threshold
+      // Set creation event to be older than the recent activity threshold (4 hours)
       chainState.childLatestCreatedBlock = {
         ...chainState.childLatestCreatedBlock!,
         timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
         number: 900n,
       } as Block
+
+      // Set batches posted beyond the last asserted block
+      chainState.lastBlockIncludedInBatch = 1000n
 
       // Set parent chain blocks to indicate a delay
       chainState.parentCurrentBlock = {
@@ -664,7 +701,6 @@ describe('Assertion Health Monitoring', () => {
 
       // Check for required alerts
       expect(alerts).toContain(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
-      expect(alerts).toContain(NON_BOLD_NO_RECENT_CREATION_ALERT)
       expect(alerts).toContain(CONFIRMATION_DELAY_ALERT)
     })
 

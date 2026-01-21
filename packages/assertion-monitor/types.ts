@@ -55,7 +55,7 @@ export interface ChainState {
   childLatestCreatedBlock?: Block
   childLatestConfirmedBlock?: Block
   parentCurrentBlock?: Block
-  parentBlockAtCreation?: Block 
+  parentBlockAtCreation?: Block
   parentBlockAtConfirmation?: Block
   recentCreationEvent: CreationEvent | null
   recentConfirmationEvent: ConfirmationEvent | null
@@ -63,4 +63,6 @@ export interface ChainState {
   isBaseStakeBelowThreshold: boolean
   searchFromBlock?: bigint
   searchToBlock?: bigint
+  /** Last child chain block number included in a batch (from sequencerReportedSubMessageCount) */
+  lastBlockIncludedInBatch?: bigint
 }
