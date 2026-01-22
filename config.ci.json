@@ -1,21 +1,490 @@
 {
   "childChains": [
     {
-      "name": "Arbitrum Sepolia",
-      "chainId": 421614,
-      "parentChainId": 11155111,
+      "name": "Xai",
+      "chainId": 660279,
+      "parentChainId": 42161,
       "confirmPeriodBlocks": 45818,
-      "parentRpcUrl": "https://sepolia.drpc.org",
-      "orbitRpcUrl": "https://sepolia-rollup.arbitrum.io/rpc",
-      "explorerUrl": "https://sepolia.arbiscan.io",
-      "parentExplorerUrl": "https://sepolia.etherscan.io",
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://xai-chain.net/rpc",
+      "explorerUrl": "https://explorer.xai-chain.net",
+      "parentExplorerUrl": "https://arbiscan.io",
       "ethBridge": {
-        "bridge": "0x38f918D0E9F1b721EDaA41302E399fa1B79333a9",
-        "inbox": "0xaAe29B0366299461418F5324a79Afc425BE5ae21",
-        "outbox": "0x65f07C7D521164a4d5DaC6eB8Fac8DA067A3B78F",
-        "rollup": "0x042b2e6c5e99d4c521bd49beed5e99651d9b0cf4",
-        "sequencerInbox": "0x6c97864CE4bE1C2C8bB6aFe3A115E6D7Dca82E71"
-      }
+        "bridge": "0x7dd8A76bdAeBE3BBBaCD7Aa87f1D4FDa1E60f94f",
+        "inbox": "0xaE21fDA3de92dE2FDAF606233b2863782Ba046F9",
+        "outbox": "0x1E400568AD4840dbE50FB32f306B842e9ddeF726",
+        "rollup": "0xC47DacFbAa80Bd9D8112F4e8069482c2A3221336",
+        "sequencerInbox": "0x995a9d3ca121D48d21087eDE20bc8acb2398c8B1"
+      },
+      "isBold": false
+    },
+    {
+      "name": "RARI Mainnet",
+      "chainId": 1380012617,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 45818,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://mainnet.rpc.rarichain.org/http",
+      "explorerUrl": "https://mainnet.explorer.rarichain.org",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0x255f80Ef2F09FCE0944faBb292b8510F01316Cf0",
+        "inbox": "0x37e60F80d921dc5E7f501a7130F31f6548dBa564",
+        "outbox": "0x91591BB66075BCfF94AA128B003134165C3Ab83a",
+        "rollup": "0x2e988Ea0873C9d712628F0bf38DAFdE754927C89",
+        "sequencerInbox": "0xA436f1867adD490BF1530c636f2FB090758bB6B3"
+      },
+      "isBold": false
+    },
+    {
+      "name": "XCHAIN",
+      "chainId": 94524,
+      "parentChainId": 1,
+      "confirmPeriodBlocks": 40320,
+      "parentRpcUrl": "https://eth.llamarpc.com",
+      "orbitRpcUrl": "https://xchain-rpc.idex.io",
+      "explorerUrl": "https://xchain-explorer.idex.io",
+      "parentExplorerUrl": "https://etherscan.io",
+      "ethBridge": {
+        "bridge": "0x2Be65c5b58F78B02AB5c0e798A9ffC181703D3C1",
+        "inbox": "0xE961Ef06c26D0f032F0298c97C41e648d3bb715a",
+        "outbox": "0x0b8071337dcB089478Ea740efC10904d9F359141",
+        "rollup": "0xeb61c3FA03544021cf76412eFb9D0Ce7D8c0290d",
+        "sequencerInbox": "0x47861E0419BE83d0175818a09221B6DF2EFD7793"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Sanko",
+      "chainId": 1996,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 45818,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://mainnet.sanko.xyz",
+      "explorerUrl": "https://explorer.sanko.xyz",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0x2f285781B8d58678a3483de52D618198E4d27532",
+        "inbox": "0x718E2a83775343d5c0B1eE0676703cBAF30CaFCD",
+        "outbox": "0x575d32f7ff0C72921645e302cb14d2757E300786",
+        "rollup": "0x9A59EdF7080fdA05396373a85DdBf2cEBDB81Cd4",
+        "sequencerInbox": "0x24B68936C13A414cd91437aE7AA730321B9ff159"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Superposition",
+      "chainId": 55244,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 40320,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://rpc.superposition.so",
+      "explorerUrl": "https://explorer.superposition.so",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0xEca0fEB4aA6112a3923823559e7197294Bc49CC7",
+        "inbox": "0x2EAf07A964c6601c4fAefd6D8969DF0B84f65e55",
+        "outbox": "0xa4b3B4D5f7976a8D283864ea83f1Bb3D815b1798",
+        "rollup": "0x325Dd0279Ba31bC346BA80F3D00628deFa2EacD4",
+        "sequencerInbox": "0xe0064A9fb8e45BfD8e5aB1cE7523888814A096E0"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Mind Network",
+      "chainId": 228,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 7200,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://rpc-mainnet.mindnetwork.xyz",
+      "explorerUrl": "https://explorer.mindnetwork.xyz",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0x34F81F9C4F3227DbaCcFF8E51DBaa1571e114759",
+        "inbox": "0x703F97120c8E5F5fC7c878C309E9e84E118B0478",
+        "outbox": "0x31A1A120939007547aBC5e3BFaBDB6AcA6C00378",
+        "rollup": "0x435CEf963dE6CC2241da6f09CE6Bb3600cF259a9",
+        "sequencerInbox": "0xD00d2ef101d86C570dA8f38801f236b79a7a2A93"
+      },
+      "isBold": false
+    },
+    {
+      "name": "SX",
+      "chainId": 4162,
+      "parentChainId": 1,
+      "confirmPeriodBlocks": 45818,
+      "parentRpcUrl": "https://eth.llamarpc.com",
+      "orbitRpcUrl": "https://rpc-rollup.sx.technology",
+      "explorerUrl": "https://explorerl2.sx.technology",
+      "parentExplorerUrl": "https://etherscan.io",
+      "ethBridge": {
+        "bridge": "0xa104C0426e95a5538e89131DbB4163d230C35f86",
+        "inbox": "0xEa83E8907C89Bc0D9517632f0ba081972E328631",
+        "outbox": "0xB360b2f57c645E847148d7C479b7468AbF6F707d",
+        "rollup": "0x36c6C69A6186D4475fc5c21181CD980Bd6E5e11F",
+        "sequencerInbox": "0xD80a805c86C14c879420eC6acb366D04D318fC0C"
+      },
+      "isBold": false
+    },
+    {
+      "name": "ApeChain",
+      "chainId": 33139,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 45818,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://apechain.calderachain.xyz/http",
+      "explorerUrl": "https://apescan.io",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0x6B71AFb4b7725227ab944c96FE018AB9dc0434b8",
+        "inbox": "0x1B98e4ED82Ee1a91A65a38C690e2266364064D15",
+        "outbox": "0x4F405BA65291063d8A524c2bDf55d4e67405c2aF",
+        "rollup": "0x374de579AE15aD59eD0519aeAf1A23F348Df259c",
+        "sequencerInbox": "0xE6a92Ae29E24C343eE66A2B3D3ECB783d65E4a3C"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Gravity Alpha",
+      "chainId": 1625,
+      "parentChainId": 1,
+      "confirmPeriodBlocks": 40320,
+      "parentRpcUrl": "https://eth.llamarpc.com",
+      "orbitRpcUrl": "https://rpc.gravity.xyz",
+      "explorerUrl": "https://explorer.gravity.xyz",
+      "parentExplorerUrl": "https://etherscan.io",
+      "ethBridge": {
+        "bridge": "0x7983403dDA368AA7d67145a9b81c5c517F364c42",
+        "inbox": "0x7AD2a94BefF3294a31894cFb5ba4206957a53c19",
+        "outbox": "0x1153a1e4B1523DFf36f77d696bd6eBF2B0e7DAbF",
+        "rollup": "0xf993AF239770932A0EDaB88B6A5ba3708Bd58239",
+        "sequencerInbox": "0x8D99372612e8cFE7163B1a453831Bc40eAeb3cF3"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Edu Chain",
+      "chainId": 41923,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 45818,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://rpc.edu-chain.raas.gelato.cloud",
+      "explorerUrl": "https://educhain.blockscout.com",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0x2F12c50b46adB01a4961AdDa5038c0974C7C78e8",
+        "inbox": "0x590044e628ea1B9C10a86738Cf7a7eeF52D031B8",
+        "outbox": "0x6339965Cb3002f5c746895e4eD895bd775dbfdf9",
+        "rollup": "0xBaE3B462a2A7fb758F66D91170514C10B14Ce914",
+        "sequencerInbox": "0xA3464bf0ed52cFe6676D3e34ab1F4DF53f193631"
+      },
+      "isBold": false
+    },
+    {
+      "name": "ChainBounty",
+      "chainId": 51828,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 40320,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://rpc.chainbounty.io",
+      "explorerUrl": "https://scan.chainbounty.io/",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0xd46AB997110a91C4CB6f4576ffE6769a3033622A",
+        "inbox": "0xF649EF414d5674851614615b3e3861E90a812379",
+        "outbox": "0x48a5c0942046753B8026b1dc074Dd22297A31340",
+        "rollup": "0xAa400A624190FFbD09F292d09C2Ed01704609C67",
+        "sequencerInbox": "0x6CBf221c8cc7E2B9De4bce3a5c75378591Bdf8Ea"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Miracle Chain",
+      "chainId": 92278,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 40320,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://rpc-miracle-chain-dqfxgxhidy.t.conduit.xyz",
+      "explorerUrl": "https://explorer-miracle-chain-dqfxgxhidy.t.conduit.xyz/",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0xaF25849aEb040bEab7a0c783fc6861d26aE49796",
+        "inbox": "0xc7b143E5E4Bf1893BA33007ecb3Db9c1092dab38",
+        "outbox": "0xA5b6E1DbA5c9037cCd2013D7dd7BD173AFc90d4c",
+        "rollup": "0xE18FD99F6C0eBEC7d01893E9f7Cf363EeF38F9B4",
+        "sequencerInbox": "0x21f9c31eD91612B48A8ae450Bdd0f19F8f5Bea40"
+      },
+      "isBold": false
+    },
+    {
+      "name": "BirdLayer",
+      "chainId": 53456,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 150,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://rpc.birdlayer.xyz",
+      "explorerUrl": "https://scan.birdlayer.xyz",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0x113E7DC5e4A42b1bEe9DB0594f48EFdEa7b88eE0",
+        "inbox": "0x5b777fa9fBF1587509fe5b2Ab681af7Af890A5A3",
+        "outbox": "0x1B7b002b9430c6D59058beFa1f718A91fBe51ff0",
+        "rollup": "0xd6e33A7898aE63Cb3D56b4B51575141E953BD9D5",
+        "sequencerInbox": "0xf5299083F7C234425f01CccDD9141e500011fffb"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Plume Mainnet",
+      "chainId": 98866,
+      "parentChainId": 1,
+      "confirmPeriodBlocks": 40320,
+      "parentRpcUrl": "https://eth.llamarpc.com",
+      "orbitRpcUrl": "https://rpc.plume.org",
+      "explorerUrl": "https://explorer.plume.org",
+      "parentExplorerUrl": "https://etherscan.io",
+      "ethBridge": {
+        "bridge": "0x35381f63091926750F43b2A7401B083263aDEF83",
+        "inbox": "0x943fc691242291B74B105e8D19bd9E5DC2fcBa1D",
+        "outbox": "0x7e4627bC114Fcd12ba912103279FD2858E644E71",
+        "rollup": "0x35c60Cc77b0A8bf6F938B11bd3E9D319a876c2aC",
+        "sequencerInbox": "0x85eC1b9138a8b9659A51e2b51bb0861901040b59"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Humanity Mainnet",
+      "chainId": 6985385,
+      "parentChainId": 1,
+      "confirmPeriodBlocks": 45818,
+      "parentRpcUrl": "https://eth.llamarpc.com",
+      "orbitRpcUrl": "https://humanity-mainnet.g.alchemy.com/public",
+      "explorerUrl": "https://humanity-mainnet.explorer.alchemy.com/",
+      "parentExplorerUrl": "https://etherscan.io",
+      "ethBridge": {
+        "bridge": "0x8620F893F6321C31909e4a58bcEb6948A289e0fD",
+        "inbox": "0xe7D7C04885f460e0c58504D617C65ab064A4879D",
+        "outbox": "0x74045319D890f0C0CD7914F2DE757F25492331f0",
+        "rollup": "0x4ef3463F0Ffc1E9bfe30f72D705C259A0A0cCb56",
+        "sequencerInbox": "0xa80dD081B83399614fa0BB497174Bdcb3EF4Efe6"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Galactica Mainnet",
+      "chainId": 613419,
+      "parentChainId": 1,
+      "confirmPeriodBlocks": 50400,
+      "parentRpcUrl": "https://eth.llamarpc.com",
+      "orbitRpcUrl": "https://galactica-mainnet.g.alchemy.com/public",
+      "explorerUrl": "https://galactica-mainnet.explorer.alchemy.com/",
+      "parentExplorerUrl": "https://etherscan.io",
+      "ethBridge": {
+        "bridge": "0xd75a60aFcBC113C1c76e42184663Da141f839053",
+        "inbox": "0x46a2f92Fa215eBc734e51b26da3d205de71FA930",
+        "outbox": "0xC327F5cDBAAc8879EE8017A0977C9a685A850a4F",
+        "rollup": "0xf3B30Fd67211C57e2Cc36D5a41dB28415AF55BB7",
+        "sequencerInbox": "0x2fccc2de02Dd598E14403C4151F192d962E646Ba"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Earnm Mainnet",
+      "chainId": 32766,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 45818,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://earnm-mainnet.g.alchemy.com/public",
+      "explorerUrl": "https://earnm-mainnet.explorer.alchemy.com/",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0xA9F4ee72439afC704db48dc049CbFb7E914aD300",
+        "inbox": "0x446626827f14F89B38D5bA1ab152B484cd7912fD",
+        "outbox": "0x39919941b42DAb335d9924Ef56dF7b9813b2D6d9",
+        "rollup": "0xc930fd48846e956b308f28524dA2d5E14c832e33",
+        "sequencerInbox": "0x38d41Ac2fbc3f13FcA7838F6638D8FbDb189e807"
+      },
+      "isBold": false
+    },
+    {
+      "name": "T-REX",
+      "chainId": 1628,
+      "parentChainId": 1,
+      "confirmPeriodBlocks": 7200,
+      "parentRpcUrl": "https://eth.llamarpc.com",
+      "orbitRpcUrl": "https://rpc.trex.xyz",
+      "explorerUrl": "https://explorer.trex.xyz",
+      "parentExplorerUrl": "https://etherscan.io",
+      "ethBridge": {
+        "bridge": "0x61C4b51f9388A2DD62C791341f0d50AD88d64Fd4",
+        "inbox": "0x1744424936C6F1A4921130b12AA4F3832B421002",
+        "outbox": "0xa0419E39cA100DCfC6F0d68D605d2445f387Fb4e",
+        "rollup": "0x7705e53B707AF758aCEa86580d5da155d2fB2921",
+        "sequencerInbox": "0xfF3e828FD206bD8491A7C77ABfb128860D314b6B"
+      },
+      "isBold": false
+    },
+    {
+      "name": "RCADE",
+      "chainId": 101069,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 45818,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://rpc.rcade.network/http",
+      "explorerUrl": "https://scan.rcade.network",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0x13355730A242744D71f1e489896837f70797fB26",
+        "inbox": "0x09a0f92A165dE693E2f5A9dE6c78605Fe873b36E",
+        "outbox": "0xbBe348691B0765B04D5a72EBfD502Acd3bf5d09A",
+        "rollup": "0x5aE6380a5E9306A616CCDffF5a53813dbC4b88F3",
+        "sequencerInbox": "0x9876fC5268F4053e6339ead270311582A4983cE5"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Molten",
+      "chainId": 360,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 45818,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://molten.calderachain.xyz/http",
+      "explorerUrl": "https://molten.calderaexplorer.xyz/",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0xE1d32C985825562edAa906fAC39295370Db72195",
+        "inbox": "0x235000876bd58336C802B3546Fc0250f285fCc79",
+        "outbox": "0xb255de22d39a26D4CbcAFd6Cf660ccaCa047e95B",
+        "rollup": "0x0f28D76Ec5c62b502625351726b4A3E3F54FF5F0",
+        "sequencerInbox": "0x0fFe9ACC296ddd4De5F616Aa482C99fA4b41A3E2"
+      },
+      "isBold": false
+    },
+    {
+      "name": "MeerChain",
+      "chainId": 98215,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 40320,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://rpc.tiktrix.gg",
+      "explorerUrl": "https://explorer.tiktrix.gg/",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0x55A1B18E0300aD707617B828E0554765dBFc8535",
+        "inbox": "0x306c4D4032862813db6554519e03DA31C1387cFf",
+        "outbox": "0x8D6513Bc0cafaa0CaEdB80dB392997E92c7FA125",
+        "rollup": "0xA71a1e9649167787e179DD66348e578f928d43F4",
+        "sequencerInbox": "0xA672239e003124455c00FdAB7D15dD682BCe97AE"
+      },
+      "isBold": false
+    },
+    {
+      "name": "HPP Mainnet",
+      "chainId": 190415,
+      "parentChainId": 1,
+      "confirmPeriodBlocks": 40320,
+      "parentRpcUrl": "https://eth.llamarpc.com",
+      "orbitRpcUrl": "https://mainnet.hpp.io",
+      "explorerUrl": "https://explorer.hpp.io/",
+      "parentExplorerUrl": "https://etherscan.io",
+      "ethBridge": {
+        "bridge": "0x9948eDFBb9e0b104bAd60393dBe79d0BC7937014",
+        "inbox": "0xE0400a87d5Ee8a2Fc1dF2aAf4B6d8f89d0B9bE55",
+        "outbox": "0x433da6d107e942Ec4EAB1e86B16427B6071F6491",
+        "rollup": "0xf0d2960a37B33567FF7507C2d59da021277663A1",
+        "sequencerInbox": "0x9B26957a661bc862FA0d7eb21813Aa008d0Cc6E6"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Syndicate Network",
+      "chainId": 510,
+      "parentChainId": 1,
+      "confirmPeriodBlocks": 50400,
+      "parentRpcUrl": "https://eth.llamarpc.com",
+      "orbitRpcUrl": "https://synd-mainnet.g.alchemy.com/public",
+      "explorerUrl": "https://synd-mainnet.explorer.alchemy.com/",
+      "parentExplorerUrl": "https://etherscan.io",
+      "ethBridge": {
+        "bridge": "0x3C8cF0ae6E89AC0796f29B3a58e7dEa1cD072277",
+        "inbox": "0x5EA55Fd41D42Eb307D281bdE78E4e7572A35ea13",
+        "outbox": "0xf555Bc86D1C953414F676479Bf7C979b1A737E8C",
+        "rollup": "0x451bD7813909B899DA6EbEC55E8fF823c057e14A",
+        "sequencerInbox": "0x12ad349e5d72B582856290736e0f13FE5fA57Aa4"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Lit Chain",
+      "chainId": 175200,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 40320,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://lit-chain-rpc.litprotocol.com",
+      "explorerUrl": "https://lit-chain-explorer.litprotocol.com",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0x7a472B48D9e9D2f6B7fF8FCBb5251849ca75D18f",
+        "inbox": "0x009060fdb0816c354F487843d275D9e1d90B1956",
+        "outbox": "0x09c35e5848B52Fa422447AD6728b328d0Aa39bA9",
+        "rollup": "0xA11359544aEDC8E5d6700DEf8A8D9dCb828cf646",
+        "sequencerInbox": "0x3a1b2BDcD084f0536bEF90B8e709fbcCDBf9fEb3"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Muster",
+      "chainId": 4078,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 7200,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://muster.alt.technology",
+      "explorerUrl": "https://muster-explorer.alt.technology",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0xB0EC3C1368AF7d9C2CAE6B7f8E022Cc14d59D2b1",
+        "inbox": "0x18BB8310E3a3DF4EFcCb6B3E9AeCB8bE6d4af07f",
+        "outbox": "0xD17550876106645988051ffDd31dFc3cDaA29F9c",
+        "rollup": "0xE383D432F039f4377CC9AA003FfaE4c814936864",
+        "sequencerInbox": "0xfb27e42E964F3364630F76D62EB295ae792BD4FA"
+      },
+      "isBold": false
+    },
+    {
+      "name": "Edge Mainnet",
+      "chainId": 3343,
+      "parentChainId": 42161,
+      "confirmPeriodBlocks": 50400,
+      "parentRpcUrl": "https://arb1.arbitrum.io/rpc",
+      "orbitRpcUrl": "https://edge-mainnet.g.alchemy.com/public",
+      "explorerUrl": "https://edge-mainnet.explorer.alchemy.com/",
+      "parentExplorerUrl": "https://arbiscan.io",
+      "ethBridge": {
+        "bridge": "0x6F4836aFD5e21EDcee9b838C5a4125829EC198d0",
+        "inbox": "0xeB88b89e085D6B747Dd6b9CEaf2716bdd89F1E7c",
+        "outbox": "0x9f427c80C4DF962726808d4c876fc2c55474a764",
+        "rollup": "0x14FdC47483e79d5A76599a74A2D622DA1cf97BBF",
+        "sequencerInbox": "0xe44B83D8a3A86994043C809E29B723a44FAEE479"
+      },
+      "isBold": false
+    },
+    {
+      "name": "JasmyChain",
+      "chainId": 680,
+      "parentChainId": 1,
+      "confirmPeriodBlocks": 6000,
+      "parentRpcUrl": "https://eth.llamarpc.com",
+      "orbitRpcUrl": "https://jasmychain-mainnet.alt.technology",
+      "explorerUrl": "https://explorer.jasmyscan.net",
+      "parentExplorerUrl": "https://etherscan.io",
+      "ethBridge": {
+        "bridge": "0x546bd55bF4f3F05810f14eea894cEaB8Cb58F1EA",
+        "inbox": "0x76e17330a08C9e4943D9E617109cF1f4ED05Ee83",
+        "outbox": "0x15A2937b7FB92eC2b550B5Ce9bF8ffE92373d2F8",
+        "rollup": "0x1ad4DEDFe0D975D2b547aBD607194750aA7f6310",
+        "sequencerInbox": "0x37C6a6d9986542844D156F852A0047F7592b06fa"
+      },
+      "isBold": false
     }
   ]
 }
