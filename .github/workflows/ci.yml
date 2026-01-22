@@ -176,17 +176,20 @@ jobs:
         yarn workspace batch-poster-monitor build
         yarn workspace retryable-monitor build
 
-        # Run each monitor and capture output
+        # Run each monitor and extract ONLY the summary output
         echo "=== ASSERTION MONITOR ===" > ../target-output.txt
-        timeout 180s yarn workspace assertion-monitor dev --configPath=../../config.ci.json 2>&1 | tee -a ../target-output.txt || true
+        timeout 180s yarn workspace assertion-monitor dev --configPath=../../config.ci.json 2>&1 | \
+          grep -E "(Assertion Monitor Alert Summary|Monitoring complete - all chains healthy|No assertion creation events found)" >> ../target-output.txt || true
 
         echo "" >> ../target-output.txt
         echo "=== BATCH POSTER MONITOR ===" >> ../target-output.txt
-        timeout 180s yarn workspace batch-poster-monitor dev --configPath=../../config.ci.json 2>&1 | tee -a ../target-output.txt || true
+        timeout 180s yarn workspace batch-poster-monitor dev --configPath=../../config.ci.json 2>&1 | \
+          sed -n '/Batch poster monitor summary/,$p' >> ../target-output.txt || true
 
         echo "" >> ../target-output.txt
         echo "=== RETRYABLE MONITOR ===" >> ../target-output.txt
-        timeout 180s yarn workspace retryable-monitor dev --configPath=../../config.ci.json 2>&1 | tee -a ../target-output.txt || true
+        timeout 180s yarn workspace retryable-monitor dev --configPath=../../config.ci.json 2>&1 | \
+          grep -E "(No retryables found|Found [0-9]+ retryable|Processing child chains)" >> ../target-output.txt || true
       continue-on-error: true
 
     - name: Run monitors on PR branch
@@ -199,17 +202,20 @@ jobs:
         yarn workspace batch-poster-monitor build
         yarn workspace retryable-monitor build
 
-        # Run each monitor and capture output
+        # Run each monitor and extract ONLY the summary output
         echo "=== ASSERTION MONITOR ===" > ../pr-output.txt
-        timeout 180s yarn workspace assertion-monitor dev --configPath=../../config.ci.json 2>&1 | tee -a ../pr-output.txt || true
+        timeout 180s yarn workspace assertion-monitor dev --configPath=../../config.ci.json 2>&1 | \
+          grep -E "(Assertion Monitor Alert Summary|Monitoring complete - all chains healthy|No assertion creation events found)" >> ../pr-output.txt || true
 
         echo "" >> ../pr-output.txt
         echo "=== BATCH POSTER MONITOR ===" >> ../pr-output.txt
-        timeout 180s yarn workspace batch-poster-monitor dev --configPath=../../config.ci.json 2>&1 | tee -a ../pr-output.txt || true
+        timeout 180s yarn workspace batch-poster-monitor dev --configPath=../../config.ci.json 2>&1 | \
+          sed -n '/Batch poster monitor summary/,$p' >> ../pr-output.txt || true
 
         echo "" >> ../pr-output.txt
         echo "=== RETRYABLE MONITOR ===" >> ../pr-output.txt
-        timeout 180s yarn workspace retryable-monitor dev --configPath=../../config.ci.json 2>&1 | tee -a ../pr-output.txt || true
+        timeout 180s yarn workspace retryable-monitor dev --configPath=../../config.ci.json 2>&1 | \
+          grep -E "(No retryables found|Found [0-9]+ retryable|Processing child chains)" >> ../pr-output.txt || true
       continue-on-error: true
 
     - name: Generate diff and post comment
@@ -218,12 +224,25 @@ jobs:
         script: |
           const fs = require('fs');
 
-          const targetOutput = fs.existsSync('target-output.txt')
+          // Normalize dynamic values (block numbers, timestamps) for comparison
+          function normalizeOutput(text) {
+            return text
+              .replace(/\d{7,}/g, 'BLOCK_NUM')      // Replace large numbers (block numbers)
+              .replace(/\d+n\b/g, 'BIGINT')         // Replace bigint literals
+              .replace(/0x[a-fA-F0-9]{40}/g, 'ADDR') // Replace addresses
+              .trim();
+          }
+
+          const targetOutputRaw = fs.existsSync('target-output.txt')
             ? fs.readFileSync('target-output.txt', 'utf8').trim()
             : '';
-          const prOutput = fs.existsSync('pr-output.txt')
+          const prOutputRaw = fs.existsSync('pr-output.txt')
             ? fs.readFileSync('pr-output.txt', 'utf8').trim()
             : '';
+
+          // Use normalized versions for comparison
+          const targetOutput = normalizeOutput(targetOutputRaw);
+          const prOutput = normalizeOutput(prOutputRaw);
 
           const hasChanges = targetOutput !== prOutput;
 
