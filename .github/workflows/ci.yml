@@ -166,28 +166,50 @@ jobs:
       with:
         node-version: 18.x
 
-    - name: Run monitoring on target branch
-      id: target
+    - name: Run monitors on target branch
       run: |
         cd target-branch
         yarn install --frozen-lockfile
+
+        # Build all monitors
         yarn workspace assertion-monitor build
-        # Run monitoring with CI config and extract alert summary
-        timeout 180s yarn workspace assertion-monitor dev --configPath=../../config.ci.json 2>&1 | tee output.txt || true
-        # Extract alerts section
-        sed -n '/Alert Summary/,$ p' output.txt > ../target-alerts.txt || echo "No alerts" > ../target-alerts.txt
+        yarn workspace batch-poster-monitor build
+        yarn workspace retryable-monitor build
+
+        # Run each monitor and capture output
+        echo "=== ASSERTION MONITOR ===" > ../target-output.txt
+        timeout 180s yarn workspace assertion-monitor dev --configPath=../../config.ci.json 2>&1 | tee -a ../target-output.txt || true
+
+        echo "" >> ../target-output.txt
+        echo "=== BATCH POSTER MONITOR ===" >> ../target-output.txt
+        timeout 180s yarn workspace batch-poster-monitor dev --configPath=../../config.ci.json 2>&1 | tee -a ../target-output.txt || true
+
+        echo "" >> ../target-output.txt
+        echo "=== RETRYABLE MONITOR ===" >> ../target-output.txt
+        timeout 180s yarn workspace retryable-monitor dev --configPath=../../config.ci.json 2>&1 | tee -a ../target-output.txt || true
       continue-on-error: true
 
-    - name: Run monitoring on PR branch
-      id: pr
+    - name: Run monitors on PR branch
       run: |
         cd pr-branch
         yarn install --frozen-lockfile
+
+        # Build all monitors
         yarn workspace assertion-monitor build
-        # Run monitoring with CI config and extract alert summary
-        timeout 180s yarn workspace assertion-monitor dev --configPath=../../config.ci.json 2>&1 | tee output.txt || true
-        # Extract alerts section
-        sed -n '/Alert Summary/,$ p' output.txt > ../pr-alerts.txt || echo "No alerts" > ../pr-alerts.txt
+        yarn workspace batch-poster-monitor build
+        yarn workspace retryable-monitor build
+
+        # Run each monitor and capture output
+        echo "=== ASSERTION MONITOR ===" > ../pr-output.txt
+        timeout 180s yarn workspace assertion-monitor dev --configPath=../../config.ci.json 2>&1 | tee -a ../pr-output.txt || true
+
+        echo "" >> ../pr-output.txt
+        echo "=== BATCH POSTER MONITOR ===" >> ../pr-output.txt
+        timeout 180s yarn workspace batch-poster-monitor dev --configPath=../../config.ci.json 2>&1 | tee -a ../pr-output.txt || true
+
+        echo "" >> ../pr-output.txt
+        echo "=== RETRYABLE MONITOR ===" >> ../pr-output.txt
+        timeout 180s yarn workspace retryable-monitor dev --configPath=../../config.ci.json 2>&1 | tee -a ../pr-output.txt || true
       continue-on-error: true
 
     - name: Generate diff and post comment
@@ -196,26 +218,14 @@ jobs:
         script: |
           const fs = require('fs');
 
-          const targetAlerts = fs.existsSync('target-alerts.txt')
-            ? fs.readFileSync('target-alerts.txt', 'utf8').trim()
+          const targetOutput = fs.existsSync('target-output.txt')
+            ? fs.readFileSync('target-output.txt', 'utf8').trim()
             : '';
-          const prAlerts = fs.existsSync('pr-alerts.txt')
-            ? fs.readFileSync('pr-alerts.txt', 'utf8').trim()
+          const prOutput = fs.existsSync('pr-output.txt')
+            ? fs.readFileSync('pr-output.txt', 'utf8').trim()
             : '';
 
-          const hasChanges = targetAlerts !== prAlerts;
-
-          let body = '';
-          if (hasChanges) {
-            body = `### ⚠️ Alert Output Changes
-
-\`\`\`diff
-${generateDiff(targetAlerts, prAlerts)}
-\`\`\`
-`;
-          } else {
-            body = `### ✅ Alert Output: No Changes`;
-          }
+          const hasChanges = targetOutput !== prOutput;
 
           // Simple line-by-line diff
           function generateDiff(oldText, newText) {
@@ -237,6 +247,13 @@ ${generateDiff(targetAlerts, prAlerts)}
             return diff.join('\n');
           }
 
+          let body = '';
+          if (hasChanges) {
+            body = '### ⚠️ Monitor Output Changes\n\n```diff\n' + generateDiff(targetOutput, prOutput) + '\n```';
+          } else {
+            body = '### ✅ Monitor Output: No Changes';
+          }
+
           // Find existing comment
           const { data: comments } = await github.rest.issues.listComments({
             owner: context.repo.owner,
@@ -246,7 +263,7 @@ ${generateDiff(targetAlerts, prAlerts)}
 
           const botComment = comments.find(comment =>
             comment.user.type === 'Bot' &&
-            comment.body.includes('Alert Output')
+            comment.body.includes('Monitor Output')
           );
 
           if (botComment) {

@@ -1,4 +1,4 @@
-export const NO_CREATION_EVENTS_ALERT = `No assertion creation events found`
+export const NO_CREATION_EVENTS_ALERT = `No assertion creation events found (TEST CHANGE)`
 
 export const CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT = `Chain activity detected, but no assertions created in the last 4 hours`
 
