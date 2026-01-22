@@ -63,6 +63,6 @@ export interface ChainState {
   isBaseStakeBelowThreshold: boolean
   searchFromBlock?: bigint
   searchToBlock?: bigint
-  /** Last child chain block number included in a batch (from sequencerReportedSubMessageCount) */
+  /** Last child block included in a batch */
   lastBlockIncludedInBatch?: bigint
 }

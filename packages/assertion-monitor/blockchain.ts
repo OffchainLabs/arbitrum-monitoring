@@ -387,8 +387,6 @@ export const fetchChainState = async ({
     isBold
   )
 
-  // Query last block included in batches from Bridge contract
-  // Fail safe: if query fails, return undefined (won't trigger batch-related alerts)
   let lastBlockIncludedInBatch: bigint | undefined
   try {
     lastBlockIncludedInBatch = await parentClient.readContract({
