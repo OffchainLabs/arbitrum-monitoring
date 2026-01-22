@@ -185,7 +185,7 @@ export const main = async () => {
     }
 
     if (alerts.length > 0) {
-      const alertMessage = `Assertion Monitor Alert Summary:\n\n${alerts.join(
+      const alertMessage = `Assertion Monitor Alert Summary (TEST CHANGE):\n\n${alerts.join(
         '\n\n'
       )}`
       console.log(alertMessage)
