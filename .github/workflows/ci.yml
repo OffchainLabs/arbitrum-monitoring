@@ -125,16 +125,16 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'yarn'
-        
+
     - name: Install dependencies
       run: yarn install --frozen-lockfile
-      
+
     - name: Run lint
       run: |
         if [ -f "package.json" ] && grep -q '"lint"' package.json; then
@@ -142,3 +142,125 @@ jobs:
         else
           echo "No lint script found at root level"
         fi
+
+  # Output comparison - compares monitoring output between target branch and PR branch
+  output-comparison:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+    - name: Checkout PR branch
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.head_ref }}
+        path: pr-branch
+
+    - name: Checkout target branch
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.base_ref }}
+        path: target-branch
+
+    - name: Use Node.js 18.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18.x
+
+    - name: Run monitoring on target branch
+      id: target
+      run: |
+        cd target-branch
+        yarn install --frozen-lockfile
+        yarn workspace assertion-monitor build
+        # Run monitoring with CI config and extract alert summary
+        timeout 180s yarn workspace assertion-monitor dev --configPath=../../config.ci.json 2>&1 | tee output.txt || true
+        # Extract alerts section
+        sed -n '/Alert Summary/,$ p' output.txt > ../target-alerts.txt || echo "No alerts" > ../target-alerts.txt
+      continue-on-error: true
+
+    - name: Run monitoring on PR branch
+      id: pr
+      run: |
+        cd pr-branch
+        yarn install --frozen-lockfile
+        yarn workspace assertion-monitor build
+        # Run monitoring with CI config and extract alert summary
+        timeout 180s yarn workspace assertion-monitor dev --configPath=../../config.ci.json 2>&1 | tee output.txt || true
+        # Extract alerts section
+        sed -n '/Alert Summary/,$ p' output.txt > ../pr-alerts.txt || echo "No alerts" > ../pr-alerts.txt
+      continue-on-error: true
+
+    - name: Generate diff and post comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+
+          const targetAlerts = fs.existsSync('target-alerts.txt')
+            ? fs.readFileSync('target-alerts.txt', 'utf8').trim()
+            : '';
+          const prAlerts = fs.existsSync('pr-alerts.txt')
+            ? fs.readFileSync('pr-alerts.txt', 'utf8').trim()
+            : '';
+
+          const hasChanges = targetAlerts !== prAlerts;
+
+          let body = '';
+          if (hasChanges) {
+            body = `### ⚠️ Alert Output Changes
+
+\`\`\`diff
+${generateDiff(targetAlerts, prAlerts)}
+\`\`\`
+`;
+          } else {
+            body = `### ✅ Alert Output: No Changes`;
+          }
+
+          // Simple line-by-line diff
+          function generateDiff(oldText, newText) {
+            const oldLines = oldText.split('\n');
+            const newLines = newText.split('\n');
+            const diff = [];
+
+            const maxLen = Math.max(oldLines.length, newLines.length);
+            for (let i = 0; i < maxLen; i++) {
+              const oldLine = oldLines[i] || '';
+              const newLine = newLines[i] || '';
+              if (oldLine !== newLine) {
+                if (oldLine) diff.push('- ' + oldLine);
+                if (newLine) diff.push('+ ' + newLine);
+              } else if (oldLine) {
+                diff.push('  ' + oldLine);
+              }
+            }
+            return diff.join('\n');
+          }
+
+          // Find existing comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const botComment = comments.find(comment =>
+            comment.user.type === 'Bot' &&
+            comment.body.includes('Alert Output')
+          );
+
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: body
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+          }
