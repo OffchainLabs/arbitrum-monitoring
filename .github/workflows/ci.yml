@@ -218,57 +218,34 @@ jobs:
           grep -E "(No retryables found|Found [0-9]+ retryable|Processing child chains)" >> ../pr-output.txt || true
       continue-on-error: true
 
-    - name: Generate diff and post comment
+    - name: Normalize outputs and generate diff
+      run: |
+        # Normalize dynamic values (block numbers, addresses) for comparison
+        normalize() {
+          sed -E 's/[0-9]{7,}/BLOCK_NUM/g; s/[0-9]+n\b/BIGINT/g; s/0x[a-fA-F0-9]{40}/ADDR/g'
+        }
+
+        cat target-output.txt | normalize > target-normalized.txt
+        cat pr-output.txt | normalize > pr-normalized.txt
+
+        # Generate unified diff (ignore exit code since diff returns 1 when files differ)
+        diff -u target-normalized.txt pr-normalized.txt > output-diff.txt || true
+
+    - name: Post comment
       uses: actions/github-script@v7
       with:
         script: |
           const fs = require('fs');
 
-          // Normalize dynamic values (block numbers, timestamps) for comparison
-          function normalizeOutput(text) {
-            return text
-              .replace(/\d{7,}/g, 'BLOCK_NUM')      // Replace large numbers (block numbers)
-              .replace(/\d+n\b/g, 'BIGINT')         // Replace bigint literals
-              .replace(/0x[a-fA-F0-9]{40}/g, 'ADDR') // Replace addresses
-              .trim();
-          }
-
-          const targetOutputRaw = fs.existsSync('target-output.txt')
-            ? fs.readFileSync('target-output.txt', 'utf8').trim()
-            : '';
-          const prOutputRaw = fs.existsSync('pr-output.txt')
-            ? fs.readFileSync('pr-output.txt', 'utf8').trim()
+          const diffOutput = fs.existsSync('output-diff.txt')
+            ? fs.readFileSync('output-diff.txt', 'utf8').trim()
             : '';
 
-          // Use normalized versions for comparison
-          const targetOutput = normalizeOutput(targetOutputRaw);
-          const prOutput = normalizeOutput(prOutputRaw);
-
-          const hasChanges = targetOutput !== prOutput;
-
-          // Simple line-by-line diff
-          function generateDiff(oldText, newText) {
-            const oldLines = oldText.split('\n');
-            const newLines = newText.split('\n');
-            const diff = [];
-
-            const maxLen = Math.max(oldLines.length, newLines.length);
-            for (let i = 0; i < maxLen; i++) {
-              const oldLine = oldLines[i] || '';
-              const newLine = newLines[i] || '';
-              if (oldLine !== newLine) {
-                if (oldLine) diff.push('- ' + oldLine);
-                if (newLine) diff.push('+ ' + newLine);
-              } else if (oldLine) {
-                diff.push('  ' + oldLine);
-              }
-            }
-            return diff.join('\n');
-          }
+          const hasChanges = diffOutput.length > 0;
 
           let body = '';
           if (hasChanges) {
-            body = '### ⚠️ Monitor Output Changes\n\n```diff\n' + generateDiff(targetOutput, prOutput) + '\n```';
+            body = '### ⚠️ Monitor Output Changes\n\n```diff\n' + diffOutput + '\n```';
           } else {
             body = '### ✅ Monitor Output: No Changes';
           }
