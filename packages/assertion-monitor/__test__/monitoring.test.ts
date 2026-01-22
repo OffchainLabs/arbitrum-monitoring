@@ -559,8 +559,9 @@ describe('Assertion Health Monitoring', () => {
       chainState.childLatestCreatedBlock = {
         ...chainState.childLatestCreatedBlock!,
         timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
-        number: 900n,
+        number: 900n, // arbitrary block number for last assertion
       } as Block
+      // any value > 900 triggers alert (batches exist beyond last assertion)
       chainState.lastBlockIncludedInBatch = 1000n
 
       const alerts = await analyzeAssertionEvents(
