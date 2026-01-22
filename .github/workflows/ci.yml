@@ -218,6 +218,14 @@ jobs:
           grep -E "(No retryables found|Found [0-9]+ retryable|Processing child chains)" >> ../pr-output.txt || true
       continue-on-error: true
 
+    - name: Show captured output
+      run: |
+        echo "=== TARGET BRANCH OUTPUT ==="
+        cat target-output.txt
+        echo ""
+        echo "=== PR BRANCH OUTPUT ==="
+        cat pr-output.txt
+
     - name: Normalize outputs and generate diff
       run: |
         # Normalize dynamic values (block numbers, addresses) for comparison
