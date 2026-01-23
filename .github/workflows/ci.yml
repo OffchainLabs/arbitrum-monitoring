@@ -176,17 +176,17 @@ jobs:
         yarn workspace batch-poster-monitor build
         yarn workspace retryable-monitor build
 
-        # Run each monitor and capture ALL output (NODE_ENV=CI enables slack message markers)
+        # Run each monitor with --enableAlerting (NODE_ENV=CI outputs slack messages without posting)
         echo "=== ASSERTION MONITOR ===" > ../target-output.txt
-        NODE_ENV=CI timeout 300s yarn workspace assertion-monitor dev --configPath=../../config.ci.json >> ../target-output.txt 2>&1 || true
+        NODE_ENV=CI timeout 300s yarn workspace assertion-monitor dev --configPath=../../config.ci.json --enableAlerting >> ../target-output.txt 2>&1 || true
 
         echo "" >> ../target-output.txt
         echo "=== BATCH POSTER MONITOR ===" >> ../target-output.txt
-        NODE_ENV=CI timeout 300s yarn workspace batch-poster-monitor dev --configPath=../../config.ci.json >> ../target-output.txt 2>&1 || true
+        NODE_ENV=CI timeout 300s yarn workspace batch-poster-monitor dev --configPath=../../config.ci.json --enableAlerting >> ../target-output.txt 2>&1 || true
 
         echo "" >> ../target-output.txt
         echo "=== RETRYABLE MONITOR ===" >> ../target-output.txt
-        NODE_ENV=CI timeout 300s yarn workspace retryable-monitor dev --configPath=../../config.ci.json >> ../target-output.txt 2>&1 || true
+        NODE_ENV=CI timeout 300s yarn workspace retryable-monitor dev --configPath=../../config.ci.json --enableAlerting >> ../target-output.txt 2>&1 || true
       continue-on-error: true
 
     - name: Run monitors on PR branch
@@ -199,17 +199,17 @@ jobs:
         yarn workspace batch-poster-monitor build
         yarn workspace retryable-monitor build
 
-        # Run each monitor and capture ALL output (NODE_ENV=CI enables slack message markers)
+        # Run each monitor with --enableAlerting (NODE_ENV=CI outputs slack messages without posting)
         echo "=== ASSERTION MONITOR ===" > ../pr-output.txt
-        NODE_ENV=CI timeout 300s yarn workspace assertion-monitor dev --configPath=../../config.ci.json >> ../pr-output.txt 2>&1 || true
+        NODE_ENV=CI timeout 300s yarn workspace assertion-monitor dev --configPath=../../config.ci.json --enableAlerting >> ../pr-output.txt 2>&1 || true
 
         echo "" >> ../pr-output.txt
         echo "=== BATCH POSTER MONITOR ===" >> ../pr-output.txt
-        NODE_ENV=CI timeout 300s yarn workspace batch-poster-monitor dev --configPath=../../config.ci.json >> ../pr-output.txt 2>&1 || true
+        NODE_ENV=CI timeout 300s yarn workspace batch-poster-monitor dev --configPath=../../config.ci.json --enableAlerting >> ../pr-output.txt 2>&1 || true
 
         echo "" >> ../pr-output.txt
         echo "=== RETRYABLE MONITOR ===" >> ../pr-output.txt
-        NODE_ENV=CI timeout 300s yarn workspace retryable-monitor dev --configPath=../../config.ci.json >> ../pr-output.txt 2>&1 || true
+        NODE_ENV=CI timeout 300s yarn workspace retryable-monitor dev --configPath=../../config.ci.json --enableAlerting >> ../pr-output.txt 2>&1 || true
       continue-on-error: true
 
     - name: Show captured output
