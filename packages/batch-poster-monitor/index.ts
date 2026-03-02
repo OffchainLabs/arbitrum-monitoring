@@ -154,6 +154,50 @@ const sequencerInboxAbi = [
     stateMutability: 'nonpayable',
     type: 'function',
   },
+  // Espresso variant (selector 0x37501551) — 7th param for TEE attestation
+  {
+    inputs: [
+      {
+        internalType: 'uint256',
+        name: 'sequenceNumber',
+        type: 'uint256',
+      },
+      {
+        internalType: 'bytes',
+        name: 'data',
+        type: 'bytes',
+      },
+      {
+        internalType: 'uint256',
+        name: 'afterDelayedMessagesRead',
+        type: 'uint256',
+      },
+      {
+        internalType: 'address',
+        name: 'gasRefunder',
+        type: 'address',
+      },
+      {
+        internalType: 'uint256',
+        name: 'prevMessageCount',
+        type: 'uint256',
+      },
+      {
+        internalType: 'uint256',
+        name: 'newMessageCount',
+        type: 'uint256',
+      },
+      {
+        internalType: 'bytes',
+        name: 'batcherSignatureAndHotshotHeight',
+        type: 'bytes',
+      },
+    ],
+    name: 'addSequencerL2BatchFromOrigin',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
 ] as const
 
 const displaySummaryInformation = ({
@@ -793,9 +837,9 @@ const checkIfAnyTrustRevertedToPostDataOnChain = async ({
       )
     }
   } catch (e) {
-    console.log(
-      `Chain [${childChainInformation.name}]: Error checking if AnyTrust reverted to posting calldata on-chain: ${e.message}`
-    )
+    const errorMsg = `Chain [${childChainInformation.name}]: Error checking if AnyTrust reverted to posting calldata on-chain: ${e.message}`
+    console.log(errorMsg)
+    alerts.push(errorMsg)
   }
 
   return alerts
