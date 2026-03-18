@@ -34,6 +34,7 @@ import {
   DEFAULT_CONFIG_PATH,
   getConfig,
   getExplorerUrlPrefixes,
+  resolveRollupAddress,
 } from 'utils'
 import {
   shouldIgnoreFunctionSelector,
@@ -501,6 +502,12 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     chain: childChain,
     transport: http(childChainInformation.orbitRpcUrl),
   })
+
+  childChainInformation.ethBridge.rollup = await resolveRollupAddress(
+    parentChainClient,
+    childChainInformation.ethBridge,
+    childChainInformation.name
+  )
 
   // Getting sequencer inbox logs
   const latestBlockNumber = await parentChainClient.getBlockNumber()

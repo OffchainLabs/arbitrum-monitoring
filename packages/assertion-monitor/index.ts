@@ -4,6 +4,7 @@ import {
   ChildNetwork as ChainInfo,
   DEFAULT_CONFIG_PATH,
   getConfig,
+  resolveRollupAddress,
 } from 'utils'
 import {
   createChildChainClient,
@@ -118,6 +119,12 @@ export const checkChainForAssertionIssues = async (
     chain: parentChain,
     transport: http(childChainInfo.parentRpcUrl),
   })
+
+  childChainInfo.ethBridge.rollup = await resolveRollupAddress(
+    parentClient,
+    childChainInfo.ethBridge,
+    childChainInfo.name
+  )
 
   const isBold = await isBoldEnabled(
     parentClient,
