@@ -199,6 +199,99 @@ const sequencerInboxAbi = [
     stateMutability: 'nonpayable',
     type: 'function',
   },
+  // Bold DelayProof variant (selector 0x69cacded) — 7th param is DelayProof struct
+  {
+    inputs: [
+      {
+        internalType: 'uint256',
+        name: 'sequenceNumber',
+        type: 'uint256',
+      },
+      {
+        internalType: 'bytes',
+        name: 'data',
+        type: 'bytes',
+      },
+      {
+        internalType: 'uint256',
+        name: 'afterDelayedMessagesRead',
+        type: 'uint256',
+      },
+      {
+        internalType: 'address',
+        name: 'gasRefunder',
+        type: 'address',
+      },
+      {
+        internalType: 'uint256',
+        name: 'prevMessageCount',
+        type: 'uint256',
+      },
+      {
+        internalType: 'uint256',
+        name: 'newMessageCount',
+        type: 'uint256',
+      },
+      {
+        components: [
+          {
+            internalType: 'bytes32',
+            name: 'beforeDelayedAcc',
+            type: 'bytes32',
+          },
+          {
+            components: [
+              {
+                internalType: 'uint8',
+                name: 'kind',
+                type: 'uint8',
+              },
+              {
+                internalType: 'address',
+                name: 'sender',
+                type: 'address',
+              },
+              {
+                internalType: 'uint64',
+                name: 'blockNumber',
+                type: 'uint64',
+              },
+              {
+                internalType: 'uint64',
+                name: 'timestamp',
+                type: 'uint64',
+              },
+              {
+                internalType: 'uint256',
+                name: 'inboxSeqNum',
+                type: 'uint256',
+              },
+              {
+                internalType: 'uint256',
+                name: 'baseFeeL1',
+                type: 'uint256',
+              },
+              {
+                internalType: 'bytes32',
+                name: 'messageDataHash',
+                type: 'bytes32',
+              },
+            ],
+            internalType: 'struct Messages.Message',
+            name: 'message',
+            type: 'tuple',
+          },
+        ],
+        internalType: 'struct ISequencerInbox.DelayProof',
+        name: 'delayProof',
+        type: 'tuple',
+      },
+    ],
+    name: 'addSequencerL2BatchFromOriginDelayProof',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
 ] as const
 
 const displaySummaryInformation = ({

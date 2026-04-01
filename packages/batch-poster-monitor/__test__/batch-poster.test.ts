@@ -33,6 +33,12 @@ vi.mock('viem', async () => {
           args: [0n, '0x88' + '0'.repeat(100), 0n, '0x0000000000000000000000000000000000000000', 0n, 0n, '0x' + '0'.repeat(128)]
         }
       }
+      // Bold DelayProof variant (0x69cacded) — returns DACert (0x88)
+      if (selector === '0x69cacded') {
+        return {
+          args: [0n, '0x88' + '0'.repeat(100), 0n, '0x0000000000000000000000000000000000000000', 0n, 0n, { beforeDelayedAcc: '0x' + '0'.repeat(64), message: {} }]
+        }
+      }
       // Default: calldata fallback (0x00)
       return {
         args: [0n, '0x00' + '0'.repeat(100), 0n, '0x0000000000000000000000000000000000000000', 0n, 0n]
@@ -132,6 +138,31 @@ describe('Espresso batch poster decoding', () => {
     expect(alerts.length).toBe(1)
     expect(alerts[0]).toContain('Error checking if AnyTrust reverted')
     expect(alerts[0]).toContain('0xdeadbeef')
+  })
+})
+
+describe('Bold DelayProof batch poster decoding', () => {
+  beforeEach(() => {
+    setIgnoreList({})
+  })
+
+  test('should decode Bold DelayProof variant (0x69cacded) with DACert', async () => {
+    const { checkIfAnyTrustRevertedToPostDataOnChain } = await import('../index')
+
+    const mockClient = {
+      getTransaction: vi.fn().mockResolvedValue({
+        input: '0x69cacded' + '0'.repeat(200),
+      }),
+    }
+
+    const alerts = await checkIfAnyTrustRevertedToPostDataOnChain({
+      parentChainClient: mockClient as any,
+      childChainInformation: createTestChainConfig({ chainId: 42170, name: 'Arbitrum Nova' }),
+      lastSequencerInboxLog: { transactionHash: '0xtest' } as any,
+    })
+
+    // DACert (0x88) => no alerts
+    expect(alerts).toEqual([])
   })
 })
 
