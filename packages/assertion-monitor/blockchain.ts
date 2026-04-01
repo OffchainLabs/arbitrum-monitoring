@@ -8,7 +8,7 @@ import {
   type Block,
   type Log,
 } from 'viem'
-import { ChildNetwork as ChainInfo, sleep } from 'utils'
+import { ChildNetwork as ChainInfo, processBlockRangeInChunks } from 'utils'
 import {
   ASSERTION_CONFIRMED_EVENT,
   ASSERTION_CREATED_EVENT,
@@ -183,7 +183,7 @@ export function createChildChainClient(
 
 /**
  * Generic function to fetch the most recent event of a specific type within a block range.
- * Uses exponential backoff and retries to ensure robustness.
+ * Searches backwards in chunks, returning the first (most recent) match found.
  */
 export async function fetchMostRecentEvent<
   T extends Log<bigint, number, false, AbiEvent, true>
@@ -196,62 +196,28 @@ export async function fetchMostRecentEvent<
   chunkSize: bigint = CHUNK_SIZE,
   eventName?: string
 ): Promise<T | null> {
-  let currentToBlock = toBlock
-
-  while (currentToBlock >= fromBlock) {
-    const currentFromBlock =
-      currentToBlock - chunkSize + 1n > fromBlock
-        ? currentToBlock - chunkSize + 1n
-        : fromBlock
-
-    try {
+  return processBlockRangeInChunks<T | null>(
+    Number(fromBlock),
+    Number(toBlock),
+    Number(chunkSize),
+    async (from, to) => {
       const logs = await client.getLogs({
         address: rollupAddress as `0x${string}`,
-        fromBlock: currentFromBlock,
-        toBlock: currentToBlock,
+        fromBlock: BigInt(from),
+        toBlock: BigInt(to),
         event,
       })
-
       if (logs.length > 0) {
         const eventType = eventName || event.name || 'event'
-        console.log(
-          `Found ${eventType} in block range ${currentFromBlock} to ${currentToBlock}`
-        )
-        // Return the most recent event (last in the array)
+        console.log(`Found ${eventType} in block range ${from} to ${to}`)
         return logs[logs.length - 1] as T
       }
-
-      // If we've searched all blocks, stop
-      if (currentFromBlock === fromBlock) break
-
-      // Move to the next chunk
-      currentToBlock = currentFromBlock - 1n
-
-      // Add a small delay between chunks to avoid rate limiting
-      await sleep(100)
-    } catch (error) {
-      console.error(
-        `Error in fetchMostRecentEvent for ${eventName || event.name}:`,
-        error
-      )
-      // If we get an error, try a smaller chunk size
-      if (chunkSize > 100n) {
-        console.log(`Retrying with smaller chunk size: ${chunkSize / 2n}`)
-        return fetchMostRecentEvent(
-          currentFromBlock,
-          currentToBlock,
-          client,
-          rollupAddress,
-          event,
-          chunkSize / 2n,
-          eventName
-        )
-      }
-      throw error
-    }
-  }
-
-  return null
+      return null
+    },
+    (prev, next) => next ?? prev,
+    null,
+    { reverse: true, stopWhen: result => result !== null, minChunkSize: 100 }
+  )
 }
 
 /**

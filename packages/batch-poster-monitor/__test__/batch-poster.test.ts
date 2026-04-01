@@ -18,6 +18,22 @@ vi.mock('viem', async () => {
       if (selector === '0x8d80ff0a') {
         throw new Error(VIEM_DECODE_ERROR_MESSAGE('0x8d80ff0a'))
       }
+      if (selector === '0xdeadbeef') {
+        throw new Error(VIEM_DECODE_ERROR_MESSAGE('0xdeadbeef'))
+      }
+      // Standard 6-param variant (0x8f111f3c)
+      if (selector === '0x8f111f3c') {
+        return {
+          args: [0n, '0x00' + '0'.repeat(100), 0n, '0x0000000000000000000000000000000000000000', 0n, 0n]
+        }
+      }
+      // Espresso 7-param variant (0x37501551) — returns DACert (0x88)
+      if (selector === '0x37501551') {
+        return {
+          args: [0n, '0x88' + '0'.repeat(100), 0n, '0x0000000000000000000000000000000000000000', 0n, 0n, '0x' + '0'.repeat(128)]
+        }
+      }
+      // Default: calldata fallback (0x00)
       return {
         args: [0n, '0x00' + '0'.repeat(100), 0n, '0x0000000000000000000000000000000000000000', 0n, 0n]
       }
@@ -70,6 +86,52 @@ describe('Ignore List System', () => {
     })
     
     expect(alerts).toEqual([])
+  })
+})
+
+describe('Espresso batch poster decoding', () => {
+  beforeEach(() => {
+    setIgnoreList({})
+  })
+
+  test('should decode Espresso 7-param variant (0x37501551) with DACert', async () => {
+    const { checkIfAnyTrustRevertedToPostDataOnChain } = await import('../index')
+
+    const mockClient = {
+      getTransaction: vi.fn().mockResolvedValue({
+        input: '0x37501551' + '0'.repeat(200),
+      }),
+    }
+
+    const alerts = await checkIfAnyTrustRevertedToPostDataOnChain({
+      parentChainClient: mockClient as any,
+      childChainInformation: createTestChainConfig({ chainId: 777001, name: 'Espresso Chain' }),
+      lastSequencerInboxLog: { transactionHash: '0xtest' } as any,
+    })
+
+    // DACert (0x88) => no alerts
+    expect(alerts).toEqual([])
+  })
+
+  test('should alert when decode fails on unknown selector', async () => {
+    const { checkIfAnyTrustRevertedToPostDataOnChain } = await import('../index')
+
+    const mockClient = {
+      getTransaction: vi.fn().mockResolvedValue({
+        input: '0xdeadbeef' + '0'.repeat(200),
+      }),
+    }
+
+    const alerts = await checkIfAnyTrustRevertedToPostDataOnChain({
+      parentChainClient: mockClient as any,
+      childChainInformation: createTestChainConfig({ chainId: 777002, name: 'Unknown Chain' }),
+      lastSequencerInboxLog: { transactionHash: '0xtest' } as any,
+    })
+
+    // Should produce an alert instead of silently swallowing
+    expect(alerts.length).toBe(1)
+    expect(alerts[0]).toContain('Error checking if AnyTrust reverted')
+    expect(alerts[0]).toContain('0xdeadbeef')
   })
 })
 
