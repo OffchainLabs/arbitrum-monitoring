@@ -34,6 +34,7 @@ import {
   DEFAULT_CONFIG_PATH,
   getConfig,
   getExplorerUrlPrefixes,
+  processBlockRangeInChunks,
 } from 'utils'
 import {
   shouldIgnoreFunctionSelector,
@@ -553,33 +554,20 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   const toBlock = latestBlockNumber
   const fromBlock = toBlock - blocksToProcess
 
-  // if the block range provided is >=MAX_BLOCKS_TO_PROCESS, we might get rate limited while fetching logs from the node
-  // so we break down the range into smaller chunks and process them sequentially
-  // generate the final ranges' batches to process [ [fromBlock, toBlock], [fromBlock, toBlock], ...]
-  const ranges = [],
-    fromBlockNum = Number(fromBlock.toString()),
-    toBlockNum = Number(toBlock.toString())
-
-  const MAX_BLOCKS_TO_PROCESS =
-    childChainInformation.parentChainId === 1 ? 500 : 500000 // for Ethereum, have lower block range to avoid rate limiting
-
-  for (let i = fromBlockNum; i <= toBlockNum; i += MAX_BLOCKS_TO_PROCESS) {
-    ranges.push([i, Math.min(i + MAX_BLOCKS_TO_PROCESS - 1, toBlockNum)])
-  }
-
-  const sequencerInboxLogsArray = []
-  for (const range of ranges) {
-    const logs = await parentChainClient.getLogs({
-      address: childChainInformation.ethBridge.sequencerInbox as `0x${string}`,
-      event: sequencerBatchDeliveredEventAbi,
-      fromBlock: BigInt(range[0]),
-      toBlock: BigInt(range[1]),
-    })
-    sequencerInboxLogsArray.push(logs)
-  }
-
-  // Flatten the array of arrays to get final array of logs
-  const sequencerInboxLogs = sequencerInboxLogsArray.flat()
+  const sequencerInboxLogs = await processBlockRangeInChunks(
+    Number(fromBlock.toString()),
+    Number(toBlock.toString()),
+    2000,
+    async (from, to) =>
+      parentChainClient.getLogs({
+        address: childChainInformation.ethBridge.sequencerInbox as `0x${string}`,
+        event: sequencerBatchDeliveredEventAbi,
+        fromBlock: BigInt(from),
+        toBlock: BigInt(to),
+      }),
+    (prev, next) => [...prev, ...next],
+    [] as Log<bigint, number, false, AbiEvent, true, readonly AbiEvent[]>[]
+  )
 
   // First, a basic check to get batch poster balance
   const batchPosterLowBalanceMessage =

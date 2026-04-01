@@ -12,7 +12,7 @@ import {
   CheckRetryablesOneOffParams,
   CheckRetryablesContinuousParams,
 } from './types'
-import { ChildNetwork } from 'utils'
+import { ChildNetwork, processBlockRangeInChunks } from 'utils'
 import { checkRetryables } from './retryableChecker'
 
 export const getParentChainBlockTime = (childChain: ChildNetwork) => {
@@ -35,6 +35,8 @@ export const getParentChainBlockTime = (childChain: ChildNetwork) => {
   // for arbitrum networks, return the standard block time
   return 2 // ARB_MINIMUM_BLOCK_TIME_IN_SECONDS
 }
+
+const MAX_BLOCKS_TO_PROCESS = 2000
 
 export const checkRetryablesOneOff = async ({
   parentChainProvider,
@@ -72,31 +74,25 @@ export const checkRetryablesOneOff = async ({
     }
   }
 
-  const MAX_BLOCKS_TO_PROCESS = 5000 // event_logs can only be processed in batches of MAX_BLOCKS_TO_PROCESS blocks
-
-  // if the block range provided is >=MAX_BLOCKS_TO_PROCESS, we might get rate limited while fetching logs from the node
-  // so we break down the range into smaller chunks and process them sequentially
-  // generate the final ranges' batches to process [ [fromBlock, toBlock], [fromBlock, toBlock], ...]
-  const ranges = []
-  for (let i = fromBlock; i <= toBlock; i += MAX_BLOCKS_TO_PROCESS) {
-    ranges.push([i, Math.min(i + MAX_BLOCKS_TO_PROCESS - 1, toBlock)])
-  }
-
-  let retryablesFound = false
-  for (const range of ranges) {
-    retryablesFound =
-      (await checkRetryables(
+  const retryablesFound = await processBlockRangeInChunks(
+    fromBlock,
+    toBlock,
+    MAX_BLOCKS_TO_PROCESS,
+    async (from, to) =>
+      checkRetryables(
         parentChainProvider,
         childChainProvider,
         childChain,
         childChain.ethBridge.bridge,
-        range[0],
-        range[1],
+        from,
+        to,
         enableAlerting,
         onFailedRetryableFound,
         onRedeemedRetryableFound
-      )) || retryablesFound // the final `retryablesFound` value is the OR of all the `retryablesFound` for ranges
-  }
+      ),
+    (prev, next) => prev || next,
+    false
+  )
 
   return toBlock
 }
