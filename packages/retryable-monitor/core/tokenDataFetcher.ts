@@ -26,14 +26,18 @@ export const getTokenDepositData = async ({
   parentTxReceipt: providers.TransactionReceipt
   arbParentTxReceipt: ParentTransactionReceipt
   depositsInitiatedLogs: FetchedEvent<TypedEvent<any, any>>[]
-  gatewayAddresses: string[]
+  gatewayAddresses: Array<string | undefined | null>
   parentChainProvider: providers.Provider
 }): Promise<TokenDepositData | undefined> => {
   let parentChainErc20Address: string | undefined,
     tokenAmount: string | undefined,
     tokenDepositData: TokenDepositData | undefined
   const sender = arbParentTxReceipt.from.toLowerCase()
-  const gatewaySet = new Set(gatewayAddresses.map(x => x.toLowerCase()))
+  const gatewaySet = new Set(
+    gatewayAddresses
+      .filter((addr): addr is string => typeof addr === 'string' && addr.length > 0)
+      .map(addr => addr.toLowerCase())
+  )
 
   // Some retryable payloads include a request id that can map to DepositInitiated topic[3]
   let requestId: string | undefined

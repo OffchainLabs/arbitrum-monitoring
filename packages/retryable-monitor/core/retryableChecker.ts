@@ -153,9 +153,9 @@ export const checkRetryables = async (
             depositsInitiatedLogs,
             // Used to prefer sender -> known gateway transfers when correlating token deposits
             gatewayAddresses: [
-              childChain.tokenBridge!.parentErc20Gateway,
-              childChain.tokenBridge!.parentCustomGateway,
-              childChain.tokenBridge!.parentWethGateway,
+              childChain.tokenBridge?.parentErc20Gateway,
+              childChain.tokenBridge?.parentCustomGateway,
+              childChain.tokenBridge?.parentWethGateway,
             ],
             parentChainProvider,
           })
