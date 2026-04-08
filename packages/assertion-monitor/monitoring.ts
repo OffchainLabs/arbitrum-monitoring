@@ -211,6 +211,7 @@ export const generateConditionsForAlerts = (
     lastBlockIncludedInBatch > childLatestCreatedBlockNumber
   const hasBatchesWithoutAssertionsFromChildProgress =
     lastBlockIncludedInBatch === undefined &&
+    childCurrentBlock.number !== null &&
     childLatestCreatedBlockNumber !== undefined &&
     childLatestCreatedBlockNumber !== null &&
     childCurrentBlock.number > childLatestCreatedBlockNumber
