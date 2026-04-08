@@ -164,6 +164,7 @@ export const generateConditionsForAlerts = (
   const currentTimeSeconds = Number(currentTimestamp / 1000n)
 
   const {
+    childCurrentBlock,
     childLatestCreatedBlock,
     childLatestConfirmedBlock,
     parentCurrentBlock,
@@ -203,11 +204,19 @@ export const generateConditionsForAlerts = (
    * Only alerts when batches exist but no recent assertions cover them
    */
   const childLatestCreatedBlockNumber = childLatestCreatedBlock?.number
-  const hasBatchesWithoutAssertions =
+  const hasBatchesWithoutAssertionsFromBatchCounter =
     lastBlockIncludedInBatch !== undefined &&
     childLatestCreatedBlockNumber !== undefined &&
     childLatestCreatedBlockNumber !== null &&
     lastBlockIncludedInBatch > childLatestCreatedBlockNumber
+  const hasBatchesWithoutAssertionsFromChildProgress =
+    lastBlockIncludedInBatch === undefined &&
+    childLatestCreatedBlockNumber !== undefined &&
+    childLatestCreatedBlockNumber !== null &&
+    childCurrentBlock.number > childLatestCreatedBlockNumber
+  const hasBatchesWithoutAssertions =
+    hasBatchesWithoutAssertionsFromBatchCounter ||
+    hasBatchesWithoutAssertionsFromChildProgress
 
   /**
    * Critical for BOLD due to finality implications

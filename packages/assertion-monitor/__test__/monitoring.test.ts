@@ -182,6 +182,50 @@ describe('Assertion Health Monitoring', () => {
       expect(alerts).not.toContain(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
     })
 
+    test('should alert when batch counter is unavailable but child chain progressed', async () => {
+      const chainState = createBaseChainState()
+      chainState.childLatestCreatedBlock = {
+        ...chainState.childLatestCreatedBlock!,
+        timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
+        number: 900n,
+      } as Block
+      chainState.childCurrentBlock = {
+        ...chainState.childCurrentBlock!,
+        number: 1000n,
+      } as Block
+      chainState.lastBlockIncludedInBatch = undefined
+
+      const alerts = await analyzeAssertionEvents(
+        chainState,
+        mockChainInfo,
+        true
+      )
+
+      expect(alerts).toContain(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
+    })
+
+    test('should not alert when batch counter is unavailable and child chain has not progressed', async () => {
+      const chainState = createBaseChainState()
+      chainState.childLatestCreatedBlock = {
+        ...chainState.childLatestCreatedBlock!,
+        timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
+        number: 900n,
+      } as Block
+      chainState.childCurrentBlock = {
+        ...chainState.childCurrentBlock!,
+        number: 900n,
+      } as Block
+      chainState.lastBlockIncludedInBatch = undefined
+
+      const alerts = await analyzeAssertionEvents(
+        chainState,
+        mockChainInfo,
+        true
+      )
+
+      expect(alerts).not.toContain(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
+    })
+
     test('should alert when no confirmation events exist', async () => {
       const chainState = createBaseChainState()
       chainState.childLatestConfirmedBlock = undefined
@@ -574,6 +618,28 @@ describe('Assertion Health Monitoring', () => {
       expect(alerts.length).toBeGreaterThan(0)
 
       // Check for expected alert (same alert for both BOLD and non-BOLD)
+      expect(alerts).toContain(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
+    })
+
+    test('should alert when batch counter is unavailable but child chain progressed for non-BOLD chain', async () => {
+      const chainState = createBaseChainState()
+      chainState.childLatestCreatedBlock = {
+        ...chainState.childLatestCreatedBlock!,
+        timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
+        number: 900n,
+      } as Block
+      chainState.childCurrentBlock = {
+        ...chainState.childCurrentBlock!,
+        number: 1000n,
+      } as Block
+      chainState.lastBlockIncludedInBatch = undefined
+
+      const alerts = await analyzeAssertionEvents(
+        chainState,
+        mockChainInfo,
+        false
+      )
+
       expect(alerts).toContain(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
     })
 
