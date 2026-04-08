@@ -148,8 +148,15 @@ export const checkRetryables = async (
           const tokenDepositData = await getTokenDepositData({
             childChainTx,
             retryableMessage,
+            parentTxReceipt,
             arbParentTxReceipt,
             depositsInitiatedLogs,
+            // Used to prefer sender -> known gateway transfers when correlating token deposits
+            gatewayAddresses: [
+              childChain.tokenBridge?.parentErc20Gateway,
+              childChain.tokenBridge?.parentCustomGateway,
+              childChain.tokenBridge?.parentWethGateway,
+            ],
             parentChainProvider,
           })
 
