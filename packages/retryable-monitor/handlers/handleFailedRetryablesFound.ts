@@ -3,6 +3,7 @@ import { getExplorerUrlPrefixes } from 'utils'
 import { OnFailedRetryableFoundParams } from '../core/types'
 import { reportFailedRetryables } from './reportFailedRetryables'
 import { syncRetryableToNotion } from './notion/syncRetryableToNotion'
+import { addToFetchedNotionRetryables } from './notion/fetchedNotionRetryablesUtils'
 import {
   formatL2Callvalue,
   getGasInfo,
@@ -76,8 +77,10 @@ export const handleFailedRetryablesFound = async (
     const { PARENT_CHAIN_TX_PREFIX, CHILD_CHAIN_TX_PREFIX } =
       getExplorerUrlPrefixes(childChain)
 
-    await syncRetryableToNotion({
-      ChildTx: `${CHILD_CHAIN_TX_PREFIX}${childChainRetryableReport.id}`,
+    const childTxUrl = `${CHILD_CHAIN_TX_PREFIX}${childChainRetryableReport.id}`
+
+    const result = await syncRetryableToNotion({
+      ChildTx: childTxUrl,
       ParentTx: parentChainRetryableReport.transactionHash,
       ParentTxUrl: `${PARENT_CHAIN_TX_PREFIX}${parentChainRetryableReport.transactionHash}`,
       createdAt: Number(childChainRetryableReport.createdAtTimestamp) * 1000,
@@ -98,5 +101,9 @@ export const handleFailedRetryablesFound = async (
         retryData: childChainRetryableReport.retryData,
       },
     })
+
+    // Keep the fetched (locally cached) set coherent so a redemption event later in the same
+    // run routes through the update path instead of being filtered out.
+    if (result) addToFetchedNotionRetryables(childTxUrl)
   }
 }

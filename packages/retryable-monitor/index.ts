@@ -14,6 +14,7 @@ import {
 } from './core/retryableCheckerMode'
 import { postSlackMessage } from './handlers/slack/postSlackMessage'
 import { alertUntriagedNotionRetryables } from './handlers/notion/alertUntriagedRetraybles'
+import { fetchNotionRetryables } from './handlers/notion/fetchedNotionRetryablesUtils'
 import { handleFailedRetryablesFound } from './handlers/handleFailedRetryablesFound'
 import { handleRedeemedRetryablesFound } from './handlers/handleRedeemedRetryablesFound'
 
@@ -148,6 +149,13 @@ const processOrbitChainsConcurrently = async () => {
       parentRpcUrl: childChain.parentRpcUrl,
     }))
   )
+
+  // Fetch the list of existing Notion retryables once before any chain
+  // processing so the redeemed-retryable handler can short-circuit the common
+  // case (redeemed tickets that were never logged to Notion).
+  if (options.writeToNotion) {
+    await fetchNotionRetryables()
+  }
 
   const promises = config.childChains.map(async (childChain: ChildNetwork) => {
     try {
