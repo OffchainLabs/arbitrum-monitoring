@@ -8,7 +8,7 @@
     "@arbitrum/token-bridge-contracts": "v1.1.0-beta.2",
     "@ethersproject/abstract-provider": "^5.5.1",
     "@notionhq/client": "^2.3.0",
-    "axios": "^1.7.2",
+    "axios": "^1.15.0",
     "ethers": "^5.5.4",
     "graphql": "^16.6.0",
     "graphql-request": "^6.1.0",
