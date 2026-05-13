@@ -5,6 +5,7 @@
   ],
   "private": true,
   "license": "Apache-2.0",
+  "packageManager": "yarn@1.22.22",
   "scripts": {
     "retryable-monitor": "yarn workspace retryable-monitor dev",
     "batch-poster-monitor": "yarn workspace batch-poster-monitor dev",
