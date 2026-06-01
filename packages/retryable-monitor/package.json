@@ -16,7 +16,7 @@
     "winston": "^3.3.3"
   },
   "devDependencies": {
-    "vitest": "^3.0.5"
+    "vitest": "^4.1.0"
   },
   "scripts": {
     "lint": "eslint .",
