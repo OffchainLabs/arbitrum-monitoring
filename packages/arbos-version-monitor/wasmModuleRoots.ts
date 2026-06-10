@@ -1,0 +1,199 @@
+export type WasmModuleRootInfo = {
+  consensusRelease: string
+  /**
+   * Highest ArbOS version supported by this consensus release. For releases
+   * before consensus-v11 the release notes do not state an ArbOS version, so
+   * the consensus major number is used as an upper bound — anything that old
+   * is far below any modern minimum version anyway.
+   */
+  maxArbosVersion: number
+}
+
+/**
+ * WASM module roots published in the release notes of
+ * https://github.com/OffchainLabs/nitro/releases (tags prefixed `consensus-`).
+ * Keys must be lowercase.
+ */
+export const KNOWN_WASM_MODULE_ROOTS: Record<string, WasmModuleRootInfo> = {
+  '0xbb9d58e9527566138b682f3a207c0976d5359837f6e330f4017434cca983ff41': {
+    consensusRelease: 'consensus-v1-rc1',
+    maxArbosVersion: 1,
+  },
+  '0x60516d8bf441f449f301d7bc8901d50acf0baa8b453e8e406f6c9475feac8c8c': {
+    consensusRelease: 'consensus-v1.1',
+    maxArbosVersion: 1,
+  },
+  '0xee16b2358c81be2b9feb8486f052e74f18b8a790e4e77b4dc9e4f34d71d3b4c0': {
+    consensusRelease: 'consensus-v2',
+    maxArbosVersion: 2,
+  },
+  '0x9d68e40c47e3b87a8a7e6368cc52915720a6484bb2f47ceabad7e573e3a11232': {
+    consensusRelease: 'consensus-v2.1',
+    maxArbosVersion: 2,
+  },
+  '0x53c288a0ca7100c0f2db8ab19508763a51c7fd1be125d376d940a65378acaee7': {
+    consensusRelease: 'consensus-v3',
+    maxArbosVersion: 3,
+  },
+  '0x588762be2f364be15d323df2aa60ffff60f2b14103b34823b6f7319acd1ae7a3': {
+    consensusRelease: 'consensus-v3.1',
+    maxArbosVersion: 3,
+  },
+  '0xcfba6a883c50a1b4475ab909600fa88fc9cceed9e3ff6f43dccd2d27f6bd57cf': {
+    consensusRelease: 'consensus-v3.2',
+    maxArbosVersion: 3,
+  },
+  '0xa24ccdb052d92c5847e8ea3ce722442358db4b00985a9ee737c4e601b6ed9876': {
+    consensusRelease: 'consensus-v4',
+    maxArbosVersion: 4,
+  },
+  '0x1e09e6d9e35b93f33ed22b2bc8dc10bbcf63fdde5e8a1fb8cc1bcd1a52f14bd0': {
+    consensusRelease: 'consensus-v5',
+    maxArbosVersion: 5,
+  },
+  '0x3848eff5e0356faf1fc9cafecb789584c5e7f4f8f817694d842ada96613d8bab': {
+    consensusRelease: 'consensus-v6',
+    maxArbosVersion: 6,
+  },
+  '0x53dd4b9a3d807a8cbb4d58fbfc6a0857c3846d46956848cae0a1cc7eca2bb5a8': {
+    consensusRelease: 'consensus-v7',
+    maxArbosVersion: 7,
+  },
+  '0x2b20e1490d1b06299b222f3239b0ae07e750d8f3b4dedd19f500a815c1548bbc': {
+    consensusRelease: 'consensus-v7.1',
+    maxArbosVersion: 7,
+  },
+  '0xd1842bfbe047322b3f3b3635b5fe62eb611557784d17ac1d2b1ce9c170af6544': {
+    consensusRelease: 'consensus-v9',
+    maxArbosVersion: 8,
+  },
+  '0x6b94a7fc388fd8ef3def759297828dc311761e88d8179c7ee8d3887dc554f3c3': {
+    consensusRelease: 'consensus-v10',
+    maxArbosVersion: 10,
+  },
+  '0xda4e3ad5e7feacb817c21c8d0220da7650fe9051ece68a3f0b1c5d38bbb27b21': {
+    consensusRelease: 'consensus-v10.1',
+    maxArbosVersion: 10,
+  },
+  '0x0754e09320c381566cc0449904c377a52bd34a6b9404432e80afd573b67f7b17': {
+    consensusRelease: 'consensus-v10.2',
+    maxArbosVersion: 10,
+  },
+  '0xf559b6d4fa869472dabce70fe1c15221bdda837533dfd891916836975b434dec': {
+    consensusRelease: 'consensus-v10.3',
+    maxArbosVersion: 10,
+  },
+  '0xf4389b835497a910d7ba3ebfb77aa93da985634f3c052de1290360635be40c4a': {
+    consensusRelease: 'consensus-v11',
+    maxArbosVersion: 11,
+  },
+  '0x68e4fe5023f792d4ef584796c84d710303a5e12ea02d6e37e2b5e9c4332507c4': {
+    consensusRelease: 'consensus-v11.1',
+    maxArbosVersion: 11,
+  },
+  '0x8b104a2e80ac6165dc58b9048de12f301d70b02a0ab51396c22b4b4b802a16a4': {
+    consensusRelease: 'consensus-v20',
+    maxArbosVersion: 20,
+  },
+  '0x8805d035d5fdb8bb4450f306d9ab82633e2b6316260529cdcaf1b3702afbd5d5': {
+    consensusRelease: 'consensus-v30-rc.1',
+    maxArbosVersion: 30,
+  },
+  '0xb0de9cb89e4d944ae6023a3b62276e54804c242fd8c4c2d8e6cc4450f5fa8b1b': {
+    consensusRelease: 'consensus-v30',
+    maxArbosVersion: 30,
+  },
+  '0x260f5fa5c3176a856893642e149cf128b5a8de9f828afec8d11184415dd8dc69': {
+    consensusRelease: 'consensus-v31',
+    maxArbosVersion: 31,
+  },
+  '0x184884e1eb9fefdc158f6c8ac912bb183bf3cf83f0090317e0bc4ac5860baa39': {
+    consensusRelease: 'consensus-v32',
+    maxArbosVersion: 32,
+  },
+  '0x6dae396b0b7644a2d63b4b22e6452b767aa6a04b6778dadebdd74aa40f40a5c5': {
+    consensusRelease: 'consensus-v40-rc.1',
+    maxArbosVersion: 40,
+  },
+  '0xa8206be13d53e456c7ab061d94bab5b229d674ac57ffe7281216479a8820fcc0': {
+    consensusRelease: 'consensus-v40-rc.2',
+    maxArbosVersion: 40,
+  },
+  '0xdb698a2576298f25448bc092e52cf13b1e24141c997135d70f217d674bbeb69a': {
+    consensusRelease: 'consensus-v40',
+    maxArbosVersion: 40,
+  },
+  '0xa18d6266cef250802c3cb2bfefe947ea1aa9a32dd30a8d1dfc4568a8714d3a7a': {
+    consensusRelease: 'consensus-v41',
+    maxArbosVersion: 41,
+  },
+  '0x1be44d9f74056fc12af97ccbef7a2668bc5c946fe210505957b0a08b954b907f': {
+    consensusRelease: 'consensus-v42-rc.1',
+    maxArbosVersion: 42,
+  },
+  '0x28cfd8d81613ce4ebe750e77bfd95d6d95d4f53240488095a11c1ad3a494fa82': {
+    consensusRelease: 'consensus-v50-alpha.1',
+    maxArbosVersion: 50,
+  },
+  '0x8fd725477d8ef58183a1a943c375a8495a22cd2d7d701ac917fe20d69993e88e': {
+    consensusRelease: 'consensus-v50-rc.1',
+    maxArbosVersion: 50,
+  },
+  '0xc1ea4d6d2791bf5bdf6de3c2166ce4aab8fe16ca4ad5c226e8ae31a8b77f1a08': {
+    consensusRelease: 'consensus-v50-rc.2',
+    maxArbosVersion: 50,
+  },
+  '0x385fa2524d86d4ebc340988224f8686b3f485c7c9f7bc1015a64c85a9c76a6b0': {
+    consensusRelease: 'consensus-v50-rc.3',
+    maxArbosVersion: 50,
+  },
+  '0x393be710f252e8217d66fe179739eba1ed471f0d5a847b5905c30926d853241a': {
+    consensusRelease: 'consensus-v50-rc.4',
+    maxArbosVersion: 50,
+  },
+  '0xb90895a56a59c0267c2004a0e103ad725bd98d5a05c3262806ab4ccb3f997558': {
+    consensusRelease: 'consensus-v50-rc.5',
+    maxArbosVersion: 50,
+  },
+  '0x2c54f6e9e378ba320ed9c713a1d9f067a572b1437e4f1c40b1a915d3066c04f2': {
+    consensusRelease: 'consensus-v50',
+    maxArbosVersion: 50,
+  },
+  '0x8a7513bf7bb3e3db04b0d982d0e973bcf57bf8b88aef7c6d03dba3a81a56a499': {
+    consensusRelease: 'consensus-v51',
+    maxArbosVersion: 51,
+  },
+  '0xc2c02df561d4afaf9a1d6785f70098ec3874765c638e3cb6dbe8d3c83333e14c': {
+    consensusRelease: 'consensus-v51.1',
+    maxArbosVersion: 51,
+  },
+  '0xe237db4636ba7878fb1d6998f40fa155260a26484f81db732f9aa7dc1b684bf7': {
+    consensusRelease: 'consensus-v60-alpha.1',
+    maxArbosVersion: 60,
+  },
+  '0x5a79438ff2ab312234ee23839ea03b0c9348e856298b5ab1d2c067bf3c725bd0': {
+    consensusRelease: 'consensus-v60-alpha.2',
+    maxArbosVersion: 60,
+  },
+  '0x4a281197d799ef8e0430f5b94ed79fed72ce327311747819a593539f31938c34': {
+    consensusRelease: 'consensus-v60-rc.1',
+    maxArbosVersion: 60,
+  },
+  '0x333f5e036235b1ce1a34cbbe254ccbb2615218f9ae6f84aeef0511cb09ef9b67': {
+    consensusRelease: 'consensus-v60-rc.4',
+    maxArbosVersion: 60,
+  },
+  '0x7a9e6a77354888257a9989ce0b6bb39df5fedf222d453932933fdf7a489cbb57': {
+    consensusRelease: 'consensus-v60-rc.5',
+    maxArbosVersion: 60,
+  },
+  '0xc10cd7ec6acaf1c441a3f6bd0900ad20f15855ba775a96f1939118cbc629dc97': {
+    consensusRelease: 'consensus-v61-rc.2',
+    maxArbosVersion: 61,
+  },
+}
+
+export const getWasmModuleRootInfo = (
+  wasmModuleRoot: string
+): WasmModuleRootInfo | undefined =>
+  KNOWN_WASM_MODULE_ROOTS[wasmModuleRoot.toLowerCase()]
