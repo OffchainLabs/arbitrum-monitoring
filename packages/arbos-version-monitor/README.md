@@ -37,4 +37,10 @@ ARBOS_VERSION_MONITORING_SLACK_CHANNEL=your-slack-channel
 
 ## Maintenance
 
-When a new nitro consensus release is published, add its WASM module root to [wasmModuleRoots.ts](./wasmModuleRoots.ts). Roots are listed in the release notes of tags prefixed `consensus-` in the nitro repository.
+When a new nitro consensus release is published, regenerate the WASM module root table:
+
+```bash
+GITHUB_TOKEN=your-token yarn generate-wasm-module-roots
+```
+
+The script ([scripts/generateWasmModuleRoots.ts](./scripts/generateWasmModuleRoots.ts)) fetches all `consensus-` releases from the nitro repository, extracts each release's WASM module root and ArbOS version from the release notes, and rewrites [wasmModuleRoots.ts](./wasmModuleRoots.ts). `GITHUB_TOKEN` is optional but avoids GitHub API rate limits. Do not edit the generated file by hand.
