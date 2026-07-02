@@ -87,13 +87,20 @@ export const checkChainNodeSync = async (
     return
   }
 
+  if (!chainInfo.referenceRpcUrl) {
+    const message =
+      'monitoredNodeRpcUrl is set but referenceRpcUrl is missing; both are required for node sync monitoring.'
+    console.log(`[${chainInfo.name}] ${message}`)
+    return `${chainInfo.name}:\n- ${message}`
+  }
+
   console.log(`\nMonitoring ${chainInfo.name}...`)
 
   const nodeClient = createPublicClient({
     transport: http(chainInfo.monitoredNodeRpcUrl),
   })
   const referenceClient = createPublicClient({
-    transport: http(chainInfo.orbitRpcUrl),
+    transport: http(chainInfo.referenceRpcUrl),
   })
 
   const [syncStatus, nodeBlock, referenceBlock] = await Promise.all([
