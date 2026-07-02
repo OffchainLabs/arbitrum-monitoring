@@ -10,6 +10,7 @@
     "retryable-monitor": "yarn workspace retryable-monitor dev",
     "batch-poster-monitor": "yarn workspace batch-poster-monitor dev",
     "assertion-monitor": "yarn workspace assertion-monitor dev",
+    "node-sync-monitor": "yarn workspace node-sync-monitor dev",
     "test": "yarn workspace utils build && vitest"
   },
   "devDependencies": {
