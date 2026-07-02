@@ -6,4 +6,6 @@ export interface ChildNetwork extends ArbitrumNetwork {
   orbitRpcUrl: string
   explorerUrl: string
   parentExplorerUrl: string
+  /** Operator-run node to health-check with node-sync-monitor; orbitRpcUrl is used as the trusted reference. */
+  monitoredNodeRpcUrl?: string
 }
