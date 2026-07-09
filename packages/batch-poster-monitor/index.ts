@@ -696,7 +696,11 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   } catch (error) {
     // no batches in the monitored window + unidentifiable batch poster
     // usually means the chain is halted or deprecated
-    if (sequencerInboxLogs.length === 0 && !isTransientRpcError(error)) {
+    if (
+      sequencerInboxLogs.length === 0 &&
+      !isTransientRpcError(error) &&
+      !isIgnoredSelectorError(error, childChainInformation.chainId).isIgnored
+    ) {
       const latestChildChainBlock = await childChainClient.getBlock()
       const childChainHeadAgeInHours =
         (BigInt(Math.floor(Date.now() / 1000)) -
