@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
 import { setIgnoreList, shouldIgnoreFunctionSelector, isIgnoredSelectorError, shouldIgnoreChain } from '../ignoreList'
+import { sequencerMessageCountToBlockNumber, getNitroGenesisBlock } from '../chains'
 import { createTestChainConfig } from './testConfigs'
 
 const VIEM_DECODE_ERROR_MESSAGE = (selector: string) => 
@@ -163,6 +164,39 @@ describe('Bold DelayProof batch poster decoding', () => {
 
     // DACert (0x88) => no alerts
     expect(alerts).toEqual([])
+  })
+})
+
+describe('sequencerMessageCountToBlockNumber', () => {
+  test('applies the Nitro genesis offset for Arbitrum One', () => {
+    expect(getNitroGenesisBlock(42161)).toBe(22207817n)
+
+    // real values observed on 2026-07-09: message count 459837830 while the
+    // chain head was 482045975 — the true backlog was ~329 blocks, not ~22M
+    const lastBlockReported = sequencerMessageCountToBlockNumber(
+      459837830n,
+      42161
+    )
+    expect(lastBlockReported).toBe(482045646n)
+    expect(482045975n - lastBlockReported).toBe(329n)
+  })
+
+  test('is off-by-one-free for chains without a genesis offset', () => {
+    expect(getNitroGenesisBlock(42170)).toBe(0n)
+
+    // real values observed on 2026-07-09 on Arbitrum Nova: message count
+    // 85146909 with chain head 85146908 — fully caught up, backlog 0 (not -1)
+    const lastBlockReported = sequencerMessageCountToBlockNumber(
+      85146909n,
+      42170
+    )
+    expect(lastBlockReported).toBe(85146908n)
+    expect(85146908n - lastBlockReported).toBe(0n)
+  })
+
+  test('handles a zero message count', () => {
+    expect(sequencerMessageCountToBlockNumber(0n, 42170)).toBe(0n)
+    expect(sequencerMessageCountToBlockNumber(0n, 42161)).toBe(22207817n)
   })
 })
 

@@ -26,6 +26,7 @@ import {
   MAX_LOGS_TO_PROCESS_FOR_BALANCE,
   BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK,
   supportedCoreChainIds,
+  sequencerMessageCountToBlockNumber,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
@@ -36,12 +37,16 @@ import {
   getExplorerUrlPrefixes,
   resolveRollupAddress,
   processBlockRangeInChunks,
+  isTransientRpcError,
+  withRetry,
+  getErrorMessage,
 } from 'utils'
 import {
   shouldIgnoreFunctionSelector,
   isIgnoredSelectorError,
   shouldIgnoreChain,
 } from './ignoreList'
+import { sequencerBatchDeliveredEventAbi, sequencerInboxAbi } from './abis'
 
 // Parsing command line arguments using yargs
 let options: BatchPosterMonitorOptions = {
@@ -60,240 +65,6 @@ const parseOptions = () => {
     .strict()
     .parseSync() as BatchPosterMonitorOptions
 }
-
-const sequencerBatchDeliveredEventAbi: AbiEvent = {
-  anonymous: false,
-  inputs: [
-    {
-      indexed: true,
-      internalType: 'uint256',
-      name: 'batchSequenceNumber',
-      type: 'uint256',
-    },
-    {
-      indexed: true,
-      internalType: 'bytes32',
-      name: 'beforeAcc',
-      type: 'bytes32',
-    },
-    {
-      indexed: true,
-      internalType: 'bytes32',
-      name: 'afterAcc',
-      type: 'bytes32',
-    },
-    {
-      indexed: false,
-      internalType: 'bytes32',
-      name: 'delayedAcc',
-      type: 'bytes32',
-    },
-    {
-      indexed: false,
-      internalType: 'uint256',
-      name: 'afterDelayedMessagesRead',
-      type: 'uint256',
-    },
-    {
-      components: [
-        { internalType: 'uint64', name: 'minTimestamp', type: 'uint64' },
-        { internalType: 'uint64', name: 'maxTimestamp', type: 'uint64' },
-        { internalType: 'uint64', name: 'minBlockNumber', type: 'uint64' },
-        { internalType: 'uint64', name: 'maxBlockNumber', type: 'uint64' },
-      ],
-      indexed: false,
-      internalType: 'struct ISequencerInbox.TimeBounds',
-      name: 'timeBounds',
-      type: 'tuple',
-    },
-    {
-      indexed: false,
-      internalType: 'enum ISequencerInbox.BatchDataLocation',
-      name: 'dataLocation',
-      type: 'uint8',
-    },
-  ],
-  name: 'SequencerBatchDelivered',
-  type: 'event',
-}
-
-const sequencerInboxAbi = [
-  {
-    inputs: [
-      {
-        internalType: 'uint256',
-        name: 'sequenceNumber',
-        type: 'uint256',
-      },
-      {
-        internalType: 'bytes',
-        name: 'data',
-        type: 'bytes',
-      },
-      {
-        internalType: 'uint256',
-        name: 'afterDelayedMessagesRead',
-        type: 'uint256',
-      },
-      {
-        internalType: 'address',
-        name: 'gasRefunder',
-        type: 'address',
-      },
-      {
-        internalType: 'uint256',
-        name: 'prevMessageCount',
-        type: 'uint256',
-      },
-      {
-        internalType: 'uint256',
-        name: 'newMessageCount',
-        type: 'uint256',
-      },
-    ],
-    name: 'addSequencerL2BatchFromOrigin',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  // Espresso variant (selector 0x37501551) — 7th param for TEE attestation
-  {
-    inputs: [
-      {
-        internalType: 'uint256',
-        name: 'sequenceNumber',
-        type: 'uint256',
-      },
-      {
-        internalType: 'bytes',
-        name: 'data',
-        type: 'bytes',
-      },
-      {
-        internalType: 'uint256',
-        name: 'afterDelayedMessagesRead',
-        type: 'uint256',
-      },
-      {
-        internalType: 'address',
-        name: 'gasRefunder',
-        type: 'address',
-      },
-      {
-        internalType: 'uint256',
-        name: 'prevMessageCount',
-        type: 'uint256',
-      },
-      {
-        internalType: 'uint256',
-        name: 'newMessageCount',
-        type: 'uint256',
-      },
-      {
-        internalType: 'bytes',
-        name: 'batcherSignatureAndHotshotHeight',
-        type: 'bytes',
-      },
-    ],
-    name: 'addSequencerL2BatchFromOrigin',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  // Bold DelayProof variant (selector 0x69cacded) — 7th param is DelayProof struct
-  {
-    inputs: [
-      {
-        internalType: 'uint256',
-        name: 'sequenceNumber',
-        type: 'uint256',
-      },
-      {
-        internalType: 'bytes',
-        name: 'data',
-        type: 'bytes',
-      },
-      {
-        internalType: 'uint256',
-        name: 'afterDelayedMessagesRead',
-        type: 'uint256',
-      },
-      {
-        internalType: 'address',
-        name: 'gasRefunder',
-        type: 'address',
-      },
-      {
-        internalType: 'uint256',
-        name: 'prevMessageCount',
-        type: 'uint256',
-      },
-      {
-        internalType: 'uint256',
-        name: 'newMessageCount',
-        type: 'uint256',
-      },
-      {
-        components: [
-          {
-            internalType: 'bytes32',
-            name: 'beforeDelayedAcc',
-            type: 'bytes32',
-          },
-          {
-            components: [
-              {
-                internalType: 'uint8',
-                name: 'kind',
-                type: 'uint8',
-              },
-              {
-                internalType: 'address',
-                name: 'sender',
-                type: 'address',
-              },
-              {
-                internalType: 'uint64',
-                name: 'blockNumber',
-                type: 'uint64',
-              },
-              {
-                internalType: 'uint64',
-                name: 'timestamp',
-                type: 'uint64',
-              },
-              {
-                internalType: 'uint256',
-                name: 'inboxSeqNum',
-                type: 'uint256',
-              },
-              {
-                internalType: 'uint256',
-                name: 'baseFeeL1',
-                type: 'uint256',
-              },
-              {
-                internalType: 'bytes32',
-                name: 'messageDataHash',
-                type: 'bytes32',
-              },
-            ],
-            internalType: 'struct Messages.Message',
-            name: 'message',
-            type: 'tuple',
-          },
-        ],
-        internalType: 'struct ISequencerInbox.DelayProof',
-        name: 'delayProof',
-        type: 'tuple',
-      },
-    ],
-    name: 'addSequencerL2BatchFromOriginDelayProof',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-] as const
 
 const displaySummaryInformation = ({
   childChainInformation,
@@ -392,7 +163,7 @@ const getBatchPosterAddress = async (
   parentChainClient: PublicClient,
   childChainInformation: ChainInfo,
   sequencerInboxLogs: EventLogs
-) => {
+): Promise<`0x${string}` | null> => {
   // if we have sequencer inbox logs, then get the batch poster directly
   if (sequencerInboxLogs.length > 0) {
     return await getBatchPosterFromEventLogs(
@@ -402,37 +173,65 @@ const getBatchPosterAddress = async (
   }
 
   // else derive batch poster from the sdk
-  const { batchPosters, isAccurate } = await getBatchPosters(
-    //@ts-ignore - PublicClient that we pass vs PublicClient that orbit-sdk expects is not matching
-    parentChainClient,
-    {
-      rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
-      sequencerInbox: childChainInformation.ethBridge
-        .sequencerInbox as `0x${string}`,
+  try {
+    const { batchPosters, isAccurate } = await getBatchPosters(
+      //@ts-ignore - PublicClient that we pass vs PublicClient that orbit-sdk expects is not matching
+      parentChainClient,
+      {
+        rollup: childChainInformation.ethBridge.rollup as `0x${string}`,
+        sequencerInbox: childChainInformation.ethBridge
+          .sequencerInbox as `0x${string}`,
+      }
+    )
+    if (isAccurate) {
+      return batchPosters[0] // get the first batch poster
     }
-  )
-
-  if (isAccurate) {
-    return batchPosters[0] // get the first batch poster
-  } else {
-    throw Error('Batch poster information not found')
+  } catch (error) {
+    // transient RPC and ignore-listed decode errors keep their dedicated handling
+    if (
+      isTransientRpcError(error) ||
+      isIgnoredSelectorError(error, childChainInformation.chainId).isIgnored
+    ) {
+      throw error
+    }
+    console.warn(
+      `[${childChainInformation.name}] could not derive batch poster: ${
+        getErrorMessage(error).split('\n')[0]
+      }`
+    )
   }
+  return null
+}
+
+const reportHaltedChain = async (
+  childChainInformation: ChainInfo,
+  childChainClient: PublicClient
+) => {
+  const latestChildChainBlock = await childChainClient.getBlock()
+  const childChainHeadAgeInHours =
+    (BigInt(Math.floor(Date.now() / 1000)) - latestChildChainBlock.timestamp) /
+    3600n
+  showAlert(childChainInformation, [
+    `No batch has been posted in the last ${
+      MAX_TIMEBOUNDS_SECONDS / 60 / 60
+    } hours and the batch poster could not be identified. The latest block on [${
+      childChainInformation.name
+    }] (#${
+      latestChildChainBlock.number
+    }) is ~${childChainHeadAgeInHours} hours old. The chain appears halted or deprecated — if deprecated, remove it from the chain config or add it to the batch-poster ignore list.`,
+  ])
 }
 
 const getBatchPosterLowBalanceAlertMessage = async (
   parentChainClient: PublicClient,
   childChainInformation: ChainInfo,
-  sequencerInboxLogs: EventLogs
+  sequencerInboxLogs: EventLogs,
+  batchPoster: `0x${string}`
 ) => {
   const { PARENT_CHAIN_ADDRESS_PREFIX } = getExplorerUrlPrefixes(
     childChainInformation
   )
 
-  const batchPoster = await getBatchPosterAddress(
-    parentChainClient,
-    childChainInformation,
-    sequencerInboxLogs
-  )
   const currentBalance = await parentChainClient.getBalance({
     address: batchPoster,
   })
@@ -632,13 +431,16 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     },
   })
 
+  // retry transient RPC failures (429s / 5xx) at the transport level so every
+  // call through these clients — including orbit-sdk's — is covered
+  const rpcRetryConfig = { retryCount: 5, retryDelay: 2_000 }
   const parentChainClient = createPublicClient({
     chain: parentChain,
-    transport: http(childChainInformation.parentRpcUrl),
+    transport: http(childChainInformation.parentRpcUrl, rpcRetryConfig),
   })
   const childChainClient = createPublicClient({
     chain: childChain,
-    transport: http(childChainInformation.orbitRpcUrl),
+    transport: http(childChainInformation.orbitRpcUrl, rpcRetryConfig),
   })
 
   childChainInformation.ethBridge.rollup = await resolveRollupAddress(
@@ -669,12 +471,27 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     [] as Log<bigint, number, false, AbiEvent, true, readonly AbiEvent[]>[]
   )
 
-  // First, a basic check to get batch poster balance
+  // First, identify the batch poster
+  const batchPoster = await getBatchPosterAddress(
+    parentChainClient,
+    childChainInformation,
+    sequencerInboxLogs
+  )
+
+  // no batches in the monitored window + unidentifiable batch poster
+  // usually means the chain is halted or deprecated
+  if (batchPoster === null) {
+    await reportHaltedChain(childChainInformation, childChainClient)
+    return
+  }
+
+  // Basic check on the batch poster balance
   const batchPosterLowBalanceMessage =
     await getBatchPosterLowBalanceAlertMessage(
       parentChainClient,
       childChainInformation,
-      sequencerInboxLogs
+      sequencerInboxLogs,
+      batchPoster
     )
   if (batchPosterLowBalanceMessage) {
     alertsForChildChain.push(batchPosterLowBalanceMessage)
@@ -762,13 +579,17 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     BigInt(Math.floor(Date.now() / 1000)) - lastBatchPostedTime
 
   // Get last block that's part of a batch
-  const lastBlockReported = await parentChainClient.readContract({
+  const sequencerMessageCount = await parentChainClient.readContract({
     address: childChainInformation.ethBridge.bridge as `0x${string}`,
     abi: parseAbi([
       'function sequencerReportedSubMessageCount() view returns (uint256)',
     ]),
     functionName: 'sequencerReportedSubMessageCount',
   })
+  const lastBlockReported = sequencerMessageCountToBlockNumber(
+    sequencerMessageCount,
+    childChainInformation.chainId
+  )
 
   // Get batch poster backlog
   const batchPosterBacklog = latestChildChainBlockNumber - lastBlockReported
@@ -819,6 +640,8 @@ const main = async () => {
     }))
   )
 
+  const chainsSkippedDueToRpcErrors: string[] = []
+
   // process each chain sequentially to avoid RPC rate limiting
   for (const childChain of config.childChains) {
     try {
@@ -831,7 +654,12 @@ const main = async () => {
       }
 
       console.log('>>>>> Processing chain: ', childChain.name)
-      await monitorBatchPoster(childChain)
+      // retry the whole chain once on transient RPC errors (rate limit / timeout)
+      await withRetry(() => monitorBatchPoster(childChain), {
+        retries: 1,
+        initialDelayMs: 30_000,
+        label: `Chain [${childChain.name}]`,
+      })
     } catch (e) {
       // Check if this is an ignored selector error
       const { isIgnored, selector } = isIgnoredSelectorError(
@@ -845,7 +673,20 @@ const main = async () => {
         continue
       }
 
-      const errorStr = `Batch Posting alert on [${childChain.name}]:\nError processing chain: ${e.message}`
+      // RPC-infra failures are not batch-posting alerts — reported separately below
+      if (isTransientRpcError(e)) {
+        chainsSkippedDueToRpcErrors.push(childChain.name)
+        console.error(
+          `Chain [${childChain.name}]: skipped due to persistent RPC errors: ${getErrorMessage(
+            e
+          )}`
+        )
+        continue
+      }
+
+      const errorStr = `Batch Posting alert on [${
+        childChain.name
+      }]:\nError processing chain: ${getErrorMessage(e)}`
       if (options.enableAlerting) {
         await reportBatchPosterErrorToSlack({
           message: errorStr,
@@ -853,6 +694,16 @@ const main = async () => {
       }
       console.error(errorStr)
     }
+  }
+
+  if (options.enableAlerting && chainsSkippedDueToRpcErrors.length > 0) {
+    await reportBatchPosterErrorToSlack({
+      message: `Batch poster monitor infra: could not check ${
+        chainsSkippedDueToRpcErrors.length
+      } chain(s) this run due to RPC errors (rate limits / timeouts), NOT chain issues: [${chainsSkippedDueToRpcErrors.join(
+        ', '
+      )}]`,
+    })
   }
 
   if (options.enableAlerting && allBatchedAlertsContent.length > 0) {
