@@ -40,6 +40,7 @@ import {
   isTransientRpcError,
   withRetry,
   sleep,
+  getErrorMessage,
 } from 'utils'
 import {
   shouldIgnoreFunctionSelector,
@@ -710,7 +711,7 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
         `No batch has been posted in the last ${
           MAX_TIMEBOUNDS_SECONDS / 60 / 60
         } hours and the batch poster could not be identified (${
-          (error as Error).message.split('\n')[0]
+          getErrorMessage(error).split('\n')[0]
         }). The latest block on [${childChainInformation.name}] (#${
           latestChildChainBlock.number
         }) is ~${childChainHeadAgeInHours} hours old. The chain appears halted or deprecated — if deprecated, remove it from the chain config or add it to the batch-poster ignore list.`,
@@ -886,7 +887,7 @@ const main = async () => {
         if (!isTransientRpcError(e)) throw e
         console.warn(
           `Chain [${childChain.name}]: transient RPC error, retrying in 30s: ${
-            (e as Error).message.split('\n')[0]
+            getErrorMessage(e).split('\n')[0]
           }`
         )
         await sleep(30_000)
@@ -909,12 +910,16 @@ const main = async () => {
       if (isTransientRpcError(e)) {
         chainsSkippedDueToRpcErrors.push(childChain.name)
         console.error(
-          `Chain [${childChain.name}]: skipped due to persistent RPC errors: ${e.message}`
+          `Chain [${childChain.name}]: skipped due to persistent RPC errors: ${getErrorMessage(
+            e
+          )}`
         )
         continue
       }
 
-      const errorStr = `Batch Posting alert on [${childChain.name}]:\nError processing chain: ${e.message}`
+      const errorStr = `Batch Posting alert on [${
+        childChain.name
+      }]:\nError processing chain: ${getErrorMessage(e)}`
       if (options.enableAlerting) {
         await reportBatchPosterErrorToSlack({
           message: errorStr,

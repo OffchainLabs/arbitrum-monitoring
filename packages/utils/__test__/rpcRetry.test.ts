@@ -48,6 +48,12 @@ describe('isTransientRpcError', () => {
     expect(isTransientRpcError(new Error('execution reverted'))).toBe(false)
     expect(isTransientRpcError(undefined)).toBe(false)
   })
+
+  test('handles non-Error throws', () => {
+    expect(isTransientRpcError('rate limit exceeded')).toBe(true)
+    expect(isTransientRpcError('something else broke')).toBe(false)
+    expect(isTransientRpcError(42)).toBe(false)
+  })
 })
 
 describe('withRetry', () => {

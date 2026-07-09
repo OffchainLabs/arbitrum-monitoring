@@ -9,27 +9,43 @@ export { resolveRollupAddress } from './resolveRollupAddress'
 export const sleep = (ms: number) =>
   new Promise(resolve => setTimeout(resolve, ms))
 
+export const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error)
+
+const TRANSIENT_RPC_ERROR_REGEX =
+  /status: 429|rate limit|too many requests|compute units|timed? ?out|econnreset|econnrefused|socket hang up|fetch failed|service unavailable|bad gateway|gateway time-?out/i
+
 /**
  * Returns true for retryable RPC-infra failures (rate limits, timeouts,
  * gateway/network errors), as opposed to genuine chain/contract errors.
  */
 export const isTransientRpcError = (error: unknown): boolean => {
   // viem wraps the underlying HttpRequestError, so walk the cause chain
-  let current: any = error
-  for (let depth = 0; current && depth < 10; depth++) {
-    const status = current.status
-    if (status === 429 || (typeof status === 'number' && status >= 500)) {
+  let current: unknown = error
+  for (let depth = 0; current != null && depth < 10; depth++) {
+    if (typeof current !== 'object') {
+      return TRANSIENT_RPC_ERROR_REGEX.test(String(current))
+    }
+    const candidate = current as {
+      status?: unknown
+      message?: unknown
+      details?: unknown
+      cause?: unknown
+    }
+    if (
+      candidate.status === 429 ||
+      (typeof candidate.status === 'number' && candidate.status >= 500)
+    ) {
       return true
     }
-    const text = `${current.message ?? ''} ${current.details ?? ''}`
     if (
-      /status: 429|rate limit|too many requests|compute units|timed? ?out|econnreset|econnrefused|socket hang up|fetch failed|service unavailable|bad gateway|gateway time-?out/i.test(
-        text
+      TRANSIENT_RPC_ERROR_REGEX.test(
+        `${candidate.message ?? ''} ${candidate.details ?? ''}`
       )
     ) {
       return true
     }
-    current = current.cause
+    current = candidate.cause
   }
   return false
 }
