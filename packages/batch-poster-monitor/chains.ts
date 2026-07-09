@@ -19,18 +19,17 @@ export const MIN_DAYS_OF_BALANCE_LEFT = 3n // Number of days the batch-poster ba
 export const MAX_LOGS_TO_PROCESS_FOR_BALANCE = 50 // Number of logs to process for batch poster balance estimation, there can be 1000+ logs for high activity chains
 export const BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK = 0.1 // (ETH) Fallback if dynamic balance calculation doesn't go through
 
-// Child-chain block number at Nitro genesis. `sequencerReportedSubMessageCount`
-// counts messages since Nitro genesis, so chains that migrated from Classic
-// need this offset to convert the count into a block number.
+// Child-chain block number at Nitro genesis, for chains that migrated from Classic
 const NITRO_GENESIS_BLOCKS: Record<number, bigint> = {
-  42161: 22207817n, // Arbitrum One migrated from Classic at this block
+  42161: 22207817n, // Arbitrum One
 }
 
 export const getNitroGenesisBlock = (chainId: number): bigint =>
   NITRO_GENESIS_BLOCKS[chainId] ?? 0n
 
-// `sequencerReportedSubMessageCount` includes the genesis init message, so the
-// latest sequenced block is `count - 1` offset by the chain's Nitro genesis block
+// `sequencerReportedSubMessageCount` counts messages since Nitro genesis
+// (including the genesis init message), so the latest sequenced block is
+// `count - 1` offset by the chain's Nitro genesis block
 export const sequencerMessageCountToBlockNumber = (
   messageCount: bigint,
   chainId: number

@@ -10,14 +10,12 @@ export const sleep = (ms: number) =>
   new Promise(resolve => setTimeout(resolve, ms))
 
 /**
- * Returns true for RPC-infra failures (rate limits, timeouts, gateway/network
- * errors) that say nothing about the health of the monitored chain and are
- * worth retrying, as opposed to genuine chain/contract errors.
+ * Returns true for retryable RPC-infra failures (rate limits, timeouts,
+ * gateway/network errors), as opposed to genuine chain/contract errors.
  */
 export const isTransientRpcError = (error: unknown): boolean => {
+  // viem wraps the underlying HttpRequestError, so walk the cause chain
   let current: any = error
-  // viem wraps the underlying HttpRequestError in contract/RPC error classes,
-  // so walk the cause chain looking for an HTTP status or a known message
   for (let depth = 0; current && depth < 10; depth++) {
     const status = current.status
     if (status === 429 || (typeof status === 'number' && status >= 500)) {
@@ -37,8 +35,8 @@ export const isTransientRpcError = (error: unknown): boolean => {
 }
 
 /**
- * Retries `fn` with exponential backoff, but only for transient RPC errors
- * (see `isTransientRpcError`). Other errors are rethrown immediately.
+ * Retries `fn` with exponential backoff on transient RPC errors;
+ * other errors are rethrown immediately.
  */
 export const withRetry = async <T>(
   fn: () => Promise<T>,

@@ -694,10 +694,8 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
       sequencerInboxLogs
     )
   } catch (error) {
-    // if no batches were posted in the monitored window AND the batch poster
-    // can't be identified (eg. the SDK can't decode an old/new createRollup
-    // variant), the chain is most likely halted or deprecated — report that
-    // instead of surfacing the raw error on every run
+    // no batches in the monitored window + unidentifiable batch poster
+    // usually means the chain is halted or deprecated
     if (sequencerInboxLogs.length === 0 && !isTransientRpcError(error)) {
       const latestChildChainBlock = await childChainClient.getBlock()
       const childChainHeadAgeInHours =
@@ -803,8 +801,6 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     BigInt(Math.floor(Date.now() / 1000)) - lastBatchPostedTime
 
   // Get last block that's part of a batch
-  // `sequencerReportedSubMessageCount` is a message count since Nitro genesis,
-  // NOT a block number — convert it before comparing with the chain head
   const sequencerMessageCount = await parentChainClient.readContract({
     address: childChainInformation.ethBridge.bridge as `0x${string}`,
     abi: parseAbi([
@@ -884,7 +880,6 @@ const main = async () => {
         await monitorBatchPoster(childChain)
       } catch (e) {
         if (!isTransientRpcError(e)) throw e
-        // transient RPC error (rate limit / timeout): back off and retry the chain once
         console.warn(
           `Chain [${childChain.name}]: transient RPC error, retrying in 30s: ${
             (e as Error).message.split('\n')[0]
@@ -906,8 +901,7 @@ const main = async () => {
         continue
       }
 
-      // an RPC-infra failure says nothing about batch posting on the chain, so
-      // don't fire a batch-posting alert for it — report it separately below
+      // RPC-infra failures are not batch-posting alerts — reported separately below
       if (isTransientRpcError(e)) {
         chainsSkippedDueToRpcErrors.push(childChain.name)
         console.error(
