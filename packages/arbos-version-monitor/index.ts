@@ -15,9 +15,13 @@ import {
 import { evaluateArbosVersion } from './monitoring'
 import { reportArbosVersionAlertToSlack } from './reportArbosVersionAlertToSlack'
 
-/**  Retrieves and validates the monitor configuration from the config file. */
-export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
-  const options = yargs(process.argv.slice(2))
+/**
+ * Parses CLI options. Kept separate from config loading so it can be called
+ * outside the config try/catch — option parsing can't fail the way reading the
+ * config file can, so the error handler can rely on the parsed options.
+ */
+export const getOptions = (configPath: string = DEFAULT_CONFIG_PATH) =>
+  yargs(process.argv.slice(2))
     .options({
       configPath: { type: 'string', default: configPath },
       enableAlerting: { type: 'boolean', default: false },
@@ -29,6 +33,10 @@ export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
     })
     .strict()
     .parseSync()
+
+/**  Retrieves and validates the monitor configuration from the config file. */
+export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
+  const options = getOptions(configPath)
 
   const config = getConfig(options)
 
@@ -162,8 +170,11 @@ export const checkChainArbosVersion = async (
  * Reports issues to Slack when alerting is enabled.
  */
 export const main = async () => {
+  // Parse options up front so the outer catch can report config-load failures
+  // to Slack without re-invoking getMonitorConfig() (which would just re-throw).
+  const options = getOptions()
   try {
-    const { config, options } = getMonitorConfig()
+    const { config } = getMonitorConfig()
     const alerts: string[] = []
     console.log(
       `Starting ArbOS version monitoring (minimum version: ${options.minimumArbosVersion})...`
@@ -205,7 +216,6 @@ export const main = async () => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     const errorStr = `Error processing chain data for ArbOS version monitoring: ${errorMessage}`
-    const { options } = getMonitorConfig()
     if (options.enableAlerting) {
       await reportArbosVersionAlertToSlack({ message: errorStr })
     }
