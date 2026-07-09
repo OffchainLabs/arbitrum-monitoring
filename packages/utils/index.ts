@@ -10,6 +10,63 @@ export const sleep = (ms: number) =>
   new Promise(resolve => setTimeout(resolve, ms))
 
 /**
+ * Returns true for RPC-infra failures (rate limits, timeouts, gateway/network
+ * errors) that say nothing about the health of the monitored chain and are
+ * worth retrying, as opposed to genuine chain/contract errors.
+ */
+export const isTransientRpcError = (error: unknown): boolean => {
+  let current: any = error
+  // viem wraps the underlying HttpRequestError in contract/RPC error classes,
+  // so walk the cause chain looking for an HTTP status or a known message
+  for (let depth = 0; current && depth < 10; depth++) {
+    const status = current.status
+    if (status === 429 || (typeof status === 'number' && status >= 500)) {
+      return true
+    }
+    const text = `${current.message ?? ''} ${current.details ?? ''}`
+    if (
+      /status: 429|rate limit|too many requests|compute units|timed? ?out|econnreset|econnrefused|socket hang up|fetch failed|service unavailable|bad gateway|gateway time-?out/i.test(
+        text
+      )
+    ) {
+      return true
+    }
+    current = current.cause
+  }
+  return false
+}
+
+/**
+ * Retries `fn` with exponential backoff, but only for transient RPC errors
+ * (see `isTransientRpcError`). Other errors are rethrown immediately.
+ */
+export const withRetry = async <T>(
+  fn: () => Promise<T>,
+  options?: { retries?: number; initialDelayMs?: number; label?: string }
+): Promise<T> => {
+  const retries = options?.retries ?? 3
+  const initialDelayMs = options?.initialDelayMs ?? 2000
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      if (attempt >= retries || !isTransientRpcError(error)) {
+        throw error
+      }
+      const delayMs = initialDelayMs * 2 ** attempt
+      console.warn(
+        `${
+          options?.label ?? 'RPC call'
+        } failed with a transient error, retrying in ${
+          delayMs / 1000
+        }s (attempt ${attempt + 1}/${retries})`
+      )
+      await sleep(delayMs)
+    }
+  }
+}
+
+/**
  * Processes a block range in chunks, halving chunk size on failure and retrying.
  */
 export const processBlockRangeInChunks = async <T>(

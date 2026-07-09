@@ -26,6 +26,7 @@ import {
   MAX_LOGS_TO_PROCESS_FOR_BALANCE,
   BATCH_POSTER_BALANCE_ALERT_THRESHOLD_FALLBACK,
   supportedCoreChainIds,
+  sequencerMessageCountToBlockNumber,
 } from './chains'
 import { BatchPosterMonitorOptions } from './types'
 import { reportBatchPosterErrorToSlack } from './reportBatchPosterAlertToSlack'
@@ -36,6 +37,9 @@ import {
   getExplorerUrlPrefixes,
   resolveRollupAddress,
   processBlockRangeInChunks,
+  isTransientRpcError,
+  withRetry,
+  sleep,
 } from 'utils'
 import {
   shouldIgnoreFunctionSelector,
@@ -457,12 +461,20 @@ const getBatchPosterLowBalanceAlertMessage = async (
   )
 
   // Calculate the elapsed time (in seconds) since the first block in the logs
-  const firstTransaction = await parentChainClient.getTransaction({
-    hash: recentLogs[0].transactionHash,
-  })
-  const initialBlock = await parentChainClient.getBlock({
-    blockNumber: firstTransaction.blockNumber,
-  })
+  const firstTransaction = await withRetry(
+    () =>
+      parentChainClient.getTransaction({
+        hash: recentLogs[0].transactionHash,
+      }),
+    { label: `[${childChainInformation.name}] getTransaction` }
+  )
+  const initialBlock = await withRetry(
+    () =>
+      parentChainClient.getBlock({
+        blockNumber: firstTransaction.blockNumber,
+      }),
+    { label: `[${childChainInformation.name}] getBlock` }
+  )
   const initialBlockTimestamp = initialBlock.timestamp
 
   const elapsedTimeSinceFirstBlock =
@@ -471,9 +483,13 @@ const getBatchPosterLowBalanceAlertMessage = async (
   // Loop through each log and calculate the gas cost for posting batches
   let postingCost = BigInt(0)
   for (const log of recentLogs) {
-    const tx = await parentChainClient.getTransactionReceipt({
-      hash: log.transactionHash,
-    })
+    const tx = await withRetry(
+      () =>
+        parentChainClient.getTransactionReceipt({
+          hash: log.transactionHash,
+        }),
+      { label: `[${childChainInformation.name}] getTransactionReceipt` }
+    )
     postingCost += tx.gasUsed * tx.effectiveGasPrice // Accumulate the transaction cost
   }
 
@@ -670,12 +686,37 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
   )
 
   // First, a basic check to get batch poster balance
-  const batchPosterLowBalanceMessage =
-    await getBatchPosterLowBalanceAlertMessage(
+  let batchPosterLowBalanceMessage: string | null = null
+  try {
+    batchPosterLowBalanceMessage = await getBatchPosterLowBalanceAlertMessage(
       parentChainClient,
       childChainInformation,
       sequencerInboxLogs
     )
+  } catch (error) {
+    // if no batches were posted in the monitored window AND the batch poster
+    // can't be identified (eg. the SDK can't decode an old/new createRollup
+    // variant), the chain is most likely halted or deprecated — report that
+    // instead of surfacing the raw error on every run
+    if (sequencerInboxLogs.length === 0 && !isTransientRpcError(error)) {
+      const latestChildChainBlock = await childChainClient.getBlock()
+      const childChainHeadAgeInHours =
+        (BigInt(Math.floor(Date.now() / 1000)) -
+          latestChildChainBlock.timestamp) /
+        3600n
+      showAlert(childChainInformation, [
+        `No batch has been posted in the last ${
+          MAX_TIMEBOUNDS_SECONDS / 60 / 60
+        } hours and the batch poster could not be identified (${
+          (error as Error).message.split('\n')[0]
+        }). The latest block on [${childChainInformation.name}] (#${
+          latestChildChainBlock.number
+        }) is ~${childChainHeadAgeInHours} hours old. The chain appears halted or deprecated — if deprecated, remove it from the chain config or add it to the batch-poster ignore list.`,
+      ])
+      return
+    }
+    throw error
+  }
   if (batchPosterLowBalanceMessage) {
     alertsForChildChain.push(batchPosterLowBalanceMessage)
   }
@@ -762,13 +803,19 @@ const monitorBatchPoster = async (childChainInformation: ChainInfo) => {
     BigInt(Math.floor(Date.now() / 1000)) - lastBatchPostedTime
 
   // Get last block that's part of a batch
-  const lastBlockReported = await parentChainClient.readContract({
+  // `sequencerReportedSubMessageCount` is a message count since Nitro genesis,
+  // NOT a block number — convert it before comparing with the chain head
+  const sequencerMessageCount = await parentChainClient.readContract({
     address: childChainInformation.ethBridge.bridge as `0x${string}`,
     abi: parseAbi([
       'function sequencerReportedSubMessageCount() view returns (uint256)',
     ]),
     functionName: 'sequencerReportedSubMessageCount',
   })
+  const lastBlockReported = sequencerMessageCountToBlockNumber(
+    sequencerMessageCount,
+    childChainInformation.chainId
+  )
 
   // Get batch poster backlog
   const batchPosterBacklog = latestChildChainBlockNumber - lastBlockReported
@@ -819,6 +866,8 @@ const main = async () => {
     }))
   )
 
+  const chainsSkippedDueToRpcErrors: string[] = []
+
   // process each chain sequentially to avoid RPC rate limiting
   for (const childChain of config.childChains) {
     try {
@@ -831,7 +880,19 @@ const main = async () => {
       }
 
       console.log('>>>>> Processing chain: ', childChain.name)
-      await monitorBatchPoster(childChain)
+      try {
+        await monitorBatchPoster(childChain)
+      } catch (e) {
+        if (!isTransientRpcError(e)) throw e
+        // transient RPC error (rate limit / timeout): back off and retry the chain once
+        console.warn(
+          `Chain [${childChain.name}]: transient RPC error, retrying in 30s: ${
+            (e as Error).message.split('\n')[0]
+          }`
+        )
+        await sleep(30_000)
+        await monitorBatchPoster(childChain)
+      }
     } catch (e) {
       // Check if this is an ignored selector error
       const { isIgnored, selector } = isIgnoredSelectorError(
@@ -845,6 +906,16 @@ const main = async () => {
         continue
       }
 
+      // an RPC-infra failure says nothing about batch posting on the chain, so
+      // don't fire a batch-posting alert for it — report it separately below
+      if (isTransientRpcError(e)) {
+        chainsSkippedDueToRpcErrors.push(childChain.name)
+        console.error(
+          `Chain [${childChain.name}]: skipped due to persistent RPC errors: ${e.message}`
+        )
+        continue
+      }
+
       const errorStr = `Batch Posting alert on [${childChain.name}]:\nError processing chain: ${e.message}`
       if (options.enableAlerting) {
         await reportBatchPosterErrorToSlack({
@@ -853,6 +924,16 @@ const main = async () => {
       }
       console.error(errorStr)
     }
+  }
+
+  if (options.enableAlerting && chainsSkippedDueToRpcErrors.length > 0) {
+    await reportBatchPosterErrorToSlack({
+      message: `Batch poster monitor infra: could not check ${
+        chainsSkippedDueToRpcErrors.length
+      } chain(s) this run due to RPC errors (rate limits / timeouts), NOT chain issues: [${chainsSkippedDueToRpcErrors.join(
+        ', '
+      )}]`,
+    })
   }
 
   if (options.enableAlerting && allBatchedAlertsContent.length > 0) {
