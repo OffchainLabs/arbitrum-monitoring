@@ -10,9 +10,13 @@ import { reportNodeSyncAlertToSlack } from './reportNodeSyncAlertToSlack'
 
 const DEFAULT_BLOCK_LAG_THRESHOLD = 100
 
-/**  Retrieves and validates the monitor configuration from the config file. */
-export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
-  const options = yargs(process.argv.slice(2))
+/**
+ * Parses CLI options. Kept separate from config loading so it can be called
+ * outside the config try/catch — option parsing can't fail the way reading the
+ * config file can, so the error handler can rely on the parsed options.
+ */
+export const getOptions = (configPath: string = DEFAULT_CONFIG_PATH) =>
+  yargs(process.argv.slice(2))
     .options({
       configPath: { type: 'string', default: configPath },
       enableAlerting: { type: 'boolean', default: false },
@@ -23,6 +27,10 @@ export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
     })
     .strict()
     .parseSync()
+
+/**  Retrieves and validates the monitor configuration from the config file. */
+export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
+  const options = getOptions(configPath)
 
   const config = getConfig(options)
 
@@ -132,8 +140,11 @@ export const checkChainNodeSync = async (
  * Reports issues to Slack when alerting is enabled.
  */
 export const main = async () => {
+  // Parse options up front so the outer catch can report config-load failures
+  // to Slack without re-invoking getMonitorConfig() (which would just re-throw).
+  const options = getOptions()
   try {
-    const { config, options } = getMonitorConfig()
+    const { config } = getMonitorConfig()
     const alerts: string[] = []
     console.log(
       `Starting node sync monitoring (block lag threshold: ${options.blockLagThreshold})...`
@@ -175,7 +186,6 @@ export const main = async () => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     const errorStr = `Error processing chain data for node sync monitoring: ${errorMessage}`
-    const { options } = getMonitorConfig()
     if (options.enableAlerting) {
       await reportNodeSyncAlertToSlack({ message: errorStr })
     }
