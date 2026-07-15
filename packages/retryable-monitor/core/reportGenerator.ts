@@ -14,7 +14,28 @@ import {
   SEVEN_DAYS_IN_SECONDS,
 } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 import { ArbRetryableTx__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ArbRetryableTx__factory'
+import { withRetry } from 'utils'
 import { ChildChainTicketReport, ParentChainTicketReport } from './types'
+
+// selector of ArbRetryableTx's NoTicketWithID() custom error
+const NO_TICKET_WITH_ID_SELECTOR = '0x80698456'
+
+const isNoTicketWithIdError = (error: unknown): boolean => {
+  let current = error as any
+  for (let depth = 0; current != null && depth < 5; depth++) {
+    if (
+      current.errorName === 'NoTicketWithID' ||
+      (typeof current.message === 'string' &&
+        current.message.includes('NoTicketWithID')) ||
+      (typeof current.data === 'string' &&
+        current.data.startsWith(NO_TICKET_WITH_ID_SELECTOR))
+    ) {
+      return true
+    }
+    current = current.error ?? current.cause
+  }
+  return false
+}
 
 /**
  * Returns the ticket's on-chain timeout if it is still live, or undefined if
@@ -30,13 +51,19 @@ export const getLiveTicketTimeout = async (
   childChainProvider: providers.Provider
 ): Promise<BigNumber | undefined> => {
   try {
-    return await ArbRetryableTx__factory.connect(
-      ARB_RETRYABLE_TX_ADDRESS,
-      childChainProvider
-    ).callStatic.getTimeout(ticketId)
-  } catch {
-    // reverts with NoTicketWithID() when the ticket doesn't exist
-    return undefined
+    return await withRetry(
+      () =>
+        ArbRetryableTx__factory.connect(
+          ARB_RETRYABLE_TX_ADDRESS,
+          childChainProvider
+        ).callStatic.getTimeout(ticketId),
+      { label: 'ArbRetryableTx.getTimeout' }
+    )
+  } catch (error) {
+    // only the NoTicketWithID() revert proves the ticket doesn't exist;
+    // anything else (e.g. RPC failure) must not be mistaken for that
+    if (isNoTicketWithIdError(error)) return undefined
+    throw error
   }
 }
 
@@ -88,11 +115,10 @@ export const getChildChainRetryableReport = async ({
     createdAtTimestamp: String(timestamp),
     createdAtBlockNumber: childChainTxReceipt.blockNumber,
     // prefer the actual on-chain timeout (accounts for keepalive extensions)
-    timeoutTimestamp: String(
+    timeoutTimestamp:
       onChainTimeout !== undefined
-        ? onChainTimeout.toNumber()
-        : Number(timestamp) + SEVEN_DAYS_IN_SECONDS
-    ),
+        ? onChainTimeout.toString()
+        : String(Number(timestamp) + SEVEN_DAYS_IN_SECONDS),
     deposit: String(retryableMessage.messageData.l2CallValue), // eth amount
     status: ParentToChildMessageStatus[status],
     retryTo: retryableMessage.messageData.destAddress,

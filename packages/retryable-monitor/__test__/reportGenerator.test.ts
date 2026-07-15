@@ -85,6 +85,32 @@ describe('getChildChainRetryableReport', () => {
     )
   })
 
+  test('recognizes the NoTicketWithID revert by custom error selector', async () => {
+    getTimeoutMock.mockRejectedValue(
+      Object.assign(new Error('call revert exception'), {
+        data: '0x80698456',
+      })
+    )
+
+    const report = await getChildChainRetryableReport(
+      buildArgs(ParentToChildMessageStatus.CREATION_FAILED)
+    )
+
+    expect(report.status).toBe(
+      ParentToChildMessageStatus[ParentToChildMessageStatus.CREATION_FAILED]
+    )
+  })
+
+  test('does not misclassify the ticket as non-existent on unrelated errors', async () => {
+    getTimeoutMock.mockRejectedValue(new Error('missing trie node'))
+
+    await expect(
+      getChildChainRetryableReport(
+        buildArgs(ParentToChildMessageStatus.CREATION_FAILED)
+      )
+    ).rejects.toThrow('missing trie node')
+  })
+
   test('does not query the precompile for statuses other than CREATION_FAILED', async () => {
     await getChildChainRetryableReport(
       buildArgs(ParentToChildMessageStatus.FUNDS_DEPOSITED_ON_CHILD)
