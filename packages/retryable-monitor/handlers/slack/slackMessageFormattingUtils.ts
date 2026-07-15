@@ -59,7 +59,12 @@ export const formatPrefix = (
     case ParentToChildMessageStatus[
       ParentToChildMessageStatus.FUNDS_DEPOSITED_ON_CHILD
     ]:
-      prefix = `*[${childChainName}] Redeem failed for ticket:*`
+      prefix = ticket.retryTxHash
+        ? `*[${childChainName}] Redeem failed for ticket:*`
+        : `*[${childChainName}] Ticket created but not redeemed (no auto-redeem attempt):*`
+      break
+    case ParentToChildMessageStatus[ParentToChildMessageStatus.CREATION_FAILED]:
+      prefix = `*[${childChainName}] Retryable ticket creation failed (no live ticket on child chain):*`
       break
     case ParentToChildMessageStatus[ParentToChildMessageStatus.EXPIRED]:
       prefix = `*[${childChainName}] Retryable ticket expired:*`
@@ -71,8 +76,13 @@ export const formatPrefix = (
       prefix = `*[${childChainName}] Found retryable ticket in unrecognized state:*`
   }
 
-  // if ticket is about to expire in less than 48h make it a bit dramatic
-  if (ticket.status == 'RedeemFailed' || ticket.status == 'Created') {
+  // if a still-redeemable ticket is about to expire in less than 48h make it a bit dramatic
+  if (
+    ticket.status ===
+    ParentToChildMessageStatus[
+      ParentToChildMessageStatus.FUNDS_DEPOSITED_ON_CHILD
+    ]
+  ) {
     const criticalSoonToExpirePeriod = 2 * 24 * 60 * 60 // 2 days in s
     const expiresIn = +ticket.timeoutTimestamp - now
     if (expiresIn < criticalSoonToExpirePeriod) {
@@ -285,11 +295,20 @@ export const formatCreatedAt = (ticket: ChildChainTicketReport) => {
 }
 
 export const formatExpiration = (ticket: ChildChainTicketReport) => {
+  const isExpired =
+    ticket.status ===
+    ParentToChildMessageStatus[ParentToChildMessageStatus.EXPIRED]
+
   let msg = `\n\t *${
-    ticket.status == 'Expired' ? `Expired` : `Expires`
+    isExpired ? `Expired` : `Expires`
   } at:* ${timestampToDate(+ticket.timeoutTimestamp)}`
 
-  if (ticket.status == 'RedeemFailed' || ticket.status == 'Created') {
+  if (
+    ticket.status ===
+    ParentToChildMessageStatus[
+      ParentToChildMessageStatus.FUNDS_DEPOSITED_ON_CHILD
+    ]
+  ) {
     msg = `${msg} (that's ${getTimeDifference(
       +ticket.timeoutTimestamp
     )} from now)`
