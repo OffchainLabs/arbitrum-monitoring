@@ -8,4 +8,3 @@ dist
 logfile.log
 config.json
 retryable-run-report.json
-robinhood-config.json
