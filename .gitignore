@@ -7,4 +7,4 @@ dist
 .DS_Store
 logfile.log
 config.json
-retryable-run-report.json
+retryable-run-report.jsonrobinhood-config.json
