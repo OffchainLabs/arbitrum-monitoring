@@ -33,6 +33,7 @@ export interface ReportedRetryableEntry {
 }
 
 const reportedRetryables: ReportedRetryableEntry[] = []
+const recordedTicketKeys = new Set<string>()
 
 const toIsoDate = (timestampInSeconds: string) => {
   const ms = Number(timestampInSeconds) * 1000
@@ -41,13 +42,19 @@ const toIsoDate = (timestampInSeconds: string) => {
 
 export const recordReportedRetryable = (
   ticket: OnFailedRetryableFoundParams
-) => {
+): boolean => {
   const {
     parentChainRetryableReport,
     childChainRetryableReport,
     tokenDepositData,
     childChain,
   } = ticket
+
+  // failed block-range chunks are retried from their start, so the same
+  // ticket can be reported more than once within a run
+  const key = `${childChain.chainId}:${childChainRetryableReport.id}`
+  if (recordedTicketKeys.has(key)) return false
+  recordedTicketKeys.add(key)
 
   const { PARENT_CHAIN_TX_PREFIX, CHILD_CHAIN_TX_PREFIX } =
     getExplorerUrlPrefixes(childChain)
@@ -77,6 +84,7 @@ export const recordReportedRetryable = (
     createdAt: toIsoDate(childChainRetryableReport.createdAtTimestamp),
     expiresAt: toIsoDate(childChainRetryableReport.timeoutTimestamp),
   })
+  return true
 }
 
 export const writeRunReport = () => {

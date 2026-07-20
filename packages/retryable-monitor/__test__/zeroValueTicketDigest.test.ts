@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'vitest'
 import { ChildNetwork } from 'utils'
 import {
+  addTicketToZeroValueDigest,
   buildZeroValueDigestMessage,
   isZeroValueTicket,
 } from '../handlers/zeroValueTicketDigest'
+import { recordReportedRetryable } from '../handlers/runReport'
 import {
   ChildChainTicketReport,
   OnFailedRetryableFoundParams,
@@ -145,6 +147,13 @@ describe('buildZeroValueDigestMessage', () => {
     )
   })
 
+  test('same ticket reported twice is only digested once (chunk retries)', () => {
+    const ticket = buildTicket({ childOverrides: { id: '0xdedupe-digest' } })
+
+    expect(addTicketToZeroValueDigest(ticket)).toBe(true)
+    expect(addTicketToZeroValueDigest(ticket)).toBe(false)
+  })
+
   test('caps the listed tickets and reports the overflow count', () => {
     const tickets = Array.from({ length: 25 }, (_, i) =>
       buildTicket({ childOverrides: { id: `0xticket${i}` } })
@@ -156,5 +165,14 @@ describe('buildZeroValueDigestMessage', () => {
     expect(message).toContain('0xticket19')
     expect(message).not.toContain('0xticket20>')
     expect(message).toContain('…and 5 more')
+  })
+})
+
+describe('recordReportedRetryable', () => {
+  test('same ticket reported twice is only recorded once (chunk retries)', () => {
+    const ticket = buildTicket({ childOverrides: { id: '0xdedupe-report' } })
+
+    expect(recordReportedRetryable(ticket)).toBe(true)
+    expect(recordReportedRetryable(ticket)).toBe(false)
   })
 })

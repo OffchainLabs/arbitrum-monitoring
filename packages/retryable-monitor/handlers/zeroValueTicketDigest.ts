@@ -46,14 +46,23 @@ export const isZeroValueTicket = ({
   tokenDepositIsZero(tokenDepositData)
 
 const ticketsByChainId = new Map<number, OnFailedRetryableFoundParams[]>()
+const digestedTicketKeys = new Set<string>()
 
 export const addTicketToZeroValueDigest = (
   ticket: OnFailedRetryableFoundParams
-) => {
+): boolean => {
   const { chainId } = ticket.childChain
+
+  // failed block-range chunks are retried from their start, so the same
+  // ticket can be reported more than once within a run
+  const key = `${chainId}:${ticket.childChainRetryableReport.id}`
+  if (digestedTicketKeys.has(key)) return false
+  digestedTicketKeys.add(key)
+
   const tickets = ticketsByChainId.get(chainId) ?? []
   tickets.push(ticket)
   ticketsByChainId.set(chainId, tickets)
+  return true
 }
 
 const STATUS_LABELS: Record<string, string> = {
