@@ -93,6 +93,14 @@ describe('isZeroValueTicket', () => {
     ).toBe(true)
   })
 
+  test('token deposit with unresolved amount is not zero-value', () => {
+    expect(
+      isZeroValueTicket(
+        buildTicket({ tokenDepositData: buildTokenDeposit(undefined) })
+      )
+    ).toBe(false)
+  })
+
   test('unparseable amounts are treated as non-zero to avoid silencing real deposits', () => {
     expect(
       isZeroValueTicket(

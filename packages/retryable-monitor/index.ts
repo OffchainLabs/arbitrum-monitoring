@@ -137,12 +137,6 @@ const processChildChain = async (
       console.log('No retryables found in the specified block range.')
     }
   }
-
-  // zero-value tickets are accumulated during the checks above; post the
-  // per-chain digest once the chain has been fully processed
-  if (enableAlerting && !writeToNotion) {
-    await postZeroValueDigest(childChain)
-  }
 }
 
 // Function to process multiple child chains concurrently
@@ -196,6 +190,13 @@ const processOrbitChainsConcurrently = async () => {
         })
       }
       console.error(errorStr)
+    } finally {
+      // zero-value tickets accumulate while the chain is checked; flush the
+      // per-chain digest even when processing errored mid-run so a partial
+      // digest is posted instead of silently dropped
+      if (options.enableAlerting && !options.writeToNotion) {
+        await postZeroValueDigest(childChain)
+      }
     }
   })
 

@@ -18,6 +18,17 @@ const isZeroAmount = (amount?: string) => {
   }
 }
 
+const tokenDepositIsZero = (
+  tokenDepositData: OnFailedRetryableFoundParams['tokenDepositData']
+) => {
+  // no token deposit associated with the ticket at all
+  if (tokenDepositData === undefined) return true
+  // a token deposit whose amount could not be resolved must not be treated
+  // as zero — it may carry real funds
+  if (!tokenDepositData.tokenAmount) return false
+  return isZeroAmount(tokenDepositData.tokenAmount)
+}
+
 /**
  * A ticket is zero-value when it carries no child chain callvalue and no token
  * deposit — no user funds are at risk. These are almost always automated
@@ -32,7 +43,7 @@ export const isZeroValueTicket = ({
   'childChainRetryableReport' | 'tokenDepositData'
 >): boolean =>
   isZeroAmount(childChainRetryableReport.deposit) &&
-  isZeroAmount(tokenDepositData?.tokenAmount)
+  tokenDepositIsZero(tokenDepositData)
 
 const ticketsByChainId = new Map<number, OnFailedRetryableFoundParams[]>()
 
