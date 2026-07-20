@@ -17,6 +17,8 @@ import { alertUntriagedNotionRetryables } from './handlers/notion/alertUntriaged
 import { fetchNotionRetryables } from './handlers/notion/fetchedNotionRetryablesUtils'
 import { handleFailedRetryablesFound } from './handlers/handleFailedRetryablesFound'
 import { handleRedeemedRetryablesFound } from './handlers/handleRedeemedRetryablesFound'
+import { postZeroValueDigest } from './handlers/zeroValueTicketDigest'
+import { writeRunReport } from './handlers/runReport'
 
 // Path for the log file
 const logFilePath = 'logfile.log'
@@ -135,6 +137,12 @@ const processChildChain = async (
       console.log('No retryables found in the specified block range.')
     }
   }
+
+  // zero-value tickets are accumulated during the checks above; post the
+  // per-chain digest once the chain has been fully processed
+  if (enableAlerting && !writeToNotion) {
+    await postZeroValueDigest(childChain)
+  }
 }
 
 // Function to process multiple child chains concurrently
@@ -198,6 +206,10 @@ const processOrbitChainsConcurrently = async () => {
   if (options.writeToNotion) {
     await alertUntriagedNotionRetryables(config.childChains, options.autoRedeem)
   }
+
+  // dump every failed retryable found in this run to a JSON file which CI
+  // uploads as a run artifact, so tickets can be referenced/redeemed later
+  writeRunReport()
 }
 
 // Start processing child chains concurrently

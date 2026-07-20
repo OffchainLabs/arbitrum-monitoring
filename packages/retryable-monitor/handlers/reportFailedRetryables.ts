@@ -7,6 +7,10 @@ import {
 } from '../core/types'
 import { postSlackMessage } from './slack/postSlackMessage'
 import { generateFailedRetryableSlackMessage } from './slack/slackMessageGenerator'
+import {
+  addTicketToZeroValueDigest,
+  isZeroValueTicket,
+} from './zeroValueTicketDigest'
 
 export const reportFailedRetryables = async ({
   parentChainRetryableReport,
@@ -37,6 +41,23 @@ export const reportFailedRetryables = async ({
     t.status == 'EXPIRED' &&
     now - +t.timeoutTimestamp > reportingPeriodForExpired
   ) {
+    return
+  }
+
+  // zero-value tickets go into a single per-chain digest posted at the end of
+  // the chain's run instead of one Slack message per ticket
+  if (
+    isZeroValueTicket({
+      childChainRetryableReport,
+      tokenDepositData,
+    })
+  ) {
+    addTicketToZeroValueDigest({
+      parentChainRetryableReport,
+      childChainRetryableReport,
+      tokenDepositData,
+      childChain,
+    })
     return
   }
 

@@ -2,6 +2,7 @@ import { BigNumber, ethers, providers } from 'ethers'
 import { getExplorerUrlPrefixes } from 'utils'
 import { OnFailedRetryableFoundParams } from '../core/types'
 import { reportFailedRetryables } from './reportFailedRetryables'
+import { recordReportedRetryable } from './runReport'
 import { syncRetryableToNotion } from './notion/syncRetryableToNotion'
 import { addToFetchedNotionRetryables } from './notion/fetchedNotionRetryablesUtils'
 import {
@@ -14,6 +15,10 @@ export const handleFailedRetryablesFound = async (
   ticket: OnFailedRetryableFoundParams,
   writeToNotion: boolean
 ) => {
+  // every failed retryable found in the run goes into the JSON run report,
+  // regardless of whether it is alerted via Slack or synced to Notion
+  recordReportedRetryable(ticket)
+
   //old slack alert: only when not writing to Notion
   if (!writeToNotion) {
     await reportFailedRetryables(ticket)
