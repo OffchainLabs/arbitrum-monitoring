@@ -193,10 +193,9 @@ const processOrbitChainsConcurrently = async () => {
     } finally {
       // zero-value tickets accumulate while the chain is checked; flush the
       // per-chain digest even when processing errored mid-run so a partial
-      // digest is posted instead of silently dropped
-      if (options.enableAlerting && !options.writeToNotion) {
-        await postZeroValueDigest(childChain)
-      }
+      // digest is posted instead of silently dropped (no-ops when nothing
+      // was accumulated)
+      await postZeroValueDigest(childChain)
     }
   })
 

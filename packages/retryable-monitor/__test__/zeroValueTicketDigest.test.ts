@@ -1,11 +1,10 @@
 import { describe, expect, test } from 'vitest'
 import { ChildNetwork } from 'utils'
 import {
-  addTicketToZeroValueDigest,
   buildZeroValueDigestMessage,
   isZeroValueTicket,
 } from '../handlers/zeroValueTicketDigest'
-import { recordReportedRetryable } from '../handlers/runReport'
+import { ticketAlreadyHandled } from '../handlers/handleFailedRetryablesFound'
 import {
   ChildChainTicketReport,
   OnFailedRetryableFoundParams,
@@ -147,11 +146,19 @@ describe('buildZeroValueDigestMessage', () => {
     )
   })
 
-  test('same ticket reported twice is only digested once (chunk retries)', () => {
-    const ticket = buildTicket({ childOverrides: { id: '0xdedupe-digest' } })
+  test('caps the listed senders and reports the overflow count', () => {
+    const tickets = Array.from({ length: 7 }, (_, i) =>
+      buildTicket({
+        childOverrides: { id: `0xticket${i}` },
+        parentOverrides: { sender: `0xsender${i}` },
+      })
+    )
 
-    expect(addTicketToZeroValueDigest(ticket)).toBe(true)
-    expect(addTicketToZeroValueDigest(ticket)).toBe(false)
+    const message = buildZeroValueDigestMessage(childChain, tickets)
+
+    expect(message).toContain('0xsender4: 1')
+    expect(message).not.toContain('0xsender5')
+    expect(message).toContain('…and 2 more senders')
   })
 
   test('caps the listed tickets and reports the overflow count', () => {
@@ -168,11 +175,22 @@ describe('buildZeroValueDigestMessage', () => {
   })
 })
 
-describe('recordReportedRetryable', () => {
-  test('same ticket reported twice is only recorded once (chunk retries)', () => {
-    const ticket = buildTicket({ childOverrides: { id: '0xdedupe-report' } })
+describe('ticketAlreadyHandled', () => {
+  test('same ticket surfacing twice is only handled once (chunk retries)', () => {
+    const ticket = buildTicket({ childOverrides: { id: '0xdedupe' } })
 
-    expect(recordReportedRetryable(ticket)).toBe(true)
-    expect(recordReportedRetryable(ticket)).toBe(false)
+    expect(ticketAlreadyHandled(ticket)).toBe(false)
+    expect(ticketAlreadyHandled(ticket)).toBe(true)
+  })
+
+  test('same ticket id on different chains is handled separately', () => {
+    const ticket = buildTicket({ childOverrides: { id: '0xcrosschain' } })
+    const otherChainTicket = {
+      ...ticket,
+      childChain: { ...childChain, chainId: 99999 },
+    }
+
+    expect(ticketAlreadyHandled(ticket)).toBe(false)
+    expect(ticketAlreadyHandled(otherChainTicket)).toBe(false)
   })
 })

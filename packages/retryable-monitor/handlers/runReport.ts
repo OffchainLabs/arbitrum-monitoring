@@ -4,8 +4,9 @@ import { getExplorerUrlPrefixes } from 'utils'
 import { OnFailedRetryableFoundParams } from '../core/types'
 import { isZeroValueTicket } from './zeroValueTicketDigest'
 
-// written to the package root so the CI workflow can upload it as a run
-// artifact; every failed retryable found in the run lands here, including the
+// written to the working directory — the package root when run via the yarn
+// workspace scripts — so the CI workflow can upload it as a run artifact;
+// every failed retryable found in the run lands here, including the
 // zero-value ones that only appear in the Slack digest
 export const RUN_REPORT_FILENAME = 'retryable-run-report.json'
 
@@ -33,7 +34,6 @@ export interface ReportedRetryableEntry {
 }
 
 const reportedRetryables: ReportedRetryableEntry[] = []
-const recordedTicketKeys = new Set<string>()
 
 const toIsoDate = (timestampInSeconds: string) => {
   const ms = Number(timestampInSeconds) * 1000
@@ -42,19 +42,13 @@ const toIsoDate = (timestampInSeconds: string) => {
 
 export const recordReportedRetryable = (
   ticket: OnFailedRetryableFoundParams
-): boolean => {
+) => {
   const {
     parentChainRetryableReport,
     childChainRetryableReport,
     tokenDepositData,
     childChain,
   } = ticket
-
-  // failed block-range chunks are retried from their start, so the same
-  // ticket can be reported more than once within a run
-  const key = `${childChain.chainId}:${childChainRetryableReport.id}`
-  if (recordedTicketKeys.has(key)) return false
-  recordedTicketKeys.add(key)
 
   const { PARENT_CHAIN_TX_PREFIX, CHILD_CHAIN_TX_PREFIX } =
     getExplorerUrlPrefixes(childChain)
@@ -84,7 +78,6 @@ export const recordReportedRetryable = (
     createdAt: toIsoDate(childChainRetryableReport.createdAtTimestamp),
     expiresAt: toIsoDate(childChainRetryableReport.timeoutTimestamp),
   })
-  return true
 }
 
 export const writeRunReport = () => {

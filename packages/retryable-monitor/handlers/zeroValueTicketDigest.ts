@@ -4,9 +4,10 @@ import { OnFailedRetryableFoundParams } from '../core/types'
 import { postSlackMessage } from './slack/postSlackMessage'
 import { timestampToDate } from './slack/slackMessageFormattingUtils'
 
-// cap the per-ticket lines in the digest; the full list always lands in the
-// run's JSON report
+// cap the per-ticket and per-sender lines in the digest; the full list always
+// lands in the run's JSON report
 const MAX_TICKETS_LISTED = 20
+const MAX_SENDERS_LISTED = 5
 
 const isZeroAmount = (amount?: string) => {
   if (!amount) return true
@@ -46,23 +47,14 @@ export const isZeroValueTicket = ({
   tokenDepositIsZero(tokenDepositData)
 
 const ticketsByChainId = new Map<number, OnFailedRetryableFoundParams[]>()
-const digestedTicketKeys = new Set<string>()
 
 export const addTicketToZeroValueDigest = (
   ticket: OnFailedRetryableFoundParams
-): boolean => {
+) => {
   const { chainId } = ticket.childChain
-
-  // failed block-range chunks are retried from their start, so the same
-  // ticket can be reported more than once within a run
-  const key = `${chainId}:${ticket.childChainRetryableReport.id}`
-  if (digestedTicketKeys.has(key)) return false
-  digestedTicketKeys.add(key)
-
   const tickets = ticketsByChainId.get(chainId) ?? []
   tickets.push(ticket)
   ticketsByChainId.set(chainId, tickets)
-  return true
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -97,6 +89,11 @@ export const buildZeroValueDigestMessage = (
       t.childChainRetryableReport.status
   )
   const senderCounts = countBy(tickets, t => t.parentChainRetryableReport.sender)
+  const listedSenders = senderCounts.slice(0, MAX_SENDERS_LISTED)
+  const senderOverflow =
+    senderCounts.length > MAX_SENDERS_LISTED
+      ? `, …and ${senderCounts.length - MAX_SENDERS_LISTED} more senders`
+      : ''
 
   const soonestToExpire = tickets.reduce((soonest, t) =>
     +t.childChainRetryableReport.timeoutTimestamp <
@@ -126,9 +123,9 @@ export const buildZeroValueDigestMessage = (
     `\n\t *By status:* ${statusCounts
       .map(([status, count]) => `${status}: ${count}`)
       .join(', ')}` +
-    `\n\t *By sender:* ${senderCounts
+    `\n\t *By sender:* ${listedSenders
       .map(([sender, count]) => `${sender}: ${count}`)
-      .join(', ')}` +
+      .join(', ')}${senderOverflow}` +
     `\n\t *Earliest expiry:* ${timestampToDate(
       +soonestToExpire.childChainRetryableReport.timeoutTimestamp
     )}` +
