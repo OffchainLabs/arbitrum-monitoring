@@ -125,16 +125,16 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'yarn'
-        
+
     - name: Install dependencies
       run: yarn install --frozen-lockfile
-      
+
     - name: Run lint
       run: |
         if [ -f "package.json" ] && grep -q '"lint"' package.json; then
@@ -142,3 +142,180 @@ jobs:
         else
           echo "No lint script found at root level"
         fi
+
+  # Output comparison - compares monitoring output between target branch and PR branch
+  output-comparison:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+    - name: Checkout PR branch
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.head_ref }}
+        path: pr-branch
+
+    - name: Checkout target branch
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.base_ref }}
+        path: target-branch
+
+    - name: Use Node.js 18.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18.x
+
+    - name: Run monitors on target branch
+      run: |
+        cd target-branch
+        yarn install --frozen-lockfile
+
+        # Build all monitors
+        yarn workspace assertion-monitor build
+        yarn workspace batch-poster-monitor build
+        yarn workspace retryable-monitor build
+
+        # Run each monitor with --enableAlerting (NODE_ENV=CI outputs slack messages without posting)
+        echo "=== ASSERTION MONITOR ===" > ../target-output.txt
+        NODE_ENV=CI timeout 300s yarn workspace assertion-monitor dev --configPath=../../config.ci.json --enableAlerting >> ../target-output.txt 2>&1 || true
+
+        echo "" >> ../target-output.txt
+        echo "=== BATCH POSTER MONITOR ===" >> ../target-output.txt
+        NODE_ENV=CI timeout 300s yarn workspace batch-poster-monitor dev --configPath=../../config.ci.json --enableAlerting >> ../target-output.txt 2>&1 || true
+
+        echo "" >> ../target-output.txt
+        echo "=== RETRYABLE MONITOR ===" >> ../target-output.txt
+        NODE_ENV=CI timeout 300s yarn workspace retryable-monitor dev --configPath=../../config.ci.json --enableAlerting >> ../target-output.txt 2>&1 || true
+      continue-on-error: true
+
+    - name: Run monitors on PR branch
+      run: |
+        cd pr-branch
+        yarn install --frozen-lockfile
+
+        # Build all monitors
+        yarn workspace assertion-monitor build
+        yarn workspace batch-poster-monitor build
+        yarn workspace retryable-monitor build
+
+        # Run each monitor with --enableAlerting (NODE_ENV=CI outputs slack messages without posting)
+        echo "=== ASSERTION MONITOR ===" > ../pr-output.txt
+        NODE_ENV=CI timeout 300s yarn workspace assertion-monitor dev --configPath=../../config.ci.json --enableAlerting >> ../pr-output.txt 2>&1 || true
+
+        echo "" >> ../pr-output.txt
+        echo "=== BATCH POSTER MONITOR ===" >> ../pr-output.txt
+        NODE_ENV=CI timeout 300s yarn workspace batch-poster-monitor dev --configPath=../../config.ci.json --enableAlerting >> ../pr-output.txt 2>&1 || true
+
+        echo "" >> ../pr-output.txt
+        echo "=== RETRYABLE MONITOR ===" >> ../pr-output.txt
+        NODE_ENV=CI timeout 300s yarn workspace retryable-monitor dev --configPath=../../config.ci.json --enableAlerting >> ../pr-output.txt 2>&1 || true
+      continue-on-error: true
+
+    - name: Show captured output
+      run: |
+        echo "=== TARGET BRANCH OUTPUT ==="
+        cat target-output.txt
+        echo ""
+        echo "=== PR BRANCH OUTPUT ==="
+        cat pr-output.txt
+
+    - name: Extract Slack messages
+      run: |
+        # Extract content between [SLACK_MESSAGE_START] and [SLACK_MESSAGE_END] markers
+        extract_slack_messages() {
+          sed -n '/\[SLACK_MESSAGE_START\]/,/\[SLACK_MESSAGE_END\]/p' | grep -v '\[SLACK_MESSAGE_'
+        }
+
+        cat target-output.txt | extract_slack_messages > target-slack.txt || true
+        cat pr-output.txt | extract_slack_messages > pr-slack.txt || true
+
+        echo "=== TARGET SLACK MESSAGES ==="
+        cat target-slack.txt
+        echo ""
+        echo "=== PR SLACK MESSAGES ==="
+        cat pr-slack.txt
+
+    - name: Normalize outputs and generate diff
+      run: |
+        # Normalize dynamic values (block numbers, addresses) for comparison
+        normalize() {
+          sed -E 's/[0-9]{7,}/BLOCK_NUM/g; s/[0-9]+n\b/BIGINT/g; s/0x[a-fA-F0-9]{40}/ADDR/g'
+        }
+
+        # Normalize full output
+        cat target-output.txt | normalize > target-normalized.txt
+        cat pr-output.txt | normalize > pr-normalized.txt
+
+        # Normalize slack messages
+        cat target-slack.txt | normalize > target-slack-normalized.txt
+        cat pr-slack.txt | normalize > pr-slack-normalized.txt
+
+        # Generate unified diffs (ignore exit code since diff returns 1 when files differ)
+        diff -u target-normalized.txt pr-normalized.txt > output-diff.txt || true
+        diff -u target-slack-normalized.txt pr-slack-normalized.txt > slack-diff.txt || true
+
+    - name: Post comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+
+          const outputDiff = fs.existsSync('output-diff.txt')
+            ? fs.readFileSync('output-diff.txt', 'utf8').trim()
+            : '';
+
+          const slackDiff = fs.existsSync('slack-diff.txt')
+            ? fs.readFileSync('slack-diff.txt', 'utf8').trim()
+            : '';
+
+          const hasOutputChanges = outputDiff.length > 0;
+          const hasSlackChanges = slackDiff.length > 0;
+
+          let body = '';
+
+          if (hasOutputChanges || hasSlackChanges) {
+            body = '### ⚠️ Monitor Output Changes\n\n';
+
+            if (hasSlackChanges) {
+              body += '#### Slack Message Changes\n```diff\n' + slackDiff + '\n```\n\n';
+            } else {
+              body += '#### ✅ Slack Messages: No Changes\n\n';
+            }
+
+            if (hasOutputChanges) {
+              body += '<details>\n<summary>Full Output Changes</summary>\n\n```diff\n' + outputDiff + '\n```\n</details>';
+            } else {
+              body += '#### ✅ Full Output: No Changes';
+            }
+          } else {
+            body = '### ✅ Monitor Output: No Changes';
+          }
+
+          // Find existing comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const botComment = comments.find(comment =>
+            comment.user.type === 'Bot' &&
+            comment.body.includes('Monitor Output')
+          );
+
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: body
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+          }
