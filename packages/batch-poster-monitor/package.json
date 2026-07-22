@@ -4,7 +4,7 @@
   "main": "index.ts",
   "scripts": {
     "lint": "eslint .",
-    "build": "yarn workspace utils build && rm -rf ./dist && tsc",
+    "build": "yarn --cwd ../.. build:deps && rm -rf ./dist && tsc",
     "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
     "dev": "yarn build && node ./dist/index.js",
     "test": "vitest"
@@ -12,6 +12,7 @@
   "dependencies": {
     "@arbitrum/orbit-sdk": "^0.23.5",
     "abitype": "^1.0.5",
+    "@arbitrum-monitoring/slack": "*",
     "typescript": "^5.4.5",
     "utils": "*",
     "viem": "1.20.0"
