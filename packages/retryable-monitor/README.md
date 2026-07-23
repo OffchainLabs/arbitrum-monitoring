@@ -9,7 +9,7 @@ The Retryable Monitor tracks ParentChain->ChildChain message execution through r
 ## Command-Line Interface
 
 ```bash
-yarn retryable-monitor [options]
+pnpm retryable-monitor [options]
 
 Monitor retryable tickets on Arbitrum chains
 
@@ -24,9 +24,9 @@ Options:
   --writeToNotion	   Sync ticket metadata to Notion	                   [boolean] [default: false]
 
 Examples:
-  yarn retryable-monitor --continuous                    Run continuous monitoring
-  yarn retryable-monitor --fromBlock=1000 --toBlock=2000 Check specific block range
-  yarn retryable-monitor --enableAlerting --writeToNotion           Enables Slack alerts and syncs retryable data to Notion
+  pnpm retryable-monitor --continuous                    Run continuous monitoring
+  pnpm retryable-monitor --fromBlock=1000 --toBlock=2000 Check specific block range
+  pnpm retryable-monitor --enableAlerting --writeToNotion           Enables Slack alerts and syncs retryable data to Notion
 
 Environment Variables:
   RETRYABLE_MONITORING_SLACK_TOKEN    Slack API token for alerts

@@ -9,7 +9,7 @@ The Assertion Monitor monitors the lifecycle of assertions in both BoLD (Bounded
 ## Command-Line Interface
 
 ```bash
-yarn assertion-monitor [options]
+pnpm assertion-monitor [options]
 
 Monitor assertion creation and validation on Arbitrum chains
 
@@ -20,9 +20,9 @@ Options:
   --enableAlerting   Enable Slack alerts            [boolean] [default: false]
 
 Examples:
-  yarn assertion-monitor                            Run with default config
-  yarn assertion-monitor --enableAlerting           Enable Slack notifications
-  yarn assertion-monitor --configPath=custom.json   Use custom config file
+  pnpm assertion-monitor                            Run with default config
+  pnpm assertion-monitor --enableAlerting           Enable Slack notifications
+  pnpm assertion-monitor --configPath=custom.json   Use custom config file
 
 Environment Variables:
   ASSERTION_MONITORING_SLACK_TOKEN    Slack API token for alerts

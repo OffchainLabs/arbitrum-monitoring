@@ -4,20 +4,23 @@
   "main": "index.ts",
   "scripts": {
     "lint": "eslint .",
-    "build": "yarn workspace utils build && rm -rf ./dist && tsc",
-    "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "dev": "yarn build && node ./dist/index.js",
+    "build": "pnpm --filter utils build && rm -rf ./dist && tsc",
+    "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && pnpm run lint --fix",
+    "dev": "pnpm build && node ./dist/index.js",
     "test": "vitest"
   },
   "dependencies": {
     "@arbitrum/orbit-sdk": "^0.23.5",
     "abitype": "^1.0.5",
     "typescript": "^5.4.5",
-    "utils": "*",
-    "viem": "1.20.0"
+    "utils": "workspace:*",
+    "viem": "1.20.0",
+    "yargs": "17.7.2"
   },
   "devDependencies": {
     "@types/node": "^20.14.1",
-    "ts-node": "^10.9.2"
+    "@types/yargs": "17.0.32",
+    "ts-node": "^10.9.2",
+    "vitest": "^3.0.5"
   }
 }

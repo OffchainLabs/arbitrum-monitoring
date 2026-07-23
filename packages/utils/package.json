@@ -4,7 +4,14 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@slack/web-api": "^7.0.4"
+    "@arbitrum/sdk": "^4.0.0",
+    "@slack/web-api": "^7.0.4",
+    "dotenv": "^10.0.0",
+    "ethers": "^5.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "typescript": "^5.4.5"
   },
   "scripts": {
     "build": "tsc",
