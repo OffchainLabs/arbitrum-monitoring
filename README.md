@@ -70,25 +70,17 @@ cp config.example.json config.json
 cp .env.sample .env
 ```
 
-2. Set up Slack alerts in `.env` (optional). Each monitor supports either-or configuration — provide a Slack incoming webhook URL (preferred, since its permissions are scoped to a single channel), or a bot token + channel. If both are set, the webhook URL takes precedence.
-
-Option A — webhook URL (preferred):
+2. Set up Slack alerts in `.env` (optional). For each monitor, set either a webhook URL (preferred, scoped to a single channel) or a token + channel; the webhook takes precedence if both are set:
 
 ```bash
 NODE_ENV=CI
-RETRYABLE_MONITORING_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
-BATCH_POSTER_MONITORING_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
-ASSERTION_MONITORING_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
-```
-
-Option B — bot token + channel:
-
-```bash
-NODE_ENV=CI
+RETRYABLE_MONITORING_SLACK_WEBHOOK_URL=your-slack-webhook-url
 RETRYABLE_MONITORING_SLACK_TOKEN=your-slack-token
 RETRYABLE_MONITORING_SLACK_CHANNEL=your-slack-channel
+BATCH_POSTER_MONITORING_SLACK_WEBHOOK_URL=your-slack-webhook-url
 BATCH_POSTER_MONITORING_SLACK_TOKEN=your-slack-token
 BATCH_POSTER_MONITORING_SLACK_CHANNEL=your-slack-channel
+ASSERTION_MONITORING_SLACK_WEBHOOK_URL=your-slack-webhook-url
 ASSERTION_MONITORING_SLACK_TOKEN=your-slack-token
 ASSERTION_MONITORING_SLACK_CHANNEL=your-slack-channel
 ```

@@ -1,14 +1,6 @@
 import { postSlackMessage } from './postSlackMessage'
 import { postSlackMessageViaWebhook } from './postSlackMessageViaWebhook'
 
-/**
- * Creates a Slack poster configured via environment variables, supporting
- * either-or configuration:
- * - webhook URL (preferred: permissions are scoped to a single channel), or
- * - bot token + channel
- *
- * If both are set, the webhook takes precedence.
- */
 export const createSlackPoster = ({
   tokenEnvVar,
   channelEnvVar,

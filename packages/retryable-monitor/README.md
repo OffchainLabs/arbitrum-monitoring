@@ -29,9 +29,9 @@ Examples:
   yarn retryable-monitor --enableAlerting --writeToNotion           Enables Slack alerts and syncs retryable data to Notion
 
 Environment Variables:
-  RETRYABLE_MONITORING_SLACK_WEBHOOK_URL  Slack incoming webhook URL for alerts (preferred; takes precedence over token+channel)
-  RETRYABLE_MONITORING_SLACK_TOKEN        Slack API token for alerts (alternative to webhook, use with channel)
-  RETRYABLE_MONITORING_SLACK_CHANNEL      Slack channel for alerts (alternative to webhook, use with token)
+  RETRYABLE_MONITORING_SLACK_WEBHOOK_URL  Slack webhook URL for alerts (preferred over token+channel)
+  RETRYABLE_MONITORING_SLACK_TOKEN    Slack API token for alerts
+  RETRYABLE_MONITORING_SLACK_CHANNEL  Slack channel for alerts
   RETRYABLE_MONITORING_NOTION_TOKEN   Notion integration token
   RETRYABLE_MONITORING_NOTION_DB_ID   Notion database ID
 ```

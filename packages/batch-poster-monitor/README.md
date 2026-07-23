@@ -25,9 +25,9 @@ Examples:
   yarn batch-poster-monitor --configPath=custom.json   Use custom config file
 
 Environment Variables:
-  BATCH_POSTER_MONITORING_SLACK_WEBHOOK_URL  Slack incoming webhook URL for alerts (preferred; takes precedence over token+channel)
-  BATCH_POSTER_MONITORING_SLACK_TOKEN        Slack API token for alerts (alternative to webhook, use with channel)
-  BATCH_POSTER_MONITORING_SLACK_CHANNEL      Slack channel for alerts (alternative to webhook, use with token)
+  BATCH_POSTER_MONITORING_SLACK_WEBHOOK_URL  Slack webhook URL for alerts (preferred over token+channel)
+  BATCH_POSTER_MONITORING_SLACK_TOKEN    Slack API token for alerts
+  BATCH_POSTER_MONITORING_SLACK_CHANNEL  Slack channel for alerts
 ```
 
 ## Monitor Details

@@ -25,9 +25,9 @@ Examples:
   yarn assertion-monitor --configPath=custom.json   Use custom config file
 
 Environment Variables:
-  ASSERTION_MONITORING_SLACK_WEBHOOK_URL  Slack incoming webhook URL for alerts (preferred; takes precedence over token+channel)
-  ASSERTION_MONITORING_SLACK_TOKEN        Slack API token for alerts (alternative to webhook, use with channel)
-  ASSERTION_MONITORING_SLACK_CHANNEL      Slack channel for alerts (alternative to webhook, use with token)
+  ASSERTION_MONITORING_SLACK_WEBHOOK_URL  Slack webhook URL for alerts (preferred over token+channel)
+  ASSERTION_MONITORING_SLACK_TOKEN    Slack API token for alerts
+  ASSERTION_MONITORING_SLACK_CHANNEL  Slack channel for alerts
 ```
 
 ## Monitor Details

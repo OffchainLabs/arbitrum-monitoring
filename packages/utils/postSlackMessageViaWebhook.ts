@@ -24,7 +24,6 @@ export const postSlackMessageViaWebhook = async ({
   })
 
   if (!response.ok) {
-    // never include the webhook URL itself in errors, it is a secret
     throw new Error(
       `Failed to post Slack message via webhook: ${
         response.status
