@@ -19,7 +19,6 @@
     "build": "yarn workspace utils build && rm -rf ./dist && tsc",
     "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
     "dev": "yarn build && node ./dist/main.js",
-    "generate-wasm-module-roots": "ts-node scripts/generateWasmModuleRoots.ts",
     "test": "vitest run __test__/*.test.ts",
     "test:watch": "vitest watch __test__/*.test.ts"
   }

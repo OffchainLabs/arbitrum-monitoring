@@ -1,12 +1,11 @@
-import { PublicClient, createPublicClient, http } from 'viem'
+import { createPublicClient, http } from 'viem'
 import yargs from 'yargs'
 import {
   ChildNetwork as ChainInfo,
   DEFAULT_CONFIG_PATH,
   getConfig,
-  resolveRollupAddress,
 } from 'utils'
-import { arbSysAbi, rollupAbi } from './abi'
+import { arbSysAbi } from './abi'
 import {
   ARBOS_VERSION_OFFSET,
   ARBSYS_ADDRESS,
@@ -64,11 +63,7 @@ export const fetchArbosVersionFromChildChain = async (
       functionName: 'arbOSVersion',
     })
 
-    if (
-      rawVersion === undefined ||
-      rawVersion === null ||
-      rawVersion <= ARBOS_VERSION_OFFSET
-    ) {
+    if (rawVersion <= ARBOS_VERSION_OFFSET) {
       console.warn(
         `[${childChainInfo.name}] ArbSys.arbOSVersion() returned an invalid value: ${rawVersion}`
       )
@@ -89,37 +84,6 @@ export const fetchArbosVersionFromChildChain = async (
 }
 
 /**
- * Reads wasmModuleRoot() from the rollup contract on the parent chain.
- * Returns null if it could not be read.
- */
-export const fetchWasmModuleRootFromParentChain = async (
-  parentClient: PublicClient,
-  childChainInfo: ChainInfo
-): Promise<string | null> => {
-  try {
-    const rollupAddress = await resolveRollupAddress(
-      parentClient,
-      childChainInfo.ethBridge,
-      childChainInfo.name
-    )
-    return await parentClient.readContract({
-      address: rollupAddress as `0x${string}`,
-      abi: rollupAbi,
-      functionName: 'wasmModuleRoot',
-    })
-  } catch (error) {
-    console.warn(
-      `[${
-        childChainInfo.name
-      }] Failed to read wasmModuleRoot from rollup contract: ${
-        error instanceof Error ? error.message : error
-      }`
-    )
-    return null
-  }
-}
-
-/**
  * Checks a single chain's ArbOS version. Returns an alert string when the
  * chain is outdated (or undeterminable), undefined otherwise.
  */
@@ -129,39 +93,16 @@ export const checkChainArbosVersion = async (
 ): Promise<string | undefined> => {
   console.log(`\nMonitoring ${childChainInfo.name}...`)
 
-  const parentClient = createPublicClient({
-    transport: http(childChainInfo.parentRpcUrl),
-  })
+  const arbosVersion = await fetchArbosVersionFromChildChain(childChainInfo)
 
-  const [arbosVersion, wasmModuleRoot] = await Promise.all([
-    fetchArbosVersionFromChildChain(childChainInfo),
-    fetchWasmModuleRootFromParentChain(parentClient, childChainInfo),
-  ])
-
-  const result = evaluateArbosVersion({
-    chainName: childChainInfo.name,
-    arbosVersion,
-    wasmModuleRoot,
-    minimumArbosVersion,
-  })
-
-  if (result.kind === 'skip') {
-    console.log(result.reason)
-    return
-  }
+  const result = evaluateArbosVersion({ arbosVersion, minimumArbosVersion })
 
   if (result.kind === 'alert') {
     console.log(`[${childChainInfo.name}] ${result.message}`)
     return `${childChainInfo.name}:\n- ${result.message}`
   }
 
-  console.log(
-    `[${childChainInfo.name}] ArbOS ${result.version} (source: ${
-      result.source === 'arbsys'
-        ? 'ArbSys.arbOSVersion()'
-        : 'wasmModuleRoot fallback'
-    }) — OK`
-  )
+  console.log(`[${childChainInfo.name}] ArbOS ${result.version} — OK`)
   return
 }
 
