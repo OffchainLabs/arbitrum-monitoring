@@ -44,7 +44,8 @@ export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
 /** Calls eth_syncing. Returns null if the call failed. */
 const fetchSyncStatus = async (
   client: PublicClient,
-  chainName: string
+  chainName: string,
+  nodeUrl: string
 ): Promise<false | Record<string, unknown> | null> => {
   try {
     // eth_syncing is not part of viem's public-client schema; use a schema override.
@@ -54,7 +55,7 @@ const fetchSyncStatus = async (
     }>({ method: 'eth_syncing' })
   } catch (error) {
     console.warn(
-      `[${chainName}] Failed to read eth_syncing from node RPC: ${
+      `[${chainName}] Failed to read eth_syncing from node RPC ${nodeUrl}: ${
         error instanceof Error ? error.message : error
       }`
     )
@@ -66,13 +67,13 @@ const fetchSyncStatus = async (
 const fetchBlockNumber = async (
   client: PublicClient,
   chainName: string,
-  label: 'node' | 'reference'
+  source: string
 ): Promise<bigint | null> => {
   try {
     return await client.getBlockNumber()
   } catch (error) {
     console.warn(
-      `[${chainName}] Failed to read eth_blockNumber from ${label} RPC: ${
+      `[${chainName}] Failed to read eth_blockNumber from ${source} RPC: ${
         error instanceof Error ? error.message : error
       }`
     )
@@ -81,58 +82,83 @@ const fetchBlockNumber = async (
 }
 
 /**
- * Checks one chain's node against its trusted reference RPC. Returns an
- * alert string when the node is unhealthy, undefined otherwise.
+ * Checks one chain's nodes against the chain's trusted reference RPC.
+ * All nodes are compared against a single reference reading so they share
+ * the same baseline. Returns an alert string listing every unhealthy node,
+ * or undefined when all nodes are healthy.
  */
 export const checkChainNodeSync = async (
   chainInfo: ChainInfo,
   blockLagThreshold: number
 ): Promise<string | undefined> => {
-  if (!chainInfo.monitoredNodeRpcUrl) {
+  const nodeUrls = chainInfo.monitoredNodeRpcUrls
+  if (!nodeUrls || nodeUrls.length === 0) {
     console.log(
-      `[${chainInfo.name}] No monitoredNodeRpcUrl configured, skipping.`
+      `[${chainInfo.name}] No monitoredNodeRpcUrls configured, skipping.`
     )
     return
   }
 
   if (!chainInfo.referenceRpcUrl) {
     const message =
-      'monitoredNodeRpcUrl is set but referenceRpcUrl is missing; both are required for node sync monitoring.'
+      'monitoredNodeRpcUrls is set but referenceRpcUrl is missing; both are required for node sync monitoring.'
     console.log(`[${chainInfo.name}] ${message}`)
     return `${chainInfo.name}:\n- ${message}`
   }
 
-  console.log(`\nMonitoring ${chainInfo.name}...`)
+  console.log(`\nMonitoring ${chainInfo.name} (${nodeUrls.length} node(s))...`)
 
-  const nodeClient = createPublicClient({
-    transport: http(chainInfo.monitoredNodeRpcUrl),
-  })
   const referenceClient = createPublicClient({
     transport: http(chainInfo.referenceRpcUrl),
   })
+  // fetchBlockNumber never rejects (it returns null on failure), so this
+  // shared promise can be awaited concurrently by every node check below.
+  const referenceBlockPromise = fetchBlockNumber(
+    referenceClient,
+    chainInfo.name,
+    'reference'
+  )
 
-  const [syncStatus, nodeBlock, referenceBlock] = await Promise.all([
-    fetchSyncStatus(nodeClient, chainInfo.name),
-    fetchBlockNumber(nodeClient, chainInfo.name, 'node'),
-    fetchBlockNumber(referenceClient, chainInfo.name, 'reference'),
-  ])
+  const nodeAlerts = (
+    await Promise.all(
+      nodeUrls.map(async nodeUrl => {
+        const nodeClient = createPublicClient({
+          transport: http(nodeUrl),
+        })
 
-  const result = evaluateNodeSync({
-    syncStatus,
-    nodeBlock,
-    referenceBlock,
-    blockLagThreshold,
-  })
+        const [syncStatus, nodeBlock, referenceBlock] = await Promise.all([
+          fetchSyncStatus(nodeClient, chainInfo.name, nodeUrl),
+          fetchBlockNumber(nodeClient, chainInfo.name, `node ${nodeUrl}`),
+          referenceBlockPromise,
+        ])
 
-  if (result.kind === 'alert') {
-    console.log(`[${chainInfo.name}] ${result.message}`)
-    return `${chainInfo.name}:\n- ${result.message}`
+        const result = evaluateNodeSync({
+          syncStatus,
+          nodeBlock,
+          referenceBlock,
+          blockLagThreshold,
+        })
+
+        if (result.kind === 'alert') {
+          console.log(`[${chainInfo.name}] [${nodeUrl}] ${result.message}`)
+          return `- [${nodeUrl}] ${result.message}`
+        }
+
+        console.log(
+          `[${chainInfo.name}] [${nodeUrl}] Node synced at block ${nodeBlock} (${result.lag} blocks behind reference) — OK`
+        )
+        return undefined
+      })
+    )
+  ).filter((alert): alert is string => alert !== undefined)
+
+  if (nodeAlerts.length === 0) {
+    return
   }
 
-  console.log(
-    `[${chainInfo.name}] Node synced at block ${nodeBlock} (${result.lag} blocks behind reference) — OK`
-  )
-  return
+  return `${chainInfo.name} (${nodeAlerts.length}/${
+    nodeUrls.length
+  } nodes unhealthy):\n${nodeAlerts.join('\n')}`
 }
 
 /**
