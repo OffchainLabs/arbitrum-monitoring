@@ -37,6 +37,17 @@ export const getOptions = (configPath: string = DEFAULT_CONFIG_PATH) =>
 export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
   const options = getOptions(configPath)
 
+  // yargs coerces non-numeric values to NaN without erroring, and every
+  // `version < NaN` comparison is false — the monitor would silently pass.
+  if (
+    !Number.isFinite(options.minimumArbosVersion) ||
+    options.minimumArbosVersion < 0
+  ) {
+    throw new Error(
+      `Invalid --minimumArbosVersion: ${options.minimumArbosVersion}`
+    )
+  }
+
   const config = getConfig(options)
 
   if (!Array.isArray(config.childChains) || config.childChains.length === 0) {
