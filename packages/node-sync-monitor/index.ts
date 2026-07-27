@@ -32,6 +32,15 @@ export const getOptions = (configPath: string = DEFAULT_CONFIG_PATH) =>
 export const getMonitorConfig = (configPath: string = DEFAULT_CONFIG_PATH) => {
   const options = getOptions(configPath)
 
+  // yargs coerces non-numeric values to NaN without erroring, and every
+  // `lag > NaN` comparison is false — lag alerting would silently disable.
+  if (
+    !Number.isFinite(options.blockLagThreshold) ||
+    options.blockLagThreshold < 0
+  ) {
+    throw new Error(`Invalid --blockLagThreshold: ${options.blockLagThreshold}`)
+  }
+
   const config = getConfig(options)
 
   if (!Array.isArray(config.childChains) || config.childChains.length === 0) {
