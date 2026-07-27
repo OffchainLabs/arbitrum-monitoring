@@ -44,6 +44,16 @@ export const reportFailedRetryables = async ({
     return
   }
 
+  // a genuine creation failure (no ticket was ever created) is terminal and
+  // only actionable while fresh — don't re-report ones older than 2 days
+  const reportingPeriodForCreationFailed = 2 * 24 * 60 * 60 // 2 days in s
+  if (
+    t.status == 'CREATION_FAILED' &&
+    now - +t.createdAtTimestamp > reportingPeriodForCreationFailed
+  ) {
+    return
+  }
+
   // zero-value tickets go into a single per-chain digest posted at the end of
   // the chain's run instead of one Slack message per ticket
   if (

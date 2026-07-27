@@ -95,20 +95,30 @@ export const buildZeroValueDigestMessage = (
       ? `, …and ${senderCounts.length - MAX_SENDERS_LISTED} more senders`
       : ''
 
-  const soonestToExpire = tickets.reduce((soonest, t) =>
-    +t.childChainRetryableReport.timeoutTimestamp <
-    +soonest.childChainRetryableReport.timeoutTimestamp
-      ? t
-      : soonest
+  // CREATION_FAILED tickets were never created, so they have no expiry — the
+  // timeoutTimestamp on their report is a synthetic createdAt+lifetime value
+  const expiringTickets = tickets.filter(
+    t => t.childChainRetryableReport.status !== 'CREATION_FAILED'
   )
+  const earliestExpiryLine = expiringTickets.length
+    ? `\n\t *Earliest expiry:* ${timestampToDate(
+        Math.min(
+          ...expiringTickets.map(t =>
+            Number(t.childChainRetryableReport.timeoutTimestamp)
+          )
+        )
+      )}`
+    : ''
 
   const ticketLines = tickets
     .slice(0, MAX_TICKETS_LISTED)
     .map(t => {
       const report = t.childChainRetryableReport
-      return `\n\t\t <${CHILD_CHAIN_TX_PREFIX + report.id}|${
-        report.id
-      }> — expires ${timestampToDate(+report.timeoutTimestamp)}`
+      const expiry =
+        report.status === 'CREATION_FAILED'
+          ? 'never created, no expiry'
+          : `expires ${timestampToDate(+report.timeoutTimestamp)}`
+      return `\n\t\t <${CHILD_CHAIN_TX_PREFIX + report.id}|${report.id}> — ${expiry}`
     })
     .join('')
   const overflowLine =
@@ -126,9 +136,7 @@ export const buildZeroValueDigestMessage = (
     `\n\t *By sender:* ${listedSenders
       .map(([sender, count]) => `${sender}: ${count}`)
       .join(', ')}${senderOverflow}` +
-    `\n\t *Earliest expiry:* ${timestampToDate(
-      +soonestToExpire.childChainRetryableReport.timeoutTimestamp
-    )}` +
+    earliestExpiryLine +
     `\n\t *Tickets:*${ticketLines}${overflowLine}` +
     `\n\t Full details are in the run's retryable report JSON artifact.` +
     '\n================================================================='
