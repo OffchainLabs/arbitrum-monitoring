@@ -83,6 +83,18 @@ describe('reportFailedRetryables muting', () => {
     expect(addTicketToZeroValueDigest).toHaveBeenCalledOnce()
   })
 
+  test('always reports FUNDS_DEPOSITED_ON_CHILD tickets, even ones older than the muting window', async () => {
+    await reportFailedRetryables(
+      buildTicket({
+        status: 'FUNDS_DEPOSITED_ON_CHILD',
+        createdAtTimestamp: String(nowInSeconds - 6 * DAY_IN_SECONDS),
+        timeoutTimestamp: String(nowInSeconds + 1 * DAY_IN_SECONDS),
+      })
+    )
+
+    expect(addTicketToZeroValueDigest).toHaveBeenCalledOnce()
+  })
+
   test('mutes EXPIRED tickets more than 2 days past their timeout', async () => {
     await reportFailedRetryables(
       buildTicket({
