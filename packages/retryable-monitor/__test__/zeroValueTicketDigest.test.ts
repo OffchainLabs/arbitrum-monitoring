@@ -146,6 +146,40 @@ describe('buildZeroValueDigestMessage', () => {
     )
   })
 
+  test('CREATION_FAILED tickets show no expiry (theirs is synthetic)', () => {
+    const tickets = [
+      buildTicket({
+        childOverrides: { id: '0xfailed', status: 'CREATION_FAILED' },
+      }),
+    ]
+
+    const message = buildZeroValueDigestMessage(childChain, tickets)
+
+    expect(message).toContain('0xfailed> — never created, no expiry')
+    expect(message).not.toContain('expires')
+    expect(message).not.toContain('*Earliest expiry:*')
+  })
+
+  test('earliest expiry ignores the synthetic timeout of CREATION_FAILED tickets', () => {
+    const realTimeout = String(nowInSeconds + 60 * 60)
+    const syntheticSoonerTimeout = String(nowInSeconds + 60)
+    const tickets = [
+      buildTicket({ childOverrides: { timeoutTimestamp: realTimeout } }),
+      buildTicket({
+        childOverrides: {
+          status: 'CREATION_FAILED',
+          timeoutTimestamp: syntheticSoonerTimeout,
+        },
+      }),
+    ]
+
+    const message = buildZeroValueDigestMessage(childChain, tickets)
+
+    expect(message).toContain(
+      `*Earliest expiry:* ${new Date(+realTimeout * 1000).toUTCString()}`
+    )
+  })
+
   test('caps the listed senders and reports the overflow count', () => {
     const tickets = Array.from({ length: 7 }, (_, i) =>
       buildTicket({
