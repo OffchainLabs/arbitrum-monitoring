@@ -13,6 +13,7 @@ jobs:
       matrix:
         node-version: [18.x]
         package:
+          - arbos-version-monitor
           - assertion-monitor
           - batch-poster-monitor
           - retryable-monitor
@@ -114,6 +115,10 @@ jobs:
     - name: Smoke test retryable-monitor dev script
       run: |
         timeout 10s yarn workspace retryable-monitor dev || [ $? -eq 124 ]
+
+    - name: Smoke test arbos-version-monitor dev script
+      run: |
+        timeout 10s yarn workspace arbos-version-monitor dev || [ $? -eq 124 ]
 
   # Lint check for code quality
   lint:

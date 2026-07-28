@@ -7,6 +7,7 @@ This monitoring suite helps you track the health and performance of your Arbitru
 1. [**Retryable Monitor**](./packages/retryable-monitor/README.md) - Tracks ParentChain->ChildChain message execution and retryable ticket lifecycle
 2. [**Batch Poster Monitor**](./packages/batch-poster-monitor/README.md) - Monitors batch posting and data availability
 3. [**Assertion Monitor**](./packages/assertion-monitor/README.md) - Monitor assertion creation and validation on Arbitrum chains
+4. [**ArbOS Version Monitor**](./packages/arbos-version-monitor/README.md) - Checks that chains run at least a minimum ArbOS version
 
 Each monitor has its own detailed documentation with technical specifics and implementation details.
 
@@ -80,6 +81,8 @@ BATCH_POSTER_MONITORING_SLACK_TOKEN=your-slack-token
 BATCH_POSTER_MONITORING_SLACK_CHANNEL=your-slack-channel
 ASSERTION_MONITORING_SLACK_TOKEN=your-slack-token
 ASSERTION_MONITORING_SLACK_CHANNEL=your-slack-channel
+ARBOS_VERSION_MONITORING_SLACK_TOKEN=your-slack-token
+ARBOS_VERSION_MONITORING_SLACK_CHANNEL=your-slack-channel
 ```
 
 Required environment variables:
@@ -105,6 +108,9 @@ yarn batch-poster-monitor [options]
 
 # Monitor chain assertions
 yarn assertion-monitor [options]
+
+# Monitor ArbOS versions
+yarn arbos-version-monitor [options]
 ```
 
 See individual monitor READMEs for specific options and features:
@@ -112,6 +118,7 @@ See individual monitor READMEs for specific options and features:
 - [Retryable Monitor Details](./packages/retryable-monitor/README.md)
 - [Batch Poster Monitor Details](./packages/batch-poster-monitor/README.md)
 - [Assertion Monitor Details](./packages/assertion-monitor/README.md)
+- [ArbOS Version Monitor Details](./packages/arbos-version-monitor/README.md)
 
 ### Notion Integration
 
