@@ -11,6 +11,7 @@
     "batch-poster-monitor": "yarn workspace batch-poster-monitor dev",
     "assertion-monitor": "yarn workspace assertion-monitor dev",
     "arbos-version-monitor": "yarn workspace arbos-version-monitor dev",
+    "node-sync-monitor": "yarn workspace node-sync-monitor dev",
     "test": "yarn workspace utils build && vitest"
   },
   "devDependencies": {

@@ -16,6 +16,7 @@ jobs:
           - arbos-version-monitor
           - assertion-monitor
           - batch-poster-monitor
+          - node-sync-monitor
           - retryable-monitor
           - utils
 
@@ -119,6 +120,10 @@ jobs:
     - name: Smoke test arbos-version-monitor dev script
       run: |
         timeout 10s yarn workspace arbos-version-monitor dev || [ $? -eq 124 ]
+
+    - name: Smoke test node-sync-monitor dev script
+      run: |
+        timeout 10s yarn workspace node-sync-monitor dev || [ $? -eq 124 ]
 
   # Lint check for code quality
   lint:
