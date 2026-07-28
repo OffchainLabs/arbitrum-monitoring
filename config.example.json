@@ -7,7 +7,7 @@
       "confirmPeriodBlocks": 45818,
       "parentRpcUrl": "https://sepolia.drpc.org",
       "orbitRpcUrl": "https://sepolia-rollup.arbitrum.io/rpc",
-      "monitoredNodeRpcUrls": ["http://localhost:8547"],
+      "monitoredNodeRpcUrls": ["http://YOUR_MONITORED_NODE_RPC"],
       "referenceRpcUrl": "https://sepolia-rollup.arbitrum.io/rpc",
       "explorerUrl": "https://sepolia.arbiscan.io",
       "parentExplorerUrl": "https://sepolia.etherscan.io",
