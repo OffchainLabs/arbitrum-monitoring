@@ -2,6 +2,7 @@ import { BigNumber, ethers, providers } from 'ethers'
 import { getExplorerUrlPrefixes } from 'utils'
 import { OnFailedRetryableFoundParams } from '../core/types'
 import { reportFailedRetryables } from './reportFailedRetryables'
+import { recordReportedRetryable } from './runReport'
 import { syncRetryableToNotion } from './notion/syncRetryableToNotion'
 import { addToFetchedNotionRetryables } from './notion/fetchedNotionRetryablesUtils'
 import {
@@ -10,10 +11,33 @@ import {
   getTokenPrice,
 } from './slack/slackMessageFormattingUtils'
 
+const handledTicketKeys = new Set<string>()
+
+/**
+ * Failed block-range chunks are retried from their start, so the same ticket
+ * can surface more than once within a run. Marks the ticket as handled and
+ * reports whether it had already been seen, so every downstream sink (Slack
+ * alert/digest, Notion sync, run report) processes each ticket exactly once.
+ */
+export const ticketAlreadyHandled = (
+  ticket: OnFailedRetryableFoundParams
+): boolean => {
+  const key = `${ticket.childChain.chainId}:${ticket.childChainRetryableReport.id}`
+  if (handledTicketKeys.has(key)) return true
+  handledTicketKeys.add(key)
+  return false
+}
+
 export const handleFailedRetryablesFound = async (
   ticket: OnFailedRetryableFoundParams,
   writeToNotion: boolean
 ) => {
+  if (ticketAlreadyHandled(ticket)) return
+
+  // every failed retryable found in the run goes into the JSON run report,
+  // regardless of whether it is alerted via Slack or synced to Notion
+  recordReportedRetryable(ticket)
+
   //old slack alert: only when not writing to Notion
   if (!writeToNotion) {
     await reportFailedRetryables(ticket)

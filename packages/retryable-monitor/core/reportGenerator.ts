@@ -20,6 +20,20 @@ import { ChildChainTicketReport, ParentChainTicketReport } from './types'
 // selector of ArbRetryableTx's NoTicketWithID() custom error
 const NO_TICKET_WITH_ID_SELECTOR = '0x80698456'
 
+// keccak256 of ArbRetryableTx's TicketCreated(bytes32) event signature
+export const TICKET_CREATED_TOPIC =
+  '0x7c793cced5743dc5f531bbe2bfb5a9fa3f40adef29231e6ab165c08a29e3dd89'
+
+// a submit-retryable tx emits TicketCreated even when its receipt is marked
+// as reverted (e.g. when the requested auto-redeem could not be paid for), so
+// the event is what proves a ticket was actually created
+const hasTicketCreatedEvent = (receipt: TransactionReceipt): boolean =>
+  (receipt.logs ?? []).some(
+    log =>
+      log.address.toLowerCase() === ARB_RETRYABLE_TX_ADDRESS.toLowerCase() &&
+      log.topics[0] === TICKET_CREATED_TOPIC
+  )
+
 const isNoTicketWithIdError = (error: unknown): boolean => {
   let current = error as any
   for (let depth = 0; current != null && depth < 5; depth++) {
@@ -106,6 +120,18 @@ export const getChildChainRetryableReport = async ({
   const timestamp = (
     await childChainProvider.getBlock(childChainTxReceipt.blockNumber)
   ).timestamp
+
+  // a ticket that was created (TicketCreated emitted) but no longer exists
+  // on-chain past its lifetime has expired — report it as EXPIRED so the
+  // stale-ticket muting applies, instead of re-alerting it forever as
+  // CREATION_FAILED
+  if (
+    status === ParentToChildMessageStatus.CREATION_FAILED &&
+    hasTicketCreatedEvent(childChainTxReceipt) &&
+    Date.now() / 1000 >= Number(timestamp) + SEVEN_DAYS_IN_SECONDS
+  ) {
+    status = ParentToChildMessageStatus.EXPIRED
+  }
 
   const childChainTicketReport = {
     id: retryableMessage.retryableCreationId,

@@ -92,6 +92,14 @@ If `--enableAlerting` is used without `--writeToNotion`, alerts are only sent wh
 
 When used with `--writeToNotion`, Slack alerts are more advanced. See the next section for details — including alerts for new retryables and tickets close to expiration based on Notion status.
 
+### Zero-value ticket digest
+
+Failed tickets with no child chain callvalue and no token deposit carry no user funds and are usually automated system traffic (e.g. keeper contracts on high-volume chains). To avoid flooding Slack, these are not alerted individually — they are batched into a single per-chain digest message (counts by status and sender, earliest expiry, and up to 20 ticket links) posted once the chain has been processed. Tickets with any callvalue or token deposit still get the full per-ticket alert.
+
+### JSON run report
+
+Every failed retryable found during a run — including the zero-value ones that only appear in the digest — is written to `retryable-run-report.json` in the package directory. Each entry contains the parent chain transaction hash (the input needed to redeem the ticket), ticket ID, explorer links, sender, destination, value/token data, and expiry. CI can upload this file as a run artifact so tickets can be referenced or redeemed after the run.
+
 ## About the Notion Database
 
 The Notion database acts as a shared triage board for tracking retryable ticket status and metadata across Orbit chains.

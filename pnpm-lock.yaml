@@ -39,6 +39,34 @@ importers:
         specifier: ^3.0.5
         version: 3.2.7(@types/node@20.19.43)
 
+  packages/arbos-version-monitor:
+    dependencies:
+      '@types/yargs':
+        specifier: 17.0.32
+        version: 17.0.32
+      typescript:
+        specifier: ^5.4.5
+        version: 5.9.3
+      utils:
+        specifier: workspace:*
+        version: link:../utils
+      viem:
+        specifier: 2.23.2
+        version: 2.23.2(typescript@5.9.3)
+      yargs:
+        specifier: 17.7.2
+        version: 17.7.2
+    devDependencies:
+      '@types/node':
+        specifier: ^20.14.1
+        version: 20.19.43
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@20.19.43)(typescript@5.9.3)
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@20.19.43)
+
   packages/assertion-monitor:
     dependencies:
       '@arbitrum/sdk':
@@ -97,6 +125,34 @@ importers:
       '@types/yargs':
         specifier: 17.0.32
         version: 17.0.32
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@20.19.43)(typescript@5.9.3)
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@20.19.43)
+
+  packages/node-sync-monitor:
+    dependencies:
+      '@types/yargs':
+        specifier: 17.0.32
+        version: 17.0.32
+      typescript:
+        specifier: ^5.4.5
+        version: 5.9.3
+      utils:
+        specifier: workspace:*
+        version: link:../utils
+      viem:
+        specifier: 2.23.2
+        version: 2.23.2(typescript@5.9.3)
+      yargs:
+        specifier: 17.7.2
+        version: 17.7.2
+    devDependencies:
+      '@types/node':
+        specifier: ^20.14.1
+        version: 20.19.43
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@20.19.43)(typescript@5.9.3)

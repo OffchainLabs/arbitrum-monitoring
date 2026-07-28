@@ -1,0 +1,25 @@
+{
+  "name": "arbos-version-monitor",
+  "version": "1.0.0",
+  "main": "dist/main.js",
+  "dependencies": {
+    "@types/yargs": "17.0.32",
+    "typescript": "^5.4.5",
+    "utils": "workspace:*",
+    "viem": "2.23.2",
+    "yargs": "17.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.1",
+    "ts-node": "^10.9.2",
+    "vitest": "^3.0.5"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "build": "pnpm --filter utils build && rm -rf ./dist && tsc",
+    "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && pnpm run lint --fix",
+    "dev": "pnpm build && node ./dist/main.js",
+    "test": "vitest run __test__/*.test.ts",
+    "test:watch": "vitest watch __test__/*.test.ts"
+  }
+}

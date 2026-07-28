@@ -7,6 +7,8 @@
     "retryable-monitor": "pnpm --filter retryable-monitor dev",
     "batch-poster-monitor": "pnpm --filter batch-poster-monitor dev",
     "assertion-monitor": "pnpm --filter assertion-monitor dev",
+    "arbos-version-monitor": "pnpm --filter arbos-version-monitor dev",
+    "node-sync-monitor": "pnpm --filter node-sync-monitor dev",
     "test": "pnpm --filter utils build && vitest"
   },
   "devDependencies": {
