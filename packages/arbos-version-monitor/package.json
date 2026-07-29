@@ -5,8 +5,8 @@
   "dependencies": {
     "@types/yargs": "17.0.32",
     "typescript": "^5.4.5",
-    "utils": "*",
-    "viem": "^2.7.9",
+    "utils": "workspace:*",
+    "viem": "2.23.2",
     "yargs": "17.7.2"
   },
   "devDependencies": {
@@ -16,9 +16,9 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "build": "yarn workspace utils build && rm -rf ./dist && tsc",
-    "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "dev": "yarn build && node ./dist/main.js",
+    "build": "pnpm --filter utils build && rm -rf ./dist && tsc",
+    "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && pnpm run lint --fix",
+    "dev": "pnpm build && node ./dist/main.js",
     "test": "vitest run __test__/*.test.ts",
     "test:watch": "vitest watch __test__/*.test.ts"
   }

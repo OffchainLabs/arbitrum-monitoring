@@ -14,7 +14,7 @@ Each monitor has its own detailed documentation with technical specifics and imp
 ## Prerequisites
 
 - Node.js v18 or greater
-- Yarn package manager
+- pnpm package manager
 - Access to Arbitrum chain RPC endpoints
 - Access to parent chain RPC endpoints
 - Slack workspace for alerts (optional)
@@ -26,7 +26,7 @@ Each monitor has its own detailed documentation with technical specifics and imp
 ```bash
 git clone https://github.com/OffchainLabs/arbitrum-monitoring.git
 cd arbitrum-monitoring
-yarn install
+pnpm install
 ```
 
 ## Configuration
@@ -101,16 +101,16 @@ All monitors support these base options:
 
 ```bash
 # Monitor retryable tickets
-yarn retryable-monitor [options]
+pnpm retryable-monitor [options]
 
 # Monitor batch posting
-yarn batch-poster-monitor [options]
+pnpm batch-poster-monitor [options]
 
 # Monitor chain assertions
-yarn assertion-monitor [options]
+pnpm assertion-monitor [options]
 
 # Monitor ArbOS versions
-yarn arbos-version-monitor [options]
+pnpm arbos-version-monitor [options]
 ```
 
 See individual monitor READMEs for specific options and features:

@@ -9,7 +9,7 @@ The Batch Poster Monitor tracks batch posting performance, data compression, and
 ## Command-Line Interface
 
 ```bash
-yarn batch-poster-monitor [options]
+pnpm batch-poster-monitor [options]
 
 Monitor batch posting activity on Arbitrum chains
 
@@ -20,9 +20,9 @@ Options:
   --enableAlerting   Enable Slack alerts               [boolean] [default: false]
 
 Examples:
-  yarn batch-poster-monitor                            Run with default config
-  yarn batch-poster-monitor --enableAlerting           Enable Slack notifications
-  yarn batch-poster-monitor --configPath=custom.json   Use custom config file
+  pnpm batch-poster-monitor                            Run with default config
+  pnpm batch-poster-monitor --enableAlerting           Enable Slack notifications
+  pnpm batch-poster-monitor --configPath=custom.json   Use custom config file
 
 Environment Variables:
   BATCH_POSTER_MONITORING_SLACK_TOKEN    Slack API token for alerts

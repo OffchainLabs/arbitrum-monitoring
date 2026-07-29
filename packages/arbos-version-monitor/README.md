@@ -12,7 +12,7 @@ For each chain in `config.json`, the monitor calls `ArbSys.arbOSVersion()` on th
 ## Usage
 
 ```bash
-yarn arbos-version-monitor [options]
+pnpm arbos-version-monitor [options]
 ```
 
 Options:

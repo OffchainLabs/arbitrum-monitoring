@@ -9,20 +9,25 @@
     "@ethersproject/abstract-provider": "^5.5.1",
     "@notionhq/client": "^2.3.0",
     "axios": "^1.7.2",
+    "dotenv": "^10.0.0",
     "ethers": "^5.5.4",
     "graphql": "^16.6.0",
     "graphql-request": "^6.1.0",
-    "utils": "*",
-    "winston": "^3.3.3"
+    "utils": "workspace:*",
+    "winston": "^3.3.3",
+    "yargs": "17.7.2"
   },
   "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/yargs": "17.0.32",
+    "typescript": "^5.4.5",
     "vitest": "^3.0.5"
   },
   "scripts": {
     "lint": "eslint .",
-    "build": "yarn workspace utils build && rm -rf ./dist && tsc",
-    "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && yarn run lint --fix",
-    "dev": "yarn build && node ./dist/index.js",
+    "build": "pnpm --filter utils build && rm -rf ./dist && tsc",
+    "format": "prettier './**/*.{js,json,md,yml,sol,ts}' --write && pnpm run lint --fix",
+    "dev": "pnpm build && node ./dist/index.js",
     "test": "vitest run __test__/*.test.ts",
     "test:watch": "vitest watch __test__/*.test.ts"
   }

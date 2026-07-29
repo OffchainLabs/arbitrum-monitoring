@@ -31,7 +31,7 @@ All nodes of a chain share the one `referenceRpcUrl`; the reference head is fetc
 ## Usage
 
 ```shell
-yarn node-sync-monitor [--configPath=<path>] [--enableAlerting] [--blockLagThreshold=<blocks>]
+pnpm node-sync-monitor [--configPath=<path>] [--enableAlerting] [--blockLagThreshold=<blocks>]
 ```
 
 With `--enableAlerting`, alerts are posted to Slack using the `NODE_SYNC_MONITORING_SLACK_TOKEN` and `NODE_SYNC_MONITORING_SLACK_CHANNEL` environment variables.

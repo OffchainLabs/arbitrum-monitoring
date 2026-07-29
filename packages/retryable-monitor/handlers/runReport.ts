@@ -4,7 +4,7 @@ import { getExplorerUrlPrefixes } from 'utils'
 import { OnFailedRetryableFoundParams } from '../core/types'
 import { isZeroValueTicket } from './zeroValueTicketDigest'
 
-// written to the working directory — the package root when run via the yarn
+// written to the working directory — the package root when run via the pnpm
 // workspace scripts — so the CI workflow can upload it as a run artifact;
 // every failed retryable found in the run lands here, including the
 // zero-value ones that only appear in the Slack digest
