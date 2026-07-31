@@ -1,16 +1,14 @@
-import { providers } from 'ethers'
 import { ChildNetwork } from 'utils'
 import {
   ChildChainTicketReport,
   ParentChainTicketReport,
   TokenDepositData,
 } from '../core/types'
-import { postSlackMessage } from './slack/postSlackMessage'
-import { generateFailedRetryableSlackMessage } from './slack/slackMessageGenerator'
 import {
   addTicketToZeroValueDigest,
   isZeroValueTicket,
 } from './zeroValueTicketDigest'
+import { addTicketToFundedDigest } from './fundedTicketDigest'
 
 export const reportFailedRetryables = async ({
   parentChainRetryableReport,
@@ -71,26 +69,13 @@ export const reportFailedRetryables = async ({
     return
   }
 
-  const childChainProvider = new providers.JsonRpcProvider(
-    String(childChain.orbitRpcUrl)
-  )
-
-  const parentChainProvider = new providers.JsonRpcProvider(
-    String(childChain.parentRpcUrl)
-  )
-
-  try {
-    const reportStr = await generateFailedRetryableSlackMessage({
-      parentChainRetryableReport,
-      childChainRetryableReport,
-      tokenDepositData,
-      childChain,
-      parentChainProvider,
-      childChainProvider,
-    })
-
-    postSlackMessage({ message: reportStr })
-  } catch (e) {
-    console.log('Could not send slack message', e)
-  }
+  // funded tickets are buffered too: small batches are posted as the usual
+  // detailed per-ticket alerts once the chain's run completes, large bursts
+  // are rolled into a single digest (see postFundedTicketAlerts)
+  addTicketToFundedDigest({
+    parentChainRetryableReport,
+    childChainRetryableReport,
+    tokenDepositData,
+    childChain,
+  })
 }

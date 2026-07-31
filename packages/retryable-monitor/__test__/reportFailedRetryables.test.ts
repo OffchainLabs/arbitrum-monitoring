@@ -17,8 +17,14 @@ vi.mock('../handlers/slack/postSlackMessage', () => ({
   postSlackMessage: vi.fn(),
 }))
 
+vi.mock('../handlers/fundedTicketDigest', async importOriginal => ({
+  ...(await importOriginal<typeof import('../handlers/fundedTicketDigest')>()),
+  addTicketToFundedDigest: vi.fn(),
+}))
+
 import { reportFailedRetryables } from '../handlers/reportFailedRetryables'
 import { addTicketToZeroValueDigest } from '../handlers/zeroValueTicketDigest'
+import { addTicketToFundedDigest } from '../handlers/fundedTicketDigest'
 
 const nowInSeconds = Math.floor(Date.now() / 1000)
 const DAY_IN_SECONDS = 24 * 60 * 60
@@ -59,6 +65,30 @@ const buildTicket = (
 describe('reportFailedRetryables muting', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  test('routes funded tickets to the funded buffer, not the zero-value digest', async () => {
+    await reportFailedRetryables(
+      buildTicket({
+        deposit: '100000000000000000',
+      })
+    )
+
+    expect(addTicketToFundedDigest).toHaveBeenCalledOnce()
+    expect(addTicketToZeroValueDigest).not.toHaveBeenCalled()
+  })
+
+  test('muting also applies to funded tickets', async () => {
+    await reportFailedRetryables(
+      buildTicket({
+        deposit: '100000000000000000',
+        status: 'EXPIRED',
+        createdAtTimestamp: String(nowInSeconds - 10 * DAY_IN_SECONDS),
+        timeoutTimestamp: String(nowInSeconds - 3 * DAY_IN_SECONDS),
+      })
+    )
+
+    expect(addTicketToFundedDigest).not.toHaveBeenCalled()
   })
 
   test('mutes CREATION_FAILED tickets older than 2 days', async () => {

@@ -57,14 +57,14 @@ export const addTicketToZeroValueDigest = (
   ticketsByChainId.set(chainId, tickets)
 }
 
-const STATUS_LABELS: Record<string, string> = {
+export const STATUS_LABELS: Record<string, string> = {
   FUNDS_DEPOSITED_ON_CHILD: 'created but not redeemed',
   CREATION_FAILED: 'creation failed',
   EXPIRED: 'expired',
   NOT_YET_CREATED: 'not yet scheduled',
 }
 
-const countBy = (
+export const countBy = (
   tickets: OnFailedRetryableFoundParams[],
   getKey: (ticket: OnFailedRetryableFoundParams) => string
 ): [string, number][] => {
