@@ -221,9 +221,23 @@ describe('buildFundedDigestMessage', () => {
     const message = await buildFundedDigestMessage(childChain, tickets)
 
     expect(message).toContain('25 unredeemed retryables')
-    expect(message).toContain('0xticket19>')
-    expect(message).not.toContain('0xticket20>')
-    expect(message).toContain('…and 5 more')
+    expect(message).toContain('0xticket9>')
+    expect(message).not.toContain('0xticket10>')
+    expect(message).toContain('…and 15 more')
+  })
+
+  test('shortens long ticket ids and stays under the Slack split threshold', async () => {
+    const mkId = (i: number) =>
+      '0x' + String(i).padStart(2, '0').repeat(32) // realistic 66-char ids
+    const tickets = Array.from({ length: 55 }, (_, i) =>
+      buildTicket({ id: mkId(i) })
+    )
+
+    const message = await buildFundedDigestMessage(childChain, tickets)
+
+    expect(message).toContain(`|0x000000…000000>`)
+    expect(message).toContain(`${mkId(0)}|`) // full URL still present in the link
+    expect(message.length).toBeLessThan(4000)
   })
 
   test('skips USD conversion on custom gas-token chains', async () => {

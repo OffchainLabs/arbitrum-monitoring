@@ -7,14 +7,26 @@ import {
   getEthPrice,
 } from './slack/slackMessageFormattingUtils'
 import { generateFailedRetryableSlackMessage } from './slack/slackMessageGenerator'
-import { countBy, STATUS_LABELS } from './zeroValueTicketDigest'
+import { countBy, STATUS_LABELS, shortTicketId } from './zeroValueTicketDigest'
 
 // up to this many funded tickets per chain per run get the full per-ticket
 // alert; beyond that the run posts a single digest instead, so a burst of
 // deposits (e.g. a misconfigured depositor bot) doesn't flood the channel
 export const MAX_INDIVIDUAL_FUNDED_ALERTS = 5
-const MAX_TICKETS_LISTED = 20
+// Slack splits messages around ~4k characters (URLs included), so the cap
+// keeps the digest a single message; the full list is in the JSON report
+const MAX_TICKETS_LISTED = 10
 const MAX_SENDERS_LISTED = 5
+
+const MONTHS = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')
+
+const compactUtcDate = (tsSeconds: number): string => {
+  const d = new Date(tsSeconds * 1000)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getUTCDate())} ${MONTHS[d.getUTCMonth()]} ${pad(
+    d.getUTCHours()
+  )}:${pad(d.getUTCMinutes())} UTC`
+}
 
 const ticketsByChainId = new Map<number, OnFailedRetryableFoundParams[]>()
 
@@ -35,9 +47,11 @@ const formatAmount = (
   unit: string,
   ethPriceUsd?: number
 ): string => {
-  const amount = ethers.utils.formatEther(wei)
+  const exact = parseFloat(ethers.utils.formatEther(wei))
+  // 6 decimals is plenty for a summary; the JSON report has exact wei values
+  const amount = String(Number(exact.toFixed(6)))
   if (ethPriceUsd === undefined) return `${amount} ${unit}`
-  const usd = parseFloat(amount) * ethPriceUsd
+  const usd = exact * ethPriceUsd
   return `${amount} ${unit} (~$${usd.toFixed(2)})`
 }
 
@@ -116,9 +130,11 @@ export const buildFundedDigestMessage = async (
     .map(t => {
       const report = t.childChainRetryableReport
       const tokenMarker = t.tokenDepositData?.tokenAmount ? ' + tokens' : ''
-      return `\n\t\t <${CHILD_CHAIN_TX_PREFIX + report.id}|${
+      return `\n\t\t <${CHILD_CHAIN_TX_PREFIX + report.id}|${shortTicketId(
         report.id
-      }> — ${ethers.utils.formatEther(callvalueOf(t))} ${unit}${tokenMarker} — expires ${timestampToDate(
+      )}> — ${ethers.utils.formatEther(
+        callvalueOf(t)
+      )} ${unit}${tokenMarker} — expires ${compactUtcDate(
         +report.timeoutTimestamp
       )}`
     })
