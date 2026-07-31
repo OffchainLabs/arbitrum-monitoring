@@ -1,4 +1,5 @@
 import { BigNumber, ethers, providers } from 'ethers'
+import { ERC20__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ERC20__factory'
 import { ChildNetwork, getExplorerUrlPrefixes } from 'utils'
 import { OnFailedRetryableFoundParams } from '../core/types'
 import { postSlackMessage } from './slack/postSlackMessage'
@@ -42,12 +43,54 @@ export const addTicketToFundedDigest = (
 const callvalueOf = (ticket: OnFailedRetryableFoundParams): BigNumber =>
   BigNumber.from(ticket.childChainRetryableReport.l2CallValue ?? '0')
 
+interface AmountDisplay {
+  unit: string
+  decimals: number
+  ethPriceUsd?: number
+}
+
+/**
+ * Resolves how callvalue amounts are displayed. Custom gas-token chains
+ * denominate callvalue in the chain's gas token, so its symbol and decimals
+ * are fetched from the parent chain ERC20 (same as formatL2Callvalue);
+ * ETH-gas chains additionally get a USD conversion.
+ */
+const resolveAmountDisplay = async (
+  childChain: ChildNetwork,
+  parentChainProvider?: providers.Provider
+): Promise<AmountDisplay> => {
+  if (!childChain.nativeToken) {
+    try {
+      return { unit: 'ETH', decimals: 18, ethPriceUsd: await getEthPrice() }
+    } catch {
+      // the digest must still post when the price API is down
+      return { unit: 'ETH', decimals: 18 }
+    }
+  }
+
+  if (parentChainProvider) {
+    try {
+      const erc20 = ERC20__factory.connect(
+        childChain.nativeToken,
+        parentChainProvider
+      )
+      const [symbol, decimals] = await Promise.all([
+        erc20.symbol(),
+        erc20.decimals(),
+      ])
+      return { unit: symbol, decimals }
+    } catch {
+      // fall through to the generic label rather than dropping the digest
+    }
+  }
+  return { unit: 'gas tokens', decimals: 18 }
+}
+
 const formatAmount = (
   wei: BigNumber,
-  unit: string,
-  ethPriceUsd?: number
+  { unit, decimals, ethPriceUsd }: AmountDisplay
 ): string => {
-  const exact = parseFloat(ethers.utils.formatEther(wei))
+  const exact = parseFloat(ethers.utils.formatUnits(wei, decimals))
   // 6 decimals is plenty for a summary; the JSON report has exact wei values
   const amount = String(Number(exact.toFixed(6)))
   if (ethPriceUsd === undefined) return `${amount} ${unit}`
@@ -74,21 +117,12 @@ const formatArtifactPointer = (): string => {
 
 export const buildFundedDigestMessage = async (
   childChain: ChildNetwork,
-  tickets: OnFailedRetryableFoundParams[]
+  tickets: OnFailedRetryableFoundParams[],
+  parentChainProvider?: providers.Provider
 ): Promise<string> => {
   const { CHILD_CHAIN_TX_PREFIX } = getExplorerUrlPrefixes(childChain)
 
-  // custom gas-token chains denominate callvalue in the chain's gas token,
-  // for which the cached ETH price would be wrong
-  const unit = childChain.nativeToken ? 'gas tokens' : 'ETH'
-  let ethPriceUsd: number | undefined = undefined
-  if (!childChain.nativeToken) {
-    try {
-      ethPriceUsd = await getEthPrice()
-    } catch {
-      // the digest must still post when the price API is down
-    }
-  }
+  const display = await resolveAmountDisplay(childChain, parentChainProvider)
 
   const totalCallvalue = tickets.reduce(
     (sum, t) => sum.add(callvalueOf(t)),
@@ -132,11 +166,9 @@ export const buildFundedDigestMessage = async (
       const tokenMarker = t.tokenDepositData?.tokenAmount ? ' + tokens' : ''
       return `\n\t\t <${CHILD_CHAIN_TX_PREFIX + report.id}|${shortTicketId(
         report.id
-      )}> — ${ethers.utils.formatEther(
-        callvalueOf(t)
-      )} ${unit}${tokenMarker} — expires ${compactUtcDate(
-        +report.timeoutTimestamp
-      )}`
+      )}> — ${ethers.utils.formatUnits(callvalueOf(t), display.decimals)} ${
+        display.unit
+      }${tokenMarker} — expires ${compactUtcDate(+report.timeoutTimestamp)}`
     })
     .join('')
   const overflowLine =
@@ -150,11 +182,7 @@ export const buildFundedDigestMessage = async (
     } with funds at risk.*` +
     `\n\t Sending a summary instead of individual alerts to avoid spam, since the ticket count exceeds ${MAX_INDIVIDUAL_FUNDED_ALERTS}.` +
     `\n\t *Summary:*` +
-    `\n\t *Total unredeemed:* ${formatAmount(
-      totalCallvalue,
-      unit,
-      ethPriceUsd
-    )}${
+    `\n\t *Total unredeemed:* ${formatAmount(totalCallvalue, display)}${
       tokenDepositCount > 0
         ? ` (+${tokenDepositCount} ticket${
             tokenDepositCount === 1 ? '' : 's'
@@ -163,9 +191,8 @@ export const buildFundedDigestMessage = async (
     }` +
     `\n\t *Average per ticket:* ${formatAmount(
       averageCallvalue,
-      unit,
-      ethPriceUsd
-    )} | *Largest:* ${formatAmount(largestCallvalue, unit, ethPriceUsd)}` +
+      display
+    )} | *Largest:* ${formatAmount(largestCallvalue, display)}` +
     `\n\t *By status:* ${statusCounts
       .map(([status, count]) => `${status}: ${count}`)
       .join(', ')}` +
@@ -194,23 +221,27 @@ export const postFundedTicketAlerts = async (childChain: ChildNetwork) => {
 
   if (!tickets || tickets.length === 0) return
 
-  if (tickets.length > MAX_INDIVIDUAL_FUNDED_ALERTS) {
-    try {
-      await postSlackMessage({
-        message: await buildFundedDigestMessage(childChain, tickets),
-      })
-    } catch (e) {
-      console.log('Could not send funded-ticket digest slack message', e)
-    }
-    return
-  }
-
   const childChainProvider = new providers.JsonRpcProvider(
     String(childChain.orbitRpcUrl)
   )
   const parentChainProvider = new providers.JsonRpcProvider(
     String(childChain.parentRpcUrl)
   )
+
+  if (tickets.length > MAX_INDIVIDUAL_FUNDED_ALERTS) {
+    try {
+      await postSlackMessage({
+        message: await buildFundedDigestMessage(
+          childChain,
+          tickets,
+          parentChainProvider
+        ),
+      })
+    } catch (e) {
+      console.log('Could not send funded-ticket digest slack message', e)
+    }
+    return
+  }
 
   for (const ticket of tickets) {
     try {

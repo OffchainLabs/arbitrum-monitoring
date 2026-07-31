@@ -16,6 +16,15 @@ vi.mock('../handlers/slack/slackMessageGenerator', () => ({
     .mockResolvedValue('detailed per-ticket alert'),
 }))
 
+vi.mock('@arbitrum/sdk/dist/lib/abi/factories/ERC20__factory', () => ({
+  ERC20__factory: {
+    connect: vi.fn(() => ({
+      symbol: async () => 'XAI',
+      decimals: async () => 6,
+    })),
+  },
+}))
+
 vi.mock('../handlers/slack/slackMessageFormattingUtils', async importOriginal => ({
   ...(await importOriginal<
     typeof import('../handlers/slack/slackMessageFormattingUtils')
@@ -251,6 +260,23 @@ describe('buildFundedDigestMessage', () => {
     ])
 
     expect(message).toContain('*Total unredeemed:* 0.1 gas tokens')
+    expect(message).not.toContain('$')
+  })
+
+  test('uses the gas token symbol and decimals when a parent provider is available', async () => {
+    const gasTokenChain = {
+      ...childChain,
+      nativeToken: '0xgastoken',
+    } as ChildNetwork
+
+    const message = await buildFundedDigestMessage(
+      gasTokenChain,
+      [buildTicket({ l2CallValue: '2500000' })], // 2.5 with the token's 6 decimals
+      {} as any
+    )
+
+    expect(message).toContain('*Total unredeemed:* 2.5 XAI')
+    expect(message).toContain('— 2.5 XAI —')
     expect(message).not.toContain('$')
   })
 })
