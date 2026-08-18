@@ -5,9 +5,15 @@ import { postSlackMessage } from './slack/postSlackMessage'
 import { timestampToDate } from './slack/slackMessageFormattingUtils'
 
 // cap the per-ticket and per-sender lines in the digest; the full list always
-// lands in the run's JSON report
-const MAX_TICKETS_LISTED = 20
+// lands in the run's JSON report. Slack splits messages around ~4k characters
+// (URLs included), so the cap keeps the digest a single message.
+const MAX_TICKETS_LISTED = 10
 const MAX_SENDERS_LISTED = 5
+
+// slack renders <url|label>; a shortened label keeps the digest compact while
+// the link still leads to the full ticket
+export const shortTicketId = (id: string): string =>
+  id.length <= 18 ? id : `${id.slice(0, 8)}…${id.slice(-6)}`
 
 const isZeroAmount = (amount?: string) => {
   if (!amount) return true
@@ -57,14 +63,14 @@ export const addTicketToZeroValueDigest = (
   ticketsByChainId.set(chainId, tickets)
 }
 
-const STATUS_LABELS: Record<string, string> = {
+export const STATUS_LABELS: Record<string, string> = {
   FUNDS_DEPOSITED_ON_CHILD: 'created but not redeemed',
   CREATION_FAILED: 'creation failed',
   EXPIRED: 'expired',
   NOT_YET_CREATED: 'not yet scheduled',
 }
 
-const countBy = (
+export const countBy = (
   tickets: OnFailedRetryableFoundParams[],
   getKey: (ticket: OnFailedRetryableFoundParams) => string
 ): [string, number][] => {
@@ -118,7 +124,9 @@ export const buildZeroValueDigestMessage = (
         report.status === 'CREATION_FAILED'
           ? 'never created, no expiry'
           : `expires ${timestampToDate(+report.timeoutTimestamp)}`
-      return `\n\t\t <${CHILD_CHAIN_TX_PREFIX + report.id}|${report.id}> — ${expiry}`
+      return `\n\t\t <${CHILD_CHAIN_TX_PREFIX + report.id}|${shortTicketId(
+        report.id
+      )}> — ${expiry}`
     })
     .join('')
   const overflowLine =

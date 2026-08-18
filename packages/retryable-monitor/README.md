@@ -94,7 +94,11 @@ When used with `--writeToNotion`, Slack alerts are more advanced. See the next s
 
 ### Zero-value ticket digest
 
-Failed tickets with no child chain callvalue and no token deposit carry no user funds and are usually automated system traffic (e.g. keeper contracts on high-volume chains). To avoid flooding Slack, these are not alerted individually — they are batched into a single per-chain digest message (counts by status and sender, earliest expiry, and up to 20 ticket links) posted once the chain has been processed. Tickets with any callvalue or token deposit still get the full per-ticket alert.
+Failed tickets with no child chain callvalue and no token deposit carry no user funds and are usually automated system traffic (e.g. keeper contracts on high-volume chains). To avoid flooding Slack, these are not alerted individually — they are batched into a single per-chain digest message (counts by status and sender, earliest expiry, and up to 10 shortened ticket links) posted once the chain has been processed. Tickets with any callvalue or token deposit still get the full per-ticket alert.
+
+### Funded ticket digest
+
+Funded tickets (callvalue or token deposit) are buffered during the chain's run and flushed once it completes. Small batches (up to 5 per chain) are posted as the usual detailed per-ticket alerts. Larger bursts — typically a misconfigured depositor bot — are rolled into a single urgent digest instead, containing everything needed to triage: total/average/largest unredeemed amounts (with USD when the chain's gas token is ETH), counts by status and sender, distinct destination count, the expiry window with countdowns, up to 10 shortened ticket links, and a pointer to the run's `retryable-run-report.json` artifact which holds full per-ticket redemption details.
 
 ### JSON run report
 

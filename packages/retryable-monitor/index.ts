@@ -18,6 +18,7 @@ import { fetchNotionRetryables } from './handlers/notion/fetchedNotionRetryables
 import { handleFailedRetryablesFound } from './handlers/handleFailedRetryablesFound'
 import { handleRedeemedRetryablesFound } from './handlers/handleRedeemedRetryablesFound'
 import { postZeroValueDigest } from './handlers/zeroValueTicketDigest'
+import { postFundedTicketAlerts } from './handlers/fundedTicketDigest'
 import { writeRunReport } from './handlers/runReport'
 
 // Path for the log file
@@ -191,11 +192,12 @@ const processOrbitChainsConcurrently = async () => {
       }
       console.error(errorStr)
     } finally {
-      // zero-value tickets accumulate while the chain is checked; flush the
-      // per-chain digest even when processing errored mid-run so a partial
-      // digest is posted instead of silently dropped (no-ops when nothing
-      // was accumulated)
+      // zero-value and funded tickets accumulate while the chain is checked;
+      // flush both per-chain buffers even when processing errored mid-run so
+      // partial results are posted instead of silently dropped (no-ops when
+      // nothing was accumulated)
       await postZeroValueDigest(childChain)
+      await postFundedTicketAlerts(childChain)
     }
   })
 

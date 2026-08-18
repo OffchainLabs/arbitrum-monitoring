@@ -203,9 +203,19 @@ describe('buildZeroValueDigestMessage', () => {
     const message = buildZeroValueDigestMessage(childChain, tickets)
 
     expect(message).toContain('25 zero-value retryables')
-    expect(message).toContain('0xticket19')
-    expect(message).not.toContain('0xticket20>')
-    expect(message).toContain('…and 5 more')
+    expect(message).toContain('0xticket9>')
+    expect(message).not.toContain('0xticket10>')
+    expect(message).toContain('…and 15 more')
+  })
+
+  test('shortens long ticket ids in the listing while linking the full URL', () => {
+    const longId =
+      '0x81c4e5b5722698ac9c6feb2090683d4ce442b64afd055a7499da5b2cdf51c839'
+    const message = buildZeroValueDigestMessage(childChain, [
+      buildTicket({ childOverrides: { id: longId } }),
+    ])
+
+    expect(message).toContain(`https://child.explorer/tx/${longId}|0x81c4e5…51c839>`)
   })
 })
 
