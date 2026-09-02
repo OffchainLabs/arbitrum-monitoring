@@ -1,7 +1,7 @@
 import { notionClient, databaseId } from './createNotionClient'
 import { postSlackMessage } from '../slack/postSlackMessage'
 import { redeemRetryable } from '../../core/redeemRetryable'
-import type { ChildNetwork } from 'utils'
+import { DEFAULT_CONFIG_PATH, type ChildNetwork } from 'utils'
 
 const formatDate = (iso: string | undefined) => {
   if (!iso) return '(unknown)'
@@ -32,7 +32,8 @@ const isNearExpiry = (iso: string | undefined, hours = 24) => {
 
 export const alertUntriagedNotionRetryables = async (
   childChains: ChildNetwork[] = [],
-  enableAutoRedeem = false
+  enableAutoRedeem = false,
+  configPath: string = DEFAULT_CONFIG_PATH
 ) => {
   const allowedChainIds = childChains.map(c => c.chainId)
   const response = await notionClient.databases.query({
@@ -118,7 +119,10 @@ export const alertUntriagedNotionRetryables = async (
         }
 
         try {
-          await redeemRetryable(parentTxHash)
+          await redeemRetryable(parentTxHash, {
+            configPath,
+            retryableCreationId: extractTxHash(retryableUrl) ?? undefined,
+          })
           await notionClient.pages.update({
             page_id: page.id,
             properties: {

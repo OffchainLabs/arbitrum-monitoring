@@ -25,6 +25,8 @@ import { redeemRetryable } from '../core/redeemRetryable'
 
 const PARENT_TX_HASH =
   '0xe60d848b8fae81b103135825c30c2ca169170100cad7fbdf3e73d062e3fc90d6'
+const CHILD_TX_HASH =
+  '0xa0922360dad7e9d29b6aecd543f323cb9524e30edd2d1a45d758fcd8fa786a9e'
 
 const CHAINS = [{ chainId: 42161 }] as any
 
@@ -39,7 +41,15 @@ const buildPage = (hoursUntilExpiry: number) => ({
         { text: { content: `https://etherscan.io/tx/${PARENT_TX_HASH}` } },
       ],
     },
-    ChildTx: { title: [{ text: { content: 'https://arbiscan.io/tx/0xabc' } }] },
+    ChildTx: {
+      title: [
+        {
+          text: {
+            content: `https://robinhoodchain.blockscout.com/tx/${CHILD_TX_HASH}`,
+          },
+        },
+      ],
+    },
     timeoutTimestamp: {
       date: {
         start: new Date(
@@ -76,7 +86,10 @@ describe('alertUntriagedNotionRetryables', () => {
   test('redeems with the raw hash, not the explorer URL', async () => {
     await alertUntriagedNotionRetryables(CHAINS, true)
 
-    expect(redeemRetryable).toHaveBeenCalledWith(PARENT_TX_HASH)
+    expect(redeemRetryable).toHaveBeenCalledWith(
+      PARENT_TX_HASH,
+      expect.objectContaining({ retryableCreationId: CHILD_TX_HASH })
+    )
     expect(pagesUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         properties: {
@@ -97,6 +110,15 @@ describe('alertUntriagedNotionRetryables', () => {
           'Bot Redemption Status': { select: { name: 'Bot Failed' } },
         },
       })
+    )
+  })
+
+  test('forwards the config path it was run with', async () => {
+    await alertUntriagedNotionRetryables(CHAINS, true, '../../rh.config.json')
+
+    expect(redeemRetryable).toHaveBeenCalledWith(
+      PARENT_TX_HASH,
+      expect.objectContaining({ configPath: '../../rh.config.json' })
     )
   })
 
