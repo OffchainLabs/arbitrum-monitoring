@@ -9,9 +9,11 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 export const redeemRetryable = async (
-  parentTxHash: string
+  parentTxHash: string,
+  options: { configPath?: string; retryableCreationId?: string } = {}
 ): Promise<string> => {
-  const config = getConfig({ configPath: DEFAULT_CONFIG_PATH })
+  const { configPath = DEFAULT_CONFIG_PATH, retryableCreationId } = options
+  const config = getConfig({ configPath })
 
   const pk = process.env.RETRYABLE_MONITORING_PRIVATE_KEY
   if (!pk) {
@@ -43,8 +45,17 @@ export const redeemRetryable = async (
       const messages = await parentReceipt.getParentToChildMessages(wallet)
       if (!messages || messages.length === 0) continue // no L1->L2 messages associated; try next chain
 
-      // If multiple, redeem the first (adjust selection logic if needed)
-      const message = messages[0]
+      // a parent tx can create several tickets; pick the requested one so we
+      // never redeem a sibling ticket, falling back to the first when the
+      // caller has no specific ticket in mind
+      const message = retryableCreationId
+        ? messages.find(
+            m =>
+              m.retryableCreationId.toLowerCase() ===
+              retryableCreationId.toLowerCase()
+          )
+        : messages[0]
+      if (!message) continue
 
       // 3) If already redeemed, return its tx hash instead of throwing
       const already = await message.getSuccessfulRedeem().catch(() => null)

@@ -1,7 +1,7 @@
 import { notionClient, databaseId } from './createNotionClient'
 import { postSlackMessage } from '../slack/postSlackMessage'
 import { redeemRetryable } from '../../core/redeemRetryable'
-import type { ChildNetwork } from 'utils'
+import { DEFAULT_CONFIG_PATH, type ChildNetwork } from 'utils'
 
 const formatDate = (iso: string | undefined) => {
   if (!iso) return '(unknown)'
@@ -18,6 +18,10 @@ const formatDate = (iso: string | undefined) => {
   }).format(date)
 }
 
+// Notion's ParentTx property stores the explorer URL, not the raw hash
+export const extractTxHash = (value: string | undefined) =>
+  value?.match(/0x[a-fA-F0-9]{64}/)?.[0] ?? null
+
 const isNearExpiry = (iso: string | undefined, hours = 24) => {
   if (!iso) return false
   const expiry = new Date(iso).getTime()
@@ -28,7 +32,8 @@ const isNearExpiry = (iso: string | undefined, hours = 24) => {
 
 export const alertUntriagedNotionRetryables = async (
   childChains: ChildNetwork[] = [],
-  enableAutoRedeem = false // controls >96h silent redemption
+  enableAutoRedeem = false,
+  configPath: string = DEFAULT_CONFIG_PATH
 ) => {
   const allowedChainIds = childChains.map(c => c.chainId)
   const response = await notionClient.databases.query({
@@ -103,8 +108,24 @@ export const alertUntriagedNotionRetryables = async (
       if (under24HoursLeftToExpire) {
         message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Check why it hasn't been executed.`
       } else if (hoursLeft <= 96) {
+        if (!enableAutoRedeem) continue
+
+        const parentTxHash = extractTxHash(parentTx)
+        const retryableCreationId = extractTxHash(retryableUrl)
+        // never fall back to redeeming an arbitrary ticket: without the
+        // row's own ticket id we could redeem a sibling from the same parent tx
+        if (!parentTxHash || !retryableCreationId) {
+          console.error(
+            `[notion] skipping auto-redeem, could not read tx hashes (parent: "${parentTx}", ticket: "${retryableUrl}")`
+          )
+          continue
+        }
+
         try {
-          await redeemRetryable(parentTx)
+          await redeemRetryable(parentTxHash, {
+            configPath,
+            retryableCreationId,
+          })
           await notionClient.pages.update({
             page_id: page.id,
             properties: {
@@ -113,7 +134,8 @@ export const alertUntriagedNotionRetryables = async (
               },
             },
           })
-        } catch {
+        } catch (err) {
+          console.error(`[notion] auto-redeem failed for ${parentTxHash}:`, err)
           await notionClient.pages.update({
             page_id: page.id,
             properties: {

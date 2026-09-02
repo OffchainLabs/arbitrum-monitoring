@@ -106,17 +106,6 @@ const processChildChain = async (
         await handleRedeemedRetryablesFound(ticket, writeToNotion)
       },
     })
-
-    // todo: get closure on this - will it even be called
-    if (writeToNotion) {
-      console.log('Activating continuous sweep of Notion database...')
-      setInterval(async () => {
-        await alertUntriagedNotionRetryables(
-          config.childChains,
-          options.autoRedeem
-        )
-      }, 1000 * 60 * 60) // Run every hour
-    }
   } else {
     console.log('Activating one-off check for retryables...')
     const retryablesFound = await checkRetryablesOneOff({
@@ -206,7 +195,24 @@ const processOrbitChainsConcurrently = async () => {
 
   // once we process all the chains go through the Notion database once to alert on any `Unresolved` tickets found
   if (options.writeToNotion) {
-    await alertUntriagedNotionRetryables(config.childChains, options.autoRedeem)
+    await alertUntriagedNotionRetryables(
+      config.childChains,
+      options.autoRedeem,
+      options.configPath
+    )
+
+    // one sweep covering every chain, never one sweep per chain: concurrent
+    // sweeps read the same rows and would each submit a redemption for them
+    if (options.continuous) {
+      console.log('Activating continuous sweep of Notion database...')
+      setInterval(async () => {
+        await alertUntriagedNotionRetryables(
+          config.childChains,
+          options.autoRedeem,
+          options.configPath
+        )
+      }, 1000 * 60 * 60) // Run every hour
+    }
   }
 
   // dump every failed retryable found in this run to a JSON file which CI
