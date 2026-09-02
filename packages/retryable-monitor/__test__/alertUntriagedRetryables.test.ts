@@ -30,7 +30,10 @@ const CHILD_TX_HASH =
 
 const CHAINS = [{ chainId: 42161 }] as any
 
-const buildPage = (hoursUntilExpiry: number) => ({
+const buildPage = (
+  hoursUntilExpiry: number,
+  childTx = `https://robinhoodchain.blockscout.com/tx/${CHILD_TX_HASH}`
+) => ({
   id: 'page-1',
   properties: {
     ChainID: { number: 42161 },
@@ -41,15 +44,7 @@ const buildPage = (hoursUntilExpiry: number) => ({
         { text: { content: `https://etherscan.io/tx/${PARENT_TX_HASH}` } },
       ],
     },
-    ChildTx: {
-      title: [
-        {
-          text: {
-            content: `https://robinhoodchain.blockscout.com/tx/${CHILD_TX_HASH}`,
-          },
-        },
-      ],
-    },
+    ChildTx: { title: [{ text: { content: childTx } }] },
     timeoutTimestamp: {
       date: {
         start: new Date(
@@ -120,6 +115,15 @@ describe('alertUntriagedNotionRetryables', () => {
       PARENT_TX_HASH,
       expect.objectContaining({ configPath: '../../rh.config.json' })
     )
+  })
+
+  test('skips rather than redeeming a sibling ticket when ChildTx is unusable', async () => {
+    databasesQuery.mockResolvedValue({ results: [buildPage(48, '(unknown)')] })
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(redeemRetryable).not.toHaveBeenCalled()
+    expect(pagesUpdate).not.toHaveBeenCalled()
   })
 
   test('does not redeem when auto-redeem is disabled', async () => {

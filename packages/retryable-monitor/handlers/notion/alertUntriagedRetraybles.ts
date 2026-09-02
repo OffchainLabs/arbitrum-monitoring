@@ -111,9 +111,12 @@ export const alertUntriagedNotionRetryables = async (
         if (!enableAutoRedeem) continue
 
         const parentTxHash = extractTxHash(parentTx)
-        if (!parentTxHash) {
+        const retryableCreationId = extractTxHash(retryableUrl)
+        // never fall back to redeeming an arbitrary ticket: without the
+        // row's own ticket id we could redeem a sibling from the same parent tx
+        if (!parentTxHash || !retryableCreationId) {
           console.error(
-            `[notion] no parent tx hash found in "${parentTx}", skipping auto-redeem`
+            `[notion] skipping auto-redeem, could not read tx hashes (parent: "${parentTx}", ticket: "${retryableUrl}")`
           )
           continue
         }
@@ -121,7 +124,7 @@ export const alertUntriagedNotionRetryables = async (
         try {
           await redeemRetryable(parentTxHash, {
             configPath,
-            retryableCreationId: extractTxHash(retryableUrl) ?? undefined,
+            retryableCreationId,
           })
           await notionClient.pages.update({
             page_id: page.id,
