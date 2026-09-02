@@ -18,6 +18,10 @@ const formatDate = (iso: string | undefined) => {
   }).format(date)
 }
 
+// Notion's ParentTx property stores the explorer URL, not the raw hash
+export const extractTxHash = (value: string | undefined) =>
+  value?.match(/0x[a-fA-F0-9]{64}/)?.[0] ?? null
+
 const isNearExpiry = (iso: string | undefined, hours = 24) => {
   if (!iso) return false
   const expiry = new Date(iso).getTime()
@@ -28,7 +32,7 @@ const isNearExpiry = (iso: string | undefined, hours = 24) => {
 
 export const alertUntriagedNotionRetryables = async (
   childChains: ChildNetwork[] = [],
-  enableAutoRedeem = false // controls >96h silent redemption
+  enableAutoRedeem = false
 ) => {
   const allowedChainIds = childChains.map(c => c.chainId)
   const response = await notionClient.databases.query({
@@ -103,8 +107,18 @@ export const alertUntriagedNotionRetryables = async (
       if (under24HoursLeftToExpire) {
         message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Check why it hasn't been executed.`
       } else if (hoursLeft <= 96) {
+        if (!enableAutoRedeem) continue
+
+        const parentTxHash = extractTxHash(parentTx)
+        if (!parentTxHash) {
+          console.error(
+            `[notion] no parent tx hash found in "${parentTx}", skipping auto-redeem`
+          )
+          continue
+        }
+
         try {
-          await redeemRetryable(parentTx)
+          await redeemRetryable(parentTxHash)
           await notionClient.pages.update({
             page_id: page.id,
             properties: {
@@ -113,7 +127,8 @@ export const alertUntriagedNotionRetryables = async (
               },
             },
           })
-        } catch {
+        } catch (err) {
+          console.error(`[notion] auto-redeem failed for ${parentTxHash}:`, err)
           await notionClient.pages.update({
             page_id: page.id,
             properties: {
