@@ -117,8 +117,7 @@ export const alertUntriagedNotionRetryables = async (
 
         const parentTxHash = extractTxHash(parentTx)
         const retryableCreationId = extractTxHash(retryableUrl)
-        // never fall back to redeeming an arbitrary ticket: without the
-        // row's own ticket id we could redeem a sibling from the same parent tx
+        // without the row's own ticket id we could redeem a sibling
         if (!parentTxHash || !retryableCreationId) {
           console.error(
             `[notion] skipping auto-redeem, could not read tx hashes (parent: "${parentTx}", ticket: "${retryableUrl}")`
@@ -128,8 +127,7 @@ export const alertUntriagedNotionRetryables = async (
 
         const locator = { configPath, retryableCreationId, chainId: chainIdRaw }
 
-        // the ticket may have been redeemed or expired since the row was
-        // written, by us or by anyone else, so trust the chain over Notion
+        // the row may predate a redemption by anyone, so trust the chain
         let liveStatus: string | null = null
         try {
           liveStatus = await getLiveRetryableStatus(parentTxHash, locator)
@@ -150,8 +148,7 @@ export const alertUntriagedNotionRetryables = async (
           })
         }
 
-        // only a ticket whose funds are sitting on the child chain can be
-        // redeemed; anything else would fail every run until it expires
+        // anything else fails every run until the ticket expires
         if (liveStatus && liveStatus !== REDEEMABLE_STATUS) {
           console.log(
             `[notion] skipping auto-redeem for ${retryableUrl}, status is ${liveStatus}`

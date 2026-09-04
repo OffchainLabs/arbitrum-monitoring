@@ -82,12 +82,10 @@ export const getLiveTicketTimeout = async (
 }
 
 /**
- * Returns the hash of the child chain tx that successfully redeemed the
- * ticket, or undefined if it was never redeemed.
+ * Hash of the tx that successfully redeemed the ticket, or undefined.
  *
- * Needed because the SDK reports any ticket whose creation receipt is marked
- * reverted as CREATION_FAILED and returns before it looks for a redemption,
- * so a redeemed ticket of that kind never reports as REDEEMED.
+ * Needed because the SDK reports a ticket whose creation receipt is marked
+ * reverted as CREATION_FAILED and returns before it looks for a redemption.
  */
 export const findSuccessfulRedeem = async (
   ticketId: string,
@@ -122,9 +120,7 @@ export const findSuccessfulRedeem = async (
 
     if (toBlock === latestBlock) break
 
-    // size the next window to roughly a day, so scanning a ticket's whole
-    // lifetime costs a handful of queries rather than thousands on a chain
-    // with sub-second blocks
+    // aim for ~a day per window, so a 7-day lifetime costs a few queries
     const [fromBlockData, toBlockData] = await Promise.all([
       childChainProvider.getBlock(fromBlock),
       childChainProvider.getBlock(toBlock),

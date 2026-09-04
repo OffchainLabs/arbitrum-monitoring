@@ -45,8 +45,6 @@ const locateMessage = async (
     )
   }
 
-  // the caller usually knows which chain the ticket belongs to; probing every
-  // configured chain is only a fallback
   const candidates: ChildNetwork[] = chainId
     ? config.childChains.filter((c: ChildNetwork) => c.chainId === chainId)
     : config.childChains
@@ -70,13 +68,11 @@ const locateMessage = async (
 
       const parentReceipt = new ParentTransactionReceipt(receipt)
       // the SDK filters these by the child chain's inbox, so a ticket never
-      // matches a sibling chain that shares the same parent
+      // matches a sibling chain sharing the same parent
       const messages = await parentReceipt.getParentToChildMessages(wallet)
       if (!messages || messages.length === 0) continue
 
-      // a parent tx can create several tickets; pick the requested one so we
-      // never touch a sibling ticket, falling back to the first when the
-      // caller has no specific ticket in mind
+      // a parent tx can create several tickets; never touch a sibling
       const message = retryableCreationId
         ? messages.find(
             m =>
@@ -106,9 +102,7 @@ const locateMessage = async (
 }
 
 /**
- * Reads the ticket's current status from the chain, so callers can reflect
- * reality regardless of who redeemed it. Returns null when the ticket cannot
- * be located on any configured chain.
+ * Reads the ticket's status from the chain. Null if it cannot be located.
  */
 export const getLiveRetryableStatus = async (
   parentTxHash: string,
@@ -126,10 +120,8 @@ export const getLiveRetryableStatus = async (
     return NOTION_EXECUTED_STATUS
   }
 
-  // A submit-retryable tx can be marked reverted even though the ticket was
-  // created. The SDK reports those as CREATION_FAILED and returns before it
-  // looks for a redemption, so both "still live" and "already redeemed" have
-  // to be established here instead.
+  // a submit-retryable tx can be marked reverted even though the ticket was
+  // created, and the SDK calls those CREATION_FAILED without looking further
   if (status === ParentToChildMessageStatus.CREATION_FAILED) {
     const creationReceipt = await message.getRetryableCreationReceipt()
     if (!creationReceipt || !hasTicketCreatedEvent(creationReceipt)) {
@@ -142,8 +134,7 @@ export const getLiveRetryableStatus = async (
     )
     if (onChainTimeout !== undefined) return REDEEMABLE_STATUS
 
-    // the ticket was created but is gone, so it was redeemed, cancelled or
-    // expired; only a successful redeem tx proves the first
+    // created but gone: redeemed, cancelled or expired
     const redeemTxHash = await findSuccessfulRedeem(
       message.retryableCreationId,
       creationReceipt.blockNumber,
@@ -164,11 +155,8 @@ export const redeemRetryable = async (
 
   if (message && childChain && childChainProvider && wallet) {
     try {
-      // The SDK's redeem() re-derives status() and rejects any ticket whose
-      // creation receipt is marked reverted, even when the ticket is live and
-      // redeemable. getTimeout() reverting with NoTicketWithID is the only
-      // thing that proves a ticket does not exist, so it stands in for the
-      // SDK's guard and we call the precompile ourselves.
+      // the SDK's redeem() rejects tickets it reports as CREATION_FAILED, so
+      // NoTicketWithID stands in for its guard and we call the precompile
       const onChainTimeout = await getLiveTicketTimeout(
         message.retryableCreationId,
         childChainProvider
@@ -193,6 +181,17 @@ export const redeemRetryable = async (
         ChildTransactionReceipt.monkeyPatchWait(redeemTx),
         childChainProvider
       ).waitForRedeem()
+
+      // waitForRedeem does not inspect the receipt, and a reverted retry
+      // leaves the ticket redeemable
+      if (redeemReceipt?.status !== 1) {
+        throw new Error(
+          `Retry execution ${
+            redeemReceipt?.transactionHash ?? '(no receipt)'
+          } for ticket ${message.retryableCreationId} did not succeed`
+        )
+      }
+
       console.log(
         `Redeem successful on childChain ${childChain.chainId}: ${redeemReceipt.transactionHash}`
       )
