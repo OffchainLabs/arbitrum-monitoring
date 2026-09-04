@@ -65,15 +65,26 @@ describe('findSuccessfulRedeem', () => {
     )
   })
 
-  test('walks the range in windows instead of one unbounded query', async () => {
-    provider.getBlockNumber.mockResolvedValue(5_000)
-    provider.getBlock.mockResolvedValue({ timestamp: 0 })
+  test('splits the range into bounded chunks', async () => {
+    provider.getBlockNumber.mockResolvedValue(10_000)
 
     await findSuccessfulRedeem(TICKET_ID, 0, provider)
 
     expect(provider.getLogs.mock.calls.length).toBeGreaterThan(1)
-    expect(provider.getLogs).toHaveBeenCalledWith(
-      expect.objectContaining({ fromBlock: 0, toBlock: 1_000 })
+    for (const [{ fromBlock, toBlock }] of provider.getLogs.mock.calls) {
+      expect(toBlock - fromBlock).toBeLessThan(2_000)
+    }
+  })
+
+  test('stops scanning once the redeem is found', async () => {
+    provider.getBlockNumber.mockResolvedValue(10_000)
+    provider.getLogs.mockResolvedValueOnce([redeemScheduledLog()])
+    provider.getTransactionReceipt.mockResolvedValue({ status: 1 })
+
+    await expect(findSuccessfulRedeem(TICKET_ID, 0, provider)).resolves.toBe(
+      RETRY_TX_HASH
     )
+
+    expect(provider.getLogs).toHaveBeenCalledTimes(1)
   })
 })

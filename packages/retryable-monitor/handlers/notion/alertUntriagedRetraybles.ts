@@ -148,10 +148,13 @@ export const alertUntriagedNotionRetryables = async (
           })
         }
 
-        // anything else fails every run until the ticket expires
-        if (liveStatus && liveStatus !== REDEEMABLE_STATUS) {
+        // only redeem on a confirmed redeemable status; a failed lookup is not
+        // evidence the ticket is redeemable
+        if (liveStatus !== REDEEMABLE_STATUS) {
           console.log(
-            `[notion] skipping auto-redeem for ${retryableUrl}, status is ${liveStatus}`
+            `[notion] skipping auto-redeem for ${retryableUrl}, status is ${
+              liveStatus ?? 'unknown'
+            }`
           )
           continue
         }

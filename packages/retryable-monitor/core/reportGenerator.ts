@@ -14,11 +14,14 @@ import {
   SEVEN_DAYS_IN_SECONDS,
 } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 import { ArbRetryableTx__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ArbRetryableTx__factory'
-import { withRetry } from 'utils'
+import { withRetry, processBlockRangeInChunks } from 'utils'
 import { ChildChainTicketReport, ParentChainTicketReport } from './types'
 
 // selector of ArbRetryableTx's NoTicketWithID() custom error
 const NO_TICKET_WITH_ID_SELECTOR = '0x80698456'
+
+// same ceiling the checker scans with, so an RPC that accepts one accepts both
+const REDEEM_SCAN_CHUNK_SIZE = 2000
 
 // keccak256 of ArbRetryableTx's TicketCreated(bytes32) event signature
 export const TICKET_CREATED_TOPIC =
@@ -97,43 +100,36 @@ export const findSuccessfulRedeem = async (
     childChainProvider
   )
   const filter = arbRetryableTx.filters.RedeemScheduled(ticketId)
-
   const latestBlock = await childChainProvider.getBlockNumber()
-  let fromBlock = creationBlockNumber
-  let increment = 1000
 
-  while (fromBlock <= latestBlock) {
-    const toBlock = Math.min(fromBlock + increment, latestBlock)
-
-    const logs = await withRetry(
-      () => childChainProvider.getLogs({ ...filter, fromBlock, toBlock }),
-      { label: 'ArbRetryableTx.RedeemScheduled' }
-    )
-
-    for (const log of logs) {
-      const { retryTxHash } = arbRetryableTx.interface.parseLog(log).args
-      const receipt = await childChainProvider.getTransactionReceipt(
-        retryTxHash
+  return processBlockRangeInChunks<string | undefined>(
+    creationBlockNumber,
+    latestBlock,
+    REDEEM_SCAN_CHUNK_SIZE,
+    async (fromBlock, toBlock) => {
+      const logs = await withRetry(
+        () => childChainProvider.getLogs({ ...filter, fromBlock, toBlock }),
+        { label: 'ArbRetryableTx.RedeemScheduled' }
       )
-      if (receipt?.status === 1) return retryTxHash
-    }
 
-    if (toBlock === latestBlock) break
+      for (const log of logs) {
+        const { retryTxHash } = arbRetryableTx.interface.parseLog(log).args
+        const receipt = await childChainProvider.getTransactionReceipt(
+          retryTxHash
+        )
+        if (receipt?.status === 1) return retryTxHash
+      }
 
-    // aim for ~a day per window, so a 7-day lifetime costs a few queries
-    const [fromBlockData, toBlockData] = await Promise.all([
-      childChainProvider.getBlock(fromBlock),
-      childChainProvider.getBlock(toBlock),
-    ])
-    const processedSeconds = toBlockData.timestamp - fromBlockData.timestamp
-    if (processedSeconds > 0) {
-      increment = Math.ceil((increment * 86400) / processedSeconds)
-    }
-    fromBlock = toBlock + 1
-  }
-
-  return undefined
+      return undefined
+    },
+    (prev, next) => prev ?? next,
+    undefined,
+    { stopWhen: found => found !== undefined }
+  )
 }
+
+export const isPastTicketLifetime = (createdAtTimestamp: number): boolean =>
+  Date.now() / 1000 >= createdAtTimestamp + SEVEN_DAYS_IN_SECONDS
 
 export const getParentChainRetryableReport = (
   arbParentTxReceipt: ParentTransactionReceipt,
@@ -182,7 +178,7 @@ export const getChildChainRetryableReport = async ({
   if (
     status === ParentToChildMessageStatus.CREATION_FAILED &&
     hasTicketCreatedEvent(childChainTxReceipt) &&
-    Date.now() / 1000 >= Number(timestamp) + SEVEN_DAYS_IN_SECONDS
+    isPastTicketLifetime(Number(timestamp))
   ) {
     status = ParentToChildMessageStatus.EXPIRED
   }

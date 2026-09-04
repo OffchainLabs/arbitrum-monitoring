@@ -12,6 +12,7 @@ import {
   getLiveTicketTimeout,
   hasTicketCreatedEvent,
   findSuccessfulRedeem,
+  isPastTicketLifetime,
 } from './reportGenerator'
 
 dotenv.config()
@@ -141,6 +142,15 @@ export const getLiveRetryableStatus = async (
       childChainProvider
     )
     if (redeemTxHash) return NOTION_EXECUTED_STATUS
+
+    // resolve expiry the same way the checker does, or the two would write
+    // conflicting statuses for the same ticket
+    const { timestamp } = await childChainProvider.getBlock(
+      creationReceipt.blockNumber
+    )
+    if (isPastTicketLifetime(timestamp)) {
+      return ParentToChildMessageStatus[ParentToChildMessageStatus.EXPIRED]
+    }
   }
 
   return ParentToChildMessageStatus[status]

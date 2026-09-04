@@ -179,6 +179,23 @@ describe('alertUntriagedNotionRetryables', () => {
     expect(pagesUpdate).not.toHaveBeenCalled()
   })
 
+  test('does not redeem when the live status could not be read', async () => {
+    vi.mocked(getLiveRetryableStatus).mockRejectedValue(new Error('rpc down'))
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(redeemRetryable).not.toHaveBeenCalled()
+    expect(pagesUpdate).not.toHaveBeenCalled()
+  })
+
+  test('does not redeem when the ticket cannot be located', async () => {
+    vi.mocked(getLiveRetryableStatus).mockResolvedValue(null)
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(redeemRetryable).not.toHaveBeenCalled()
+  })
+
   test('does not redeem when auto-redeem is disabled', async () => {
     await alertUntriagedNotionRetryables(CHAINS, false)
 
