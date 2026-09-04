@@ -2,10 +2,17 @@ import { providers, Wallet } from 'ethers'
 import {
   ParentTransactionReceipt,
   ParentToChildMessageStatus,
+  ChildTransactionReceipt,
 } from '@arbitrum/sdk'
+import { ARB_RETRYABLE_TX_ADDRESS } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
+import { ArbRetryableTx__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ArbRetryableTx__factory'
 import { getConfig, DEFAULT_CONFIG_PATH, ChildNetwork } from 'utils'
 import dotenv from 'dotenv'
-import { getLiveTicketTimeout } from './reportGenerator'
+import {
+  getLiveTicketTimeout,
+  hasTicketCreatedEvent,
+  findSuccessfulRedeem,
+} from './reportGenerator'
 
 dotenv.config()
 
@@ -79,7 +86,7 @@ const locateMessage = async (
         : messages[0]
       if (!message) continue
 
-      return { message, childChain, childChainProvider, errors }
+      return { message, childChain, childChainProvider, wallet, errors }
     } catch (err) {
       console.error(
         `Error while processing parentTx ${parentTxHash} on chain ${childChain.chainId}:`,
@@ -93,6 +100,7 @@ const locateMessage = async (
     message: null,
     childChain: null,
     childChainProvider: null,
+    wallet: null,
     errors,
   }
 }
@@ -118,14 +126,30 @@ export const getLiveRetryableStatus = async (
     return NOTION_EXECUTED_STATUS
   }
 
-  // a submit-retryable tx can be marked reverted even though the ticket was
-  // created, which makes the SDK report live tickets as CREATION_FAILED
+  // A submit-retryable tx can be marked reverted even though the ticket was
+  // created. The SDK reports those as CREATION_FAILED and returns before it
+  // looks for a redemption, so both "still live" and "already redeemed" have
+  // to be established here instead.
   if (status === ParentToChildMessageStatus.CREATION_FAILED) {
+    const creationReceipt = await message.getRetryableCreationReceipt()
+    if (!creationReceipt || !hasTicketCreatedEvent(creationReceipt)) {
+      return ParentToChildMessageStatus[status]
+    }
+
     const onChainTimeout = await getLiveTicketTimeout(
       message.retryableCreationId,
       childChainProvider
     )
     if (onChainTimeout !== undefined) return REDEEMABLE_STATUS
+
+    // the ticket was created but is gone, so it was redeemed, cancelled or
+    // expired; only a successful redeem tx proves the first
+    const redeemTxHash = await findSuccessfulRedeem(
+      message.retryableCreationId,
+      creationReceipt.blockNumber,
+      childChainProvider
+    )
+    if (redeemTxHash) return NOTION_EXECUTED_STATUS
   }
 
   return ParentToChildMessageStatus[status]
@@ -135,26 +159,40 @@ export const redeemRetryable = async (
   parentTxHash: string,
   options: LocateOptions = {}
 ): Promise<string> => {
-  const { message, childChain, errors } = await locateMessage(
-    parentTxHash,
-    options
-  )
+  const { message, childChain, childChainProvider, wallet, errors } =
+    await locateMessage(parentTxHash, options)
 
-  if (message && childChain) {
-    const already = await message.getSuccessfulRedeem().catch(() => null)
-    if (already && already.status === ParentToChildMessageStatus.REDEEMED) {
-      const existingHash =
-        (already as any)?.childTxReceipt?.transactionHash ??
-        (already as any)?.txHash
-      if (existingHash) return existingHash
-    }
-
+  if (message && childChain && childChainProvider && wallet) {
     try {
-      const tx = await message.redeem()
-      console.log(
-        `Sent redeem tx on childChain ${childChain.chainId}: ${tx.hash}`
+      // The SDK's redeem() re-derives status() and rejects any ticket whose
+      // creation receipt is marked reverted, even when the ticket is live and
+      // redeemable. getTimeout() reverting with NoTicketWithID is the only
+      // thing that proves a ticket does not exist, so it stands in for the
+      // SDK's guard and we call the precompile ourselves.
+      const onChainTimeout = await getLiveTicketTimeout(
+        message.retryableCreationId,
+        childChainProvider
       )
-      const redeemReceipt = await tx.waitForRedeem()
+
+      if (onChainTimeout === undefined) {
+        throw new Error(
+          `Ticket ${message.retryableCreationId} no longer exists on chain ${childChain.chainId}`
+        )
+      }
+
+      const arbRetryableTx = ArbRetryableTx__factory.connect(
+        ARB_RETRYABLE_TX_ADDRESS,
+        wallet
+      )
+      const redeemTx = await arbRetryableTx.redeem(message.retryableCreationId)
+      console.log(
+        `Sent redeem tx on childChain ${childChain.chainId}: ${redeemTx.hash}`
+      )
+
+      const redeemReceipt = await ChildTransactionReceipt.toRedeemTransaction(
+        ChildTransactionReceipt.monkeyPatchWait(redeemTx),
+        childChainProvider
+      ).waitForRedeem()
       console.log(
         `Redeem successful on childChain ${childChain.chainId}: ${redeemReceipt.transactionHash}`
       )

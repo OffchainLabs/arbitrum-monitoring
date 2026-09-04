@@ -27,7 +27,7 @@ export const TICKET_CREATED_TOPIC =
 // a submit-retryable tx emits TicketCreated even when its receipt is marked
 // as reverted (e.g. when the requested auto-redeem could not be paid for), so
 // the event is what proves a ticket was actually created
-const hasTicketCreatedEvent = (receipt: TransactionReceipt): boolean =>
+export const hasTicketCreatedEvent = (receipt: TransactionReceipt): boolean =>
   (receipt.logs ?? []).some(
     log =>
       log.address.toLowerCase() === ARB_RETRYABLE_TX_ADDRESS.toLowerCase() &&
@@ -79,6 +79,64 @@ export const getLiveTicketTimeout = async (
     if (isNoTicketWithIdError(error)) return undefined
     throw error
   }
+}
+
+/**
+ * Returns the hash of the child chain tx that successfully redeemed the
+ * ticket, or undefined if it was never redeemed.
+ *
+ * Needed because the SDK reports any ticket whose creation receipt is marked
+ * reverted as CREATION_FAILED and returns before it looks for a redemption,
+ * so a redeemed ticket of that kind never reports as REDEEMED.
+ */
+export const findSuccessfulRedeem = async (
+  ticketId: string,
+  creationBlockNumber: number,
+  childChainProvider: providers.Provider
+): Promise<string | undefined> => {
+  const arbRetryableTx = ArbRetryableTx__factory.connect(
+    ARB_RETRYABLE_TX_ADDRESS,
+    childChainProvider
+  )
+  const filter = arbRetryableTx.filters.RedeemScheduled(ticketId)
+
+  const latestBlock = await childChainProvider.getBlockNumber()
+  let fromBlock = creationBlockNumber
+  let increment = 1000
+
+  while (fromBlock <= latestBlock) {
+    const toBlock = Math.min(fromBlock + increment, latestBlock)
+
+    const logs = await withRetry(
+      () => childChainProvider.getLogs({ ...filter, fromBlock, toBlock }),
+      { label: 'ArbRetryableTx.RedeemScheduled' }
+    )
+
+    for (const log of logs) {
+      const { retryTxHash } = arbRetryableTx.interface.parseLog(log).args
+      const receipt = await childChainProvider.getTransactionReceipt(
+        retryTxHash
+      )
+      if (receipt?.status === 1) return retryTxHash
+    }
+
+    if (toBlock === latestBlock) break
+
+    // size the next window to roughly a day, so scanning a ticket's whole
+    // lifetime costs a handful of queries rather than thousands on a chain
+    // with sub-second blocks
+    const [fromBlockData, toBlockData] = await Promise.all([
+      childChainProvider.getBlock(fromBlock),
+      childChainProvider.getBlock(toBlock),
+    ])
+    const processedSeconds = toBlockData.timestamp - fromBlockData.timestamp
+    if (processedSeconds > 0) {
+      increment = Math.ceil((increment * 86400) / processedSeconds)
+    }
+    fromBlock = toBlock + 1
+  }
+
+  return undefined
 }
 
 export const getParentChainRetryableReport = (
