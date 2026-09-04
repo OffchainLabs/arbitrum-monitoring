@@ -1,6 +1,11 @@
 import { notionClient, databaseId } from './createNotionClient'
 import { postSlackMessage } from '../slack/postSlackMessage'
-import { redeemRetryable } from '../../core/redeemRetryable'
+import {
+  redeemRetryable,
+  getLiveRetryableStatus,
+  NOTION_EXECUTED_STATUS,
+  REDEEMABLE_STATUS,
+} from '../../core/redeemRetryable'
 import { DEFAULT_CONFIG_PATH, type ChildNetwork } from 'utils'
 
 const formatDate = (iso: string | undefined) => {
@@ -121,14 +126,45 @@ export const alertUntriagedNotionRetryables = async (
           continue
         }
 
+        const locator = { configPath, retryableCreationId, chainId: chainIdRaw }
+
+        // the ticket may have been redeemed or expired since the row was
+        // written, by us or by anyone else, so trust the chain over Notion
+        let liveStatus: string | null = null
         try {
-          await redeemRetryable(parentTxHash, {
-            configPath,
-            retryableCreationId,
+          liveStatus = await getLiveRetryableStatus(parentTxHash, locator)
+        } catch (err) {
+          console.error(
+            `[notion] could not read live status for ${retryableUrl}:`,
+            err
+          )
+        }
+
+        if (liveStatus && liveStatus !== status) {
+          console.log(
+            `[notion] ${retryableUrl} status ${status} -> ${liveStatus}`
+          )
+          await notionClient.pages.update({
+            page_id: page.id,
+            properties: { Status: { select: { name: liveStatus } } },
           })
+        }
+
+        // only a ticket whose funds are sitting on the child chain can be
+        // redeemed; anything else would fail every run until it expires
+        if (liveStatus && liveStatus !== REDEEMABLE_STATUS) {
+          console.log(
+            `[notion] skipping auto-redeem for ${retryableUrl}, status is ${liveStatus}`
+          )
+          continue
+        }
+
+        try {
+          await redeemRetryable(parentTxHash, locator)
           await notionClient.pages.update({
             page_id: page.id,
             properties: {
+              Status: { select: { name: NOTION_EXECUTED_STATUS } },
               'Bot Redemption Status': {
                 select: { name: 'Bot Success' },
               },

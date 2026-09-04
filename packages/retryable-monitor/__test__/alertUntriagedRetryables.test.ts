@@ -11,7 +11,12 @@ vi.mock('../handlers/notion/createNotionClient', () => ({
   databaseId: 'test-db',
 }))
 
-vi.mock('../core/redeemRetryable', () => ({ redeemRetryable: vi.fn() }))
+vi.mock('../core/redeemRetryable', () => ({
+  redeemRetryable: vi.fn(),
+  getLiveRetryableStatus: vi.fn(),
+  NOTION_EXECUTED_STATUS: 'Executed',
+  REDEEMABLE_STATUS: 'FUNDS_DEPOSITED_ON_CHILD',
+}))
 
 vi.mock('../handlers/slack/postSlackMessage', () => ({
   postSlackMessage: vi.fn(),
@@ -21,7 +26,10 @@ import {
   alertUntriagedNotionRetryables,
   extractTxHash,
 } from '../handlers/notion/alertUntriagedRetraybles'
-import { redeemRetryable } from '../core/redeemRetryable'
+import {
+  redeemRetryable,
+  getLiveRetryableStatus,
+} from '../core/redeemRetryable'
 
 const PARENT_TX_HASH =
   '0xe60d848b8fae81b103135825c30c2ca169170100cad7fbdf3e73d062e3fc90d6'
@@ -37,7 +45,7 @@ const buildPage = (
   id: 'page-1',
   properties: {
     ChainID: { number: 42161 },
-    Status: { select: { name: 'Pending' } },
+    Status: { select: { name: 'FUNDS_DEPOSITED_ON_CHILD' } },
     Decision: { select: { name: 'Should Redeem' } },
     ParentTx: {
       rich_text: [
@@ -76,6 +84,9 @@ describe('alertUntriagedNotionRetryables', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     databasesQuery.mockResolvedValue({ results: [buildPage(48)] })
+    vi.mocked(getLiveRetryableStatus).mockResolvedValue(
+      'FUNDS_DEPOSITED_ON_CHILD'
+    )
   })
 
   test('redeems with the raw hash, not the explorer URL', async () => {
@@ -83,13 +94,55 @@ describe('alertUntriagedNotionRetryables', () => {
 
     expect(redeemRetryable).toHaveBeenCalledWith(
       PARENT_TX_HASH,
-      expect.objectContaining({ retryableCreationId: CHILD_TX_HASH })
+      expect.objectContaining({
+        retryableCreationId: CHILD_TX_HASH,
+        chainId: 42161,
+      })
     )
+  })
+
+  test('marks the page executed as well as redeemed on success', async () => {
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
     expect(pagesUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         properties: {
+          Status: { select: { name: 'Executed' } },
           'Bot Redemption Status': { select: { name: 'Bot Success' } },
         },
+      })
+    )
+  })
+
+  test('writes back the live status when Notion is stale', async () => {
+    vi.mocked(getLiveRetryableStatus).mockResolvedValue('CREATION_FAILED')
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(pagesUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        properties: { Status: { select: { name: 'CREATION_FAILED' } } },
+      })
+    )
+  })
+
+  test('does not redeem a ticket that is not sitting on the child chain', async () => {
+    vi.mocked(getLiveRetryableStatus).mockResolvedValue('CREATION_FAILED')
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(redeemRetryable).not.toHaveBeenCalled()
+  })
+
+  test('records a ticket redeemed elsewhere as executed without redeeming', async () => {
+    vi.mocked(getLiveRetryableStatus).mockResolvedValue('Executed')
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(redeemRetryable).not.toHaveBeenCalled()
+    expect(pagesUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        properties: { Status: { select: { name: 'Executed' } } },
       })
     )
   })
