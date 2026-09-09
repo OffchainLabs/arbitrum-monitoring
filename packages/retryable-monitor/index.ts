@@ -201,8 +201,7 @@ const processOrbitChainsConcurrently = async () => {
       options.configPath
     )
 
-    // one sweep covering every chain, never one sweep per chain: concurrent
-    // sweeps read the same rows and would each submit a redemption for them
+    // one sweep for all chains: concurrent sweeps double-redeem the same rows
     if (options.continuous) {
       console.log('Activating continuous sweep of Notion database...')
       setInterval(async () => {

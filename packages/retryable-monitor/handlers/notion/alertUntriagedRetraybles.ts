@@ -1,6 +1,12 @@
 import { notionClient, databaseId } from './createNotionClient'
 import { postSlackMessage } from '../slack/postSlackMessage'
-import { redeemRetryable } from '../../core/redeemRetryable'
+import {
+  redeemRetryable,
+  getLiveRetryableStatus,
+  NOTION_EXECUTED_STATUS,
+  NOTION_REDEEMED_DECISION,
+  REDEEMABLE_STATUS,
+} from '../../core/redeemRetryable'
 import { DEFAULT_CONFIG_PATH, type ChildNetwork } from 'utils'
 
 const formatDate = (iso: string | undefined) => {
@@ -40,17 +46,17 @@ export const alertUntriagedNotionRetryables = async (
     database_id: databaseId,
     page_size: 100,
     filter: {
-      and: [
+      or: [
         {
-          or: [
+          and: [
             { property: 'Decision', select: { equals: 'Triage' } },
-            { property: 'Decision', select: { equals: 'Should Redeem' } },
+            {
+              property: 'Status',
+              select: { does_not_equal: 'Executed' },
+            },
           ],
         },
-        {
-          property: 'Status',
-          select: { does_not_equal: 'Executed' },
-        },
+        { property: 'Decision', select: { equals: 'Should Redeem' } },
       ],
     },
   })
@@ -112,8 +118,7 @@ export const alertUntriagedNotionRetryables = async (
 
         const parentTxHash = extractTxHash(parentTx)
         const retryableCreationId = extractTxHash(retryableUrl)
-        // never fall back to redeeming an arbitrary ticket: without the
-        // row's own ticket id we could redeem a sibling from the same parent tx
+        // without the row's own ticket id we could redeem a sibling
         if (!parentTxHash || !retryableCreationId) {
           console.error(
             `[notion] skipping auto-redeem, could not read tx hashes (parent: "${parentTx}", ticket: "${retryableUrl}")`
@@ -121,14 +126,63 @@ export const alertUntriagedNotionRetryables = async (
           continue
         }
 
+        const locator = { configPath, retryableCreationId, chainId: chainIdRaw }
+
+        // the row may predate a redemption by anyone, so trust the chain
+        let liveStatus: string | null = null
         try {
-          await redeemRetryable(parentTxHash, {
-            configPath,
-            retryableCreationId,
+          liveStatus = await getLiveRetryableStatus(parentTxHash, locator)
+        } catch (err) {
+          console.error(
+            `[notion] could not read live status for ${retryableUrl}:`,
+            err
+          )
+        }
+
+        // a ticket redeemed by anyone, bot or not, is no longer ours to redeem
+        const liveDecision =
+          liveStatus === NOTION_EXECUTED_STATUS
+            ? NOTION_REDEEMED_DECISION
+            : decision
+
+        const drift = {
+          ...(liveStatus &&
+            liveStatus !== status && {
+              Status: { select: { name: liveStatus } },
+            }),
+          ...(liveDecision !== decision && {
+            Decision: { select: { name: liveDecision } },
+          }),
+        }
+
+        if (Object.keys(drift).length > 0) {
+          console.log(
+            `[notion] ${retryableUrl} ${status}/${decision} -> ${liveStatus}/${liveDecision}`
+          )
+          await notionClient.pages.update({
+            page_id: page.id,
+            properties: drift,
           })
+        }
+
+        // only redeem on a confirmed redeemable status; a failed lookup is not
+        // evidence the ticket is redeemable
+        if (liveStatus !== REDEEMABLE_STATUS) {
+          console.log(
+            `[notion] skipping auto-redeem for ${retryableUrl}, status is ${
+              liveStatus ?? 'unknown'
+            }`
+          )
+          continue
+        }
+
+        try {
+          await redeemRetryable(parentTxHash, locator)
           await notionClient.pages.update({
             page_id: page.id,
             properties: {
+              Status: { select: { name: NOTION_EXECUTED_STATUS } },
+              Decision: { select: { name: NOTION_REDEEMED_DECISION } },
               'Bot Redemption Status': {
                 select: { name: 'Bot Success' },
               },
