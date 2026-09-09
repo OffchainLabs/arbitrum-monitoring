@@ -167,6 +167,32 @@ describe('alertUntriagedNotionRetryables', () => {
     )
   })
 
+  test('queries executed rows that are still marked for redemption', async () => {
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(databasesQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filter: {
+          or: [
+            {
+              and: [
+                { property: 'Decision', select: { equals: 'Triage' } },
+                {
+                  property: 'Status',
+                  select: { does_not_equal: 'Executed' },
+                },
+              ],
+            },
+            {
+              property: 'Decision',
+              select: { equals: 'Should Redeem' },
+            },
+          ],
+        },
+      })
+    )
+  })
+
   test('marks the page as failed when the redeem throws', async () => {
     vi.mocked(redeemRetryable).mockRejectedValueOnce(new Error('boom'))
 

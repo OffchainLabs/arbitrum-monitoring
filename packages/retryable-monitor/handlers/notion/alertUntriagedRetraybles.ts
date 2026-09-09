@@ -46,17 +46,17 @@ export const alertUntriagedNotionRetryables = async (
     database_id: databaseId,
     page_size: 100,
     filter: {
-      and: [
+      or: [
         {
-          or: [
+          and: [
             { property: 'Decision', select: { equals: 'Triage' } },
-            { property: 'Decision', select: { equals: 'Should Redeem' } },
+            {
+              property: 'Status',
+              select: { does_not_equal: 'Executed' },
+            },
           ],
         },
-        {
-          property: 'Status',
-          select: { does_not_equal: 'Executed' },
-        },
+        { property: 'Decision', select: { equals: 'Should Redeem' } },
       ],
     },
   })
