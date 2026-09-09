@@ -18,6 +18,7 @@ import {
 dotenv.config()
 
 export const NOTION_EXECUTED_STATUS = 'Executed'
+export const NOTION_REDEEMED_DECISION = 'Redeemed'
 export const REDEEMABLE_STATUS =
   ParentToChildMessageStatus[
     ParentToChildMessageStatus.FUNDS_DEPOSITED_ON_CHILD

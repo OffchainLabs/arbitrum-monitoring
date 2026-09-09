@@ -4,6 +4,7 @@ import {
   redeemRetryable,
   getLiveRetryableStatus,
   NOTION_EXECUTED_STATUS,
+  NOTION_REDEEMED_DECISION,
   REDEEMABLE_STATUS,
 } from '../../core/redeemRetryable'
 import { DEFAULT_CONFIG_PATH, type ChildNetwork } from 'utils'
@@ -138,13 +139,29 @@ export const alertUntriagedNotionRetryables = async (
           )
         }
 
-        if (liveStatus && liveStatus !== status) {
+        // a ticket redeemed by anyone, bot or not, is no longer ours to redeem
+        const liveDecision =
+          liveStatus === NOTION_EXECUTED_STATUS
+            ? NOTION_REDEEMED_DECISION
+            : decision
+
+        const drift = {
+          ...(liveStatus &&
+            liveStatus !== status && {
+              Status: { select: { name: liveStatus } },
+            }),
+          ...(liveDecision !== decision && {
+            Decision: { select: { name: liveDecision } },
+          }),
+        }
+
+        if (Object.keys(drift).length > 0) {
           console.log(
-            `[notion] ${retryableUrl} status ${status} -> ${liveStatus}`
+            `[notion] ${retryableUrl} ${status}/${decision} -> ${liveStatus}/${liveDecision}`
           )
           await notionClient.pages.update({
             page_id: page.id,
-            properties: { Status: { select: { name: liveStatus } } },
+            properties: drift,
           })
         }
 
@@ -165,6 +182,7 @@ export const alertUntriagedNotionRetryables = async (
             page_id: page.id,
             properties: {
               Status: { select: { name: NOTION_EXECUTED_STATUS } },
+              Decision: { select: { name: NOTION_REDEEMED_DECISION } },
               'Bot Redemption Status': {
                 select: { name: 'Bot Success' },
               },

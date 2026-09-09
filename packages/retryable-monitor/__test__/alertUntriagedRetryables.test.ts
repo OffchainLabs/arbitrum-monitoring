@@ -15,6 +15,7 @@ vi.mock('../core/redeemRetryable', () => ({
   redeemRetryable: vi.fn(),
   getLiveRetryableStatus: vi.fn(),
   NOTION_EXECUTED_STATUS: 'Executed',
+  NOTION_REDEEMED_DECISION: 'Redeemed',
   REDEEMABLE_STATUS: 'FUNDS_DEPOSITED_ON_CHILD',
 }))
 
@@ -108,6 +109,7 @@ describe('alertUntriagedNotionRetryables', () => {
       expect.objectContaining({
         properties: {
           Status: { select: { name: 'Executed' } },
+          Decision: { select: { name: 'Redeemed' } },
           'Bot Redemption Status': { select: { name: 'Bot Success' } },
         },
       })
@@ -142,7 +144,25 @@ describe('alertUntriagedNotionRetryables', () => {
     expect(redeemRetryable).not.toHaveBeenCalled()
     expect(pagesUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
-        properties: { Status: { select: { name: 'Executed' } } },
+        properties: {
+          Status: { select: { name: 'Executed' } },
+          Decision: { select: { name: 'Redeemed' } },
+        },
+      })
+    )
+  })
+
+  test('retires the decision of a row already marked executed', async () => {
+    const page = buildPage(48)
+    page.properties.Status = { select: { name: 'Executed' } }
+    databasesQuery.mockResolvedValue({ results: [page] })
+    vi.mocked(getLiveRetryableStatus).mockResolvedValue('Executed')
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(pagesUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        properties: { Decision: { select: { name: 'Redeemed' } } },
       })
     )
   })
