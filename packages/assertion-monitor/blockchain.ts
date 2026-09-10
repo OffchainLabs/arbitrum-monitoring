@@ -5,6 +5,7 @@ import {
   defineChain,
   getContract,
   http,
+  parseAbi,
   type Block,
   type Log,
 } from 'viem'
@@ -352,6 +353,22 @@ export const fetchChainState = async ({
     isBold
   )
 
+  let lastBlockIncludedInBatch: bigint | undefined
+  try {
+    lastBlockIncludedInBatch = await parentClient.readContract({
+      address: childChainInfo.ethBridge.bridge as `0x${string}`,
+      abi: parseAbi([
+        'function sequencerReportedSubMessageCount() view returns (uint256)',
+      ]),
+      functionName: 'sequencerReportedSubMessageCount',
+    })
+  } catch (error) {
+    console.error(
+      `Failed to query sequencerReportedSubMessageCount for ${childChainInfo.name}:`,
+      error
+    )
+  }
+
   const chainState: ChainState = {
     childCurrentBlock,
     childLatestCreatedBlock,
@@ -365,6 +382,7 @@ export const fetchChainState = async ({
     isBaseStakeBelowThreshold,
     searchFromBlock: fromBlock,
     searchToBlock: toBlock,
+    lastBlockIncludedInBatch,
   }
 
   console.log('Built chain state blocks:', {
@@ -374,6 +392,7 @@ export const fetchChainState = async ({
     parentCurrentBlock: parentCurrentBlock.number,
     parentBlockAtCreation: parentBlockAtCreation?.number,
     parentBlockAtConfirmation: parentBlockAtConfirmation?.number,
+    lastBlockIncludedInBatch,
   })
 
   return chainState

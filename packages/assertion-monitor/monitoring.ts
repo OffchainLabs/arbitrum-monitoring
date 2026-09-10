@@ -7,7 +7,6 @@ import {
   NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT,
   NO_CONFIRMATION_EVENTS_ALERT,
   NO_CREATION_EVENTS_ALERT,
-  NON_BOLD_NO_RECENT_CREATION_ALERT,
   VALIDATOR_WHITELIST_DISABLED_ALERT,
 } from './alerts'
 import {
@@ -103,12 +102,11 @@ export const analyzeAssertionEvents = async (
   const {
     doesLatestChildCreatedBlockExist,
     doesLatestChildConfirmedBlockExist,
-    hasActivityWithoutRecentAssertions,
+    hasBatchesWithoutRecentAssertions,
     noConfirmationsWithCreationEvents,
     noConfirmedBlocksWithConfirmationEvents,
     confirmationDelayExceedsPeriod,
     creationEventStuckInChallengePeriod,
-    nonBoldMissingRecentCreation,
     isValidatorWhitelistDisabledOnClassic,
     isBaseStakeBelowThresholdOnBold,
   } = generateConditionsForAlerts(chainInfo, chainState, isBold)
@@ -133,7 +131,7 @@ export const analyzeAssertionEvents = async (
     alerts.push(NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT)
   }
 
-  if (hasActivityWithoutRecentAssertions) {
+  if (hasBatchesWithoutRecentAssertions) {
     alerts.push(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
   }
 
@@ -147,10 +145,6 @@ export const analyzeAssertionEvents = async (
 
   if (creationEventStuckInChallengePeriod) {
     alerts.push(CREATION_EVENT_STUCK_ALERT)
-  }
-
-  if (nonBoldMissingRecentCreation) {
-    alerts.push(NON_BOLD_NO_RECENT_CREATION_ALERT)
   }
 
   return alerts
@@ -175,8 +169,8 @@ export const generateConditionsForAlerts = (
     childLatestConfirmedBlock,
     parentCurrentBlock,
     parentBlockAtConfirmation,
-    recentCreationEvent,
     recentConfirmationEvent,
+    lastBlockIncludedInBatch,
   } = chainState
 
   /**
@@ -206,20 +200,32 @@ export const generateConditionsForAlerts = (
   const doesLatestChildConfirmedBlockExist = !!childLatestConfirmedBlock
 
   /**
-   * Detects transaction processing in child chain not yet asserted in parent chain
-   * Normal in small amounts due to batching, concerning in large amounts
+   * Detects batches posted to parent chain but not yet asserted
+   * Only alerts when batches exist but no recent assertions cover them
    */
-  const hasActivityWithoutAssertions =
-    childCurrentBlock?.number &&
-    childLatestCreatedBlock?.number &&
-    childCurrentBlock.number > childLatestCreatedBlock.number
+  const childLatestCreatedBlockNumber = childLatestCreatedBlock?.number
+  const hasBatchesWithoutAssertionsFromBatchCounter =
+    lastBlockIncludedInBatch !== undefined &&
+    childLatestCreatedBlockNumber !== undefined &&
+    childLatestCreatedBlockNumber !== null &&
+    lastBlockIncludedInBatch > childLatestCreatedBlockNumber
+  const hasBatchesWithoutAssertionsFromChildProgress =
+    lastBlockIncludedInBatch === undefined &&
+    childCurrentBlock.number !== null &&
+    childLatestCreatedBlockNumber !== undefined &&
+    childLatestCreatedBlockNumber !== null &&
+    childCurrentBlock.number > childLatestCreatedBlockNumber
+  const hasBatchesWithoutAssertions =
+    hasBatchesWithoutAssertionsFromBatchCounter ||
+    hasBatchesWithoutAssertionsFromChildProgress
 
   /**
    * Critical for BOLD due to finality implications
    * Indicates validator issues for both chain types
+   * Only alerts when batches have been posted but not asserted recently
    */
-  const hasActivityWithoutRecentAssertions =
-    hasActivityWithoutAssertions && !hasRecentCreationEvents
+  const hasBatchesWithoutRecentAssertions =
+    hasBatchesWithoutAssertions && !hasRecentCreationEvents
 
   /**
    * May indicate active challenges or technical issues with confirmation
@@ -273,15 +279,6 @@ export const generateConditionsForAlerts = (
       BigInt(currentTimeSeconds - CHALLENGE_PERIOD_SECONDS)
 
   /**
-   * Only alerts when activity exists without assertions
-   * May be normal for low-activity chains, hence contextual consideration required
-   */
-  const nonBoldMissingRecentCreation =
-    !isBold &&
-    (!childLatestCreatedBlock ||
-      (!hasRecentCreationEvents && hasActivityWithoutAssertions))
-
-  /**
    * Whether a Classic chain's validator whitelist is disabled, allowing
    * unauthorized validators to post assertions.
    */
@@ -301,12 +298,11 @@ export const generateConditionsForAlerts = (
     doesLatestChildCreatedBlockExist,
     doesLatestChildConfirmedBlockExist,
     hasRecentCreationEvents,
-    hasActivityWithoutRecentAssertions,
+    hasBatchesWithoutRecentAssertions,
     noConfirmationsWithCreationEvents,
     noConfirmedBlocksWithConfirmationEvents,
     confirmationDelayExceedsPeriod,
     creationEventStuckInChallengePeriod,
-    nonBoldMissingRecentCreation,
     isValidatorWhitelistDisabledOnClassic,
     isBaseStakeBelowThresholdOnBold,
   }
