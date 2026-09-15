@@ -100,6 +100,7 @@ export const processBlockRangeInChunks = async <T>(
     minChunkSize?: number
     reverse?: boolean
     stopWhen?: (result: T) => boolean
+    splitOnTransientError?: boolean
   }
 ): Promise<T> => {
   const minChunkSize = options?.minChunkSize ?? 500
@@ -118,11 +119,11 @@ export const processBlockRangeInChunks = async <T>(
       if (options?.stopWhen?.(result)) return result
       await sleep(100)
     } catch (error) {
-      // halving is for ranges the RPC won't serve, not for rate limits: `fn`
-      // has already backed off and retried a transient error, and each sub-range
-      // would re-run those retries, multiplying requests against an RPC that
-      // just asked us to slow down
-      if (chunkSize > minChunkSize && !isTransientRpcError(error)) {
+      if (
+        chunkSize > minChunkSize &&
+        (options?.splitOnTransientError !== false ||
+          !isTransientRpcError(error))
+      ) {
         const smallerChunk = Math.floor(chunkSize / 2)
         console.warn(
           `Block range [${rangeFrom}-${rangeTo}] failed, retrying with chunk size ${smallerChunk}`

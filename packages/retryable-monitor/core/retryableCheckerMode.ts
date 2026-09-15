@@ -91,7 +91,8 @@ export const checkRetryablesOneOff = async ({
         onRedeemedRetryableFound
       ),
     (prev, next) => prev || next,
-    false
+    false,
+    { splitOnTransientError: false }
   )
 
   return toBlock

@@ -1,5 +1,9 @@
-import { describe, expect, test, vi } from 'vitest'
-import { isTransientRpcError, withRetry } from '../index'
+import { afterEach, describe, expect, test, vi } from 'vitest'
+import {
+  isTransientRpcError,
+  processBlockRangeInChunks,
+  withRetry,
+} from '../index'
 
 // mirrors the error shape viem builds for an Alchemy 429 (HttpRequestError
 // wrapped in a ContractFunctionExecutionError)
@@ -14,6 +18,8 @@ const alchemy429 = () => {
   wrapped.cause = httpError
   return wrapped
 }
+
+afterEach(() => vi.restoreAllMocks())
 
 describe('isTransientRpcError', () => {
   test('detects 429 status on the error or its cause chain', () => {
@@ -108,11 +114,42 @@ describe('withRetry', () => {
         withRetry(fn, { retries: 4, initialDelayMs: 1000, maxDelayMs: 3000 })
       ).rejects.toThrow('HTTP request failed.')
 
-      // 1000, 2000, 4000 -> 3000, 8000 -> 3000
       expect(delays).toEqual([1000, 2000, 3000, 3000])
     } finally {
       vi.restoreAllMocks()
       vi.useRealTimers()
     }
+  })
+})
+
+describe('processBlockRangeInChunks', () => {
+  test('splits ranges after transient errors by default', async () => {
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void) => {
+      cb()
+      return 0 as unknown as NodeJS.Timeout
+    }) as typeof setTimeout)
+    const fn = vi.fn().mockRejectedValueOnce(alchemy429()).mockResolvedValue([])
+
+    await processBlockRangeInChunks(1, 2, 2, fn, () => [], [], {
+      minChunkSize: 1,
+    })
+
+    expect(fn.mock.calls).toEqual([
+      [1, 2],
+      [1, 1],
+      [2, 2],
+    ])
+  })
+
+  test('can avoid splitting ranges after transient errors', async () => {
+    const fn = vi.fn().mockRejectedValue(alchemy429())
+
+    await expect(
+      processBlockRangeInChunks(1, 2, 2, fn, () => false, false, {
+        minChunkSize: 1,
+        splitOnTransientError: false,
+      })
+    ).rejects.toThrow('HTTP request failed.')
+    expect(fn).toHaveBeenCalledTimes(1)
   })
 })
