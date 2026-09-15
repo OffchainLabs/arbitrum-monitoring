@@ -56,10 +56,16 @@ export const isTransientRpcError = (error: unknown): boolean => {
  */
 export const withRetry = async <T>(
   fn: () => Promise<T>,
-  options?: { retries?: number; initialDelayMs?: number; label?: string }
+  options?: {
+    retries?: number
+    initialDelayMs?: number
+    maxDelayMs?: number
+    label?: string
+  }
 ): Promise<T> => {
   const retries = options?.retries ?? 3
   const initialDelayMs = options?.initialDelayMs ?? 2000
+  const maxDelayMs = options?.maxDelayMs ?? 15_000
   for (let attempt = 0; ; attempt++) {
     try {
       return await fn()
@@ -67,7 +73,7 @@ export const withRetry = async <T>(
       if (attempt >= retries || !isTransientRpcError(error)) {
         throw error
       }
-      const delayMs = initialDelayMs * 2 ** attempt
+      const delayMs = Math.min(initialDelayMs * 2 ** attempt, maxDelayMs)
       console.warn(
         `${
           options?.label ?? 'RPC call'
@@ -94,6 +100,7 @@ export const processBlockRangeInChunks = async <T>(
     minChunkSize?: number
     reverse?: boolean
     stopWhen?: (result: T) => boolean
+    splitOnTransientError?: boolean
   }
 ): Promise<T> => {
   const minChunkSize = options?.minChunkSize ?? 500
@@ -112,7 +119,11 @@ export const processBlockRangeInChunks = async <T>(
       if (options?.stopWhen?.(result)) return result
       await sleep(100)
     } catch (error) {
-      if (chunkSize > minChunkSize) {
+      if (
+        chunkSize > minChunkSize &&
+        (options?.splitOnTransientError !== false ||
+          !isTransientRpcError(error))
+      ) {
         const smallerChunk = Math.floor(chunkSize / 2)
         console.warn(
           `Block range [${rangeFrom}-${rangeTo}] failed, retrying with chunk size ${smallerChunk}`
