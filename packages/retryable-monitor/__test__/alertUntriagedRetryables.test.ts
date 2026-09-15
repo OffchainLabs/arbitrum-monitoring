@@ -31,6 +31,7 @@ import {
   redeemRetryable,
   getLiveRetryableStatus,
 } from '../core/redeemRetryable'
+import { postSlackMessage } from '../handlers/slack/postSlackMessage'
 
 const PARENT_TX_HASH =
   '0xe60d848b8fae81b103135825c30c2ca169170100cad7fbdf3e73d062e3fc90d6'
@@ -240,6 +241,46 @@ describe('alertUntriagedNotionRetryables', () => {
     await alertUntriagedNotionRetryables(CHAINS, true)
 
     expect(redeemRetryable).not.toHaveBeenCalled()
+  })
+
+  test('does not alert a nearing-expiry row whose ticket was never created', async () => {
+    databasesQuery.mockResolvedValue({ results: [buildPage(6)] })
+    vi.mocked(getLiveRetryableStatus).mockResolvedValue('CREATION_FAILED')
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(postSlackMessage).not.toHaveBeenCalled()
+    expect(pagesUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        properties: { Status: { select: { name: 'CREATION_FAILED' } } },
+      })
+    )
+  })
+
+  test('still alerts a nearing-expiry row the chain confirms is redeemable', async () => {
+    databasesQuery.mockResolvedValue({ results: [buildPage(6)] })
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(postSlackMessage).toHaveBeenCalled()
+    expect(redeemRetryable).not.toHaveBeenCalled()
+  })
+
+  test('reconciles a row past its notion timeout instead of skipping it', async () => {
+    databasesQuery.mockResolvedValue({ results: [buildPage(-5)] })
+    vi.mocked(getLiveRetryableStatus).mockResolvedValue('Executed')
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(redeemRetryable).not.toHaveBeenCalled()
+    expect(pagesUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        properties: {
+          Status: { select: { name: 'Executed' } },
+          Decision: { select: { name: 'Redeemed' } },
+        },
+      })
+    )
   })
 
   test('does not redeem when auto-redeem is disabled', async () => {
