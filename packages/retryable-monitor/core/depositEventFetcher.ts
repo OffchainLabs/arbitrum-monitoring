@@ -7,6 +7,7 @@ import { EventFetcher } from '@arbitrum/sdk'
 import { Bridge__factory } from '@arbitrum/sdk/dist/lib/abi/factories/Bridge__factory'
 import { L1ERC20Gateway__factory } from '@arbitrum/sdk/dist/lib/abi/factories/L1ERC20Gateway__factory'
 import { DepositInitiatedEvent } from '@arbitrum/sdk/dist/lib/abi/L1ERC20Gateway'
+import { withRetry } from 'utils'
 
 export const getDepositInitiatedEventData = async (
   parentChainGatewayAddress: string,
@@ -17,13 +18,17 @@ export const getDepositInitiatedEventData = async (
   parentChainProvider: Provider
 ) => {
   const eventFetcher = new EventFetcher(parentChainProvider)
-  const logs = await eventFetcher.getEvents<any, DepositInitiatedEvent>(
-    L1ERC20Gateway__factory,
-    (g: any) => g.filters.DepositInitiated(),
-    {
-      ...filter,
-      address: parentChainGatewayAddress,
-    }
+  const logs = await withRetry(
+    () =>
+      eventFetcher.getEvents<any, DepositInitiatedEvent>(
+        L1ERC20Gateway__factory,
+        (g: any) => g.filters.DepositInitiated(),
+        {
+          ...filter,
+          address: parentChainGatewayAddress,
+        }
+      ),
+    { label: 'L1ERC20Gateway.DepositInitiated' }
   )
 
   return logs
@@ -38,10 +43,14 @@ export const getMessageDeliveredEventData = async (
   parentChainProvider: Provider
 ) => {
   const eventFetcher = new EventFetcher(parentChainProvider)
-  const logs = await eventFetcher.getEvents(
-    Bridge__factory,
-    (g: any) => g.filters.MessageDelivered(),
-    { ...filter, address: parentBridgeAddress }
+  const logs = await withRetry(
+    () =>
+      eventFetcher.getEvents(
+        Bridge__factory,
+        (g: any) => g.filters.MessageDelivered(),
+        { ...filter, address: parentBridgeAddress }
+      ),
+    { label: 'Bridge.MessageDelivered' }
   )
 
   // Filter logs where event.kind is equal to 9
