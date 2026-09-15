@@ -88,4 +88,31 @@ describe('withRetry', () => {
     ).rejects.toThrow('HTTP request failed.')
     expect(fn).toHaveBeenCalledTimes(3) // initial attempt + 2 retries
   })
+
+  test('caps the exponential delay at maxDelayMs', async () => {
+    vi.useFakeTimers()
+    try {
+      const delays: number[] = []
+      vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+        cb: () => void,
+        ms: number
+      ) => {
+        delays.push(ms)
+        cb()
+        return 0 as unknown as NodeJS.Timeout
+      }) as unknown as typeof setTimeout)
+
+      const fn = vi.fn().mockRejectedValue(alchemy429())
+
+      await expect(
+        withRetry(fn, { retries: 4, initialDelayMs: 1000, maxDelayMs: 3000 })
+      ).rejects.toThrow('HTTP request failed.')
+
+      // 1000, 2000, 4000 -> 3000, 8000 -> 3000
+      expect(delays).toEqual([1000, 2000, 3000, 3000])
+    } finally {
+      vi.restoreAllMocks()
+      vi.useRealTimers()
+    }
+  })
 })

@@ -7,7 +7,7 @@ import {
   ParentTransactionReceipt,
   ParentToChildMessageStatus,
 } from '@arbitrum/sdk'
-import { ChildNetwork } from 'utils'
+import { ChildNetwork, withRetry } from 'utils'
 import {
   getMessageDeliveredEventData,
   getDepositInitiatedLogs,
@@ -63,12 +63,14 @@ export const checkRetryables = async (
 
   // for each parent-chain-transaction found, extract the Retryables thus created by it
   for (const parentTxHash of uniqueTxHashes) {
-    const parentTxReceipt = await parentChainProvider.getTransactionReceipt(
-      parentTxHash
+    const parentTxReceipt = await withRetry(
+      () => parentChainProvider.getTransactionReceipt(parentTxHash),
+      { label: 'parentChain.getTransactionReceipt' }
     )
     const arbParentTxReceipt = new ParentTransactionReceipt(parentTxReceipt)
-    const retryables = await arbParentTxReceipt.getParentToChildMessages(
-      childChainProvider
+    const retryables = await withRetry(
+      () => arbParentTxReceipt.getParentToChildMessages(childChainProvider),
+      { label: 'getParentToChildMessages' }
     )
 
     if (retryables.length > 0) {
@@ -87,7 +89,9 @@ export const checkRetryables = async (
       for (let msgIndex = 0; msgIndex < retryables.length; msgIndex++) {
         const retryableMessage = retryables[msgIndex]
         const retryableTicketId = retryableMessage.retryableCreationId
-        let status = await retryableMessage.status()
+        let status = await withRetry(() => retryableMessage.status(), {
+          label: 'retryableMessage.status',
+        })
 
         // if we find a successful Retryable, call `onRedeemedRetryableFound()`
         if (status === ParentToChildMessageStatus.REDEEMED) {
@@ -114,13 +118,17 @@ export const checkRetryables = async (
 
         // if a Retryable is not in a successful state, extract it's details and call `onFailedRetryableFound()`
         if (status !== ParentToChildMessageStatus.REDEEMED) {
-          const childChainTx = await childChainProvider.getTransaction(
-            retryableTicketId
+          const childChainTx = await withRetry(
+            () => childChainProvider.getTransaction(retryableTicketId),
+            { label: 'childChain.getTransaction' }
           )
-          const childChainTxReceipt =
-            await childChainProvider.getTransactionReceipt(
-              retryableMessage.retryableCreationId
-            )
+          const childChainTxReceipt = await withRetry(
+            () =>
+              childChainProvider.getTransactionReceipt(
+                retryableMessage.retryableCreationId
+              ),
+            { label: 'childChain.getTransactionReceipt' }
+          )
 
           if (!childChainTxReceipt) {
             // if child-chain tx is very recent, the tx receipt might not be found yet
