@@ -149,6 +149,7 @@ export const checkRetryables = async (
           )
           const childChainRetryableReport = await getChildChainRetryableReport({
             retryableMessage,
+            status,
             childChainTx,
             childChainTxReceipt,
             childChainProvider,
