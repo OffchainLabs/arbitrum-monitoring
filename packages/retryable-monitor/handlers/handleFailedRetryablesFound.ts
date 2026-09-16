@@ -30,7 +30,8 @@ export const ticketAlreadyHandled = (
 
 export const handleFailedRetryablesFound = async (
   ticket: OnFailedRetryableFoundParams,
-  writeToNotion: boolean
+  writeToNotion: boolean,
+  enableAutoRedeem = false
 ) => {
   if (ticketAlreadyHandled(ticket)) return
 
@@ -112,7 +113,9 @@ export const handleFailedRetryablesFound = async (
       status: childChainRetryableReport.status,
       chainId: childChain.chainId,
       chain: childChain.name,
-      decision: 'Triage',
+      // a run that may redeem needs no human triage call, so the row starts
+      // where the bot can act on it
+      decision: enableAutoRedeem ? 'Should Redeem' : 'Triage',
       metadata: {
         tokensDeposited: formattedTokenString,
         gasPriceProvided,
@@ -129,5 +132,11 @@ export const handleFailedRetryablesFound = async (
     // Keep the fetched (locally cached) set coherent so a redemption event later in the same
     // run routes through the update path instead of being filtered out.
     if (result) addToFetchedNotionRetryables(childTxUrl)
+
+    // auto-redeem runs alert once, when the row first appears: the ticket is
+    // never triaged by hand, so the recurring triage nudge never fires for it
+    if (result?.isNew && enableAutoRedeem) {
+      await reportFailedRetryables(ticket)
+    }
   }
 }

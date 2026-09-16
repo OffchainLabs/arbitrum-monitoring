@@ -41,9 +41,15 @@ const CHILD_TX_HASH =
 const CHAINS = [{ chainId: 42161 }] as any
 const LOCATED = { message: {}, childChain: CHAINS[0], childChainProvider: {} }
 
+const HOUR_MS = 60 * 60 * 1000
+const DAY_MS = 24 * HOUR_MS
+
 const buildPage = (
   hoursUntilExpiry: number,
-  childTx = `https://robinhoodchain.blockscout.com/tx/${CHILD_TX_HASH}`
+  childTx = `https://robinhoodchain.blockscout.com/tx/${CHILD_TX_HASH}`,
+  // tickets live seven days, so a row's age follows from its remaining time
+  // unless a test overrides it
+  daysSinceCreation = 7 - hoursUntilExpiry / 24
 ) => ({
   id: 'page-1',
   properties: {
@@ -56,11 +62,14 @@ const buildPage = (
       ],
     },
     ChildTx: { title: [{ text: { content: childTx } }] },
+    CreatedAt: {
+      date: {
+        start: new Date(Date.now() - daysSinceCreation * DAY_MS).toISOString(),
+      },
+    },
     timeoutTimestamp: {
       date: {
-        start: new Date(
-          Date.now() + hoursUntilExpiry * 60 * 60 * 1000
-        ).toISOString(),
+        start: new Date(Date.now() + hoursUntilExpiry * HOUR_MS).toISOString(),
       },
     },
   },
@@ -189,21 +198,11 @@ describe('alertUntriagedNotionRetryables', () => {
               property: 'Decision',
               select: { equals: 'Should Redeem' },
             },
+            {
+              property: 'Decision',
+              select: { equals: 'Force Redeem' },
+            },
           ],
-        },
-      })
-    )
-  })
-
-  test('marks the page as failed when the redeem throws', async () => {
-    vi.mocked(redeemRetryable).mockRejectedValueOnce(new Error('boom'))
-
-    await alertUntriagedNotionRetryables(CHAINS, true)
-
-    expect(pagesUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        properties: {
-          'Bot Redemption Status': { select: { name: 'Bot Failed' } },
         },
       })
     )
@@ -258,13 +257,89 @@ describe('alertUntriagedNotionRetryables', () => {
     )
   })
 
-  test('still alerts a nearing-expiry row the chain confirms is redeemable', async () => {
+  test('alerts a nearing-expiry row when the run cannot redeem it itself', async () => {
     databasesQuery.mockResolvedValue({ results: [buildPage(6)] })
+
+    await alertUntriagedNotionRetryables(CHAINS, false)
+
+    expect(postSlackMessage).toHaveBeenCalledWith({
+      message: expect.stringContaining('nearing expiry'),
+    })
+    expect(redeemRetryable).not.toHaveBeenCalled()
+  })
+
+  test('waits until day 4 before redeeming a Should Redeem row', async () => {
+    databasesQuery.mockResolvedValue({
+      results: [buildPage(96, undefined, 3)],
+    })
 
     await alertUntriagedNotionRetryables(CHAINS, true)
 
-    expect(postSlackMessage).toHaveBeenCalled()
     expect(redeemRetryable).not.toHaveBeenCalled()
+    expect(postSlackMessage).not.toHaveBeenCalled()
+  })
+
+  test('redeems a Should Redeem row once it reaches day 4', async () => {
+    databasesQuery.mockResolvedValue({
+      results: [buildPage(72, undefined, 4)],
+    })
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(redeemRetryable).toHaveBeenCalled()
+  })
+
+  test('redeems a Force Redeem row before day 4', async () => {
+    const page = buildPage(144, undefined, 1)
+    page.properties.Decision = { select: { name: 'Force Redeem' } }
+    databasesQuery.mockResolvedValue({ results: [page] })
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(redeemRetryable).toHaveBeenCalled()
+  })
+
+  test('falls back to the timeout when a legacy row has no CreatedAt', async () => {
+    const page = buildPage(72)
+    delete (page.properties as any).CreatedAt
+    databasesQuery.mockResolvedValue({ results: [page] })
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(redeemRetryable).toHaveBeenCalled()
+  })
+
+  test('pings Slack and flags the row when the redeem fails', async () => {
+    vi.mocked(redeemRetryable).mockRejectedValueOnce(new Error('boom'))
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(pagesUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        properties: {
+          'Bot Redemption Status': { select: { name: 'Bot Failed' } },
+        },
+      })
+    )
+    expect(postSlackMessage).toHaveBeenCalledWith({
+      message: expect.stringContaining('Auto-redemption FAILED'),
+    })
+  })
+
+  test('posts one summary of the redemptions a run completed', async () => {
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(postSlackMessage).toHaveBeenCalledWith({
+      message: expect.stringContaining('1 retryable auto-redeemed'),
+    })
+  })
+
+  test('posts no summary when a run redeemed nothing', async () => {
+    vi.mocked(getLiveRetryableStatus).mockResolvedValue('CREATION_FAILED')
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(postSlackMessage).not.toHaveBeenCalled()
   })
 
   test('reconciles a row past its notion timeout instead of skipping it', async () => {

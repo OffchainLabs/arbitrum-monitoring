@@ -358,6 +358,19 @@ export const timestampToDate = (timestampInSeconds: number) => {
 }
 
 /**
+ * Links back to the GitHub Actions run that produced a message. Returns an
+ * empty string outside CI, so local runs read as plain sentences.
+ */
+export const formatActionRunReference = () => {
+  const repository = process.env.GITHUB_REPOSITORY
+  const runId = process.env.GITHUB_RUN_ID
+  const runNumber = process.env.GITHUB_RUN_NUMBER
+  if (!repository || !runId) return ''
+  const label = runNumber ? `run #${runNumber}` : 'this run'
+  return ` on <https://github.com/${repository}/actions/runs/${runId}|${label}>`
+}
+
+/**
  * Call precompiles to get info about gas price and gas estimation for the TX execution.
  *
  * @param createdAtBlockNumber

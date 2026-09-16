@@ -3,16 +3,21 @@ import { postSlackMessage } from '../slack/postSlackMessage'
 import {
   redeemRetryable,
   getLiveRetryableStatus,
-  locateRetryable,
+  NOTION_EXECUTED_STATUS,
+  NOTION_REDEEMED_DECISION,
   REDEEMABLE_STATUS,
-  type LocatedRetryable,
 } from '../../core/redeemRetryable'
 import { DEFAULT_CONFIG_PATH, type ChildNetwork } from 'utils'
-import {
-  NOTION_DECISION,
-  NOTION_STATUS,
-  retryableStatusToNotion,
-} from './notionVocabulary'
+import { formatActionRunReference } from '../slack/slackMessageFormattingUtils'
+
+export const TRIAGE_DECISION = 'Triage'
+export const SHOULD_REDEEM_DECISION = 'Should Redeem'
+export const FORCE_REDEEM_DECISION = 'Force Redeem'
+
+// tickets live seven days; the bot waits four so a human still has time to set
+// Ignore, and a failed attempt still has three days of daily retries left
+export const AUTO_REDEEM_DELAY_DAYS = 4
+const TICKET_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000
 
 const formatDate = (iso: string | undefined) => {
   if (!iso) return '(unknown)'
@@ -54,17 +59,20 @@ export const alertUntriagedNotionRetryables = async (
       or: [
         {
           and: [
-            { property: 'Decision', select: { equals: 'Triage' } },
+            { property: 'Decision', select: { equals: TRIAGE_DECISION } },
             {
               property: 'Status',
-              select: { does_not_equal: NOTION_STATUS.EXECUTED },
+              select: { does_not_equal: 'Executed' },
             },
           ],
         },
-        { property: 'Decision', select: { equals: 'Should Redeem' } },
+        { property: 'Decision', select: { equals: SHOULD_REDEEM_DECISION } },
+        { property: 'Decision', select: { equals: FORCE_REDEEM_DECISION } },
       ],
     },
   })
+
+  const redeemedThisRun: string[] = []
 
   for (const page of response.results) {
     const props = (page as any).properties
@@ -102,9 +110,17 @@ export const alertUntriagedNotionRetryables = async (
 
     const isPastTimeout = Number.isFinite(hoursLeft) && hoursLeft < 0
 
+    const createdAtRaw = props?.CreatedAt?.date?.start
+    // rows written before CreatedAt existed fall back to the timeout; the
+    // ticket lifetime is fixed, so it resolves to the same instant
+    const createdAtMs = createdAtRaw
+      ? new Date(createdAtRaw).getTime()
+      : expiryTime - TICKET_LIFETIME_MS
+    const daysSinceCreation = (now - createdAtMs) / (1000 * 60 * 60 * 24)
+
     let message = ''
 
-    if (decision === 'Triage') {
+    if (decision === TRIAGE_DECISION) {
       if (isPastTimeout) continue
 
       if (hoursLeft <= 72) {
@@ -112,7 +128,10 @@ export const alertUntriagedNotionRetryables = async (
       } else {
         message = `⚠️ Retryable ticket needs triage:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Please review and decide whether to redeem or ignore.`
       }
-    } else if (decision === 'Should Redeem') {
+    } else if (
+      decision === SHOULD_REDEEM_DECISION ||
+      decision === FORCE_REDEEM_DECISION
+    ) {
       const parentTxHash = extractTxHash(parentTx)
       const retryableCreationId = extractTxHash(retryableUrl)
       // without the row's own ticket id we could redeem a sibling
@@ -128,11 +147,9 @@ export const alertUntriagedNotionRetryables = async (
       // reconcile before the timeout branches decide anything: a row read only
       // by those branches alerts off stale Notion data in its last 24 hours
       // without the chain ever being consulted
-      let located: LocatedRetryable | null = null
-      let liveStatus = null
+      let liveStatus: string | null = null
       try {
-        located = await locateRetryable(parentTxHash, locator)
-        liveStatus = located ? await getLiveRetryableStatus(located) : null
+        liveStatus = await getLiveRetryableStatus(parentTxHash, locator)
       } catch (err) {
         console.error(
           `[notion] could not read live status for ${retryableUrl}:`,
@@ -141,17 +158,15 @@ export const alertUntriagedNotionRetryables = async (
       }
 
       // a ticket redeemed by anyone, bot or not, is no longer ours to redeem
-      const notionStatus =
-        liveStatus === null ? null : retryableStatusToNotion(liveStatus)
       const liveDecision =
-        notionStatus === NOTION_STATUS.EXECUTED
-          ? NOTION_DECISION.REDEEMED
+        liveStatus === NOTION_EXECUTED_STATUS
+          ? NOTION_REDEEMED_DECISION
           : decision
 
       const drift = {
-        ...(notionStatus &&
-          notionStatus !== status && {
-            Status: { select: { name: notionStatus } },
+        ...(liveStatus &&
+          liveStatus !== status && {
+            Status: { select: { name: liveStatus } },
           }),
         ...(liveDecision !== decision && {
           Decision: { select: { name: liveDecision } },
@@ -160,7 +175,7 @@ export const alertUntriagedNotionRetryables = async (
 
       if (Object.keys(drift).length > 0) {
         console.log(
-          `[notion] ${retryableUrl} ${status}/${decision} -> ${notionStatus}/${liveDecision}`
+          `[notion] ${retryableUrl} ${status}/${decision} -> ${liveStatus}/${liveDecision}`
         )
         await notionClient.pages.update({
           page_id: page.id,
@@ -170,10 +185,10 @@ export const alertUntriagedNotionRetryables = async (
 
       // only alert or redeem on a confirmed redeemable status; a failed lookup
       // is not evidence the ticket is redeemable
-      if (!located || liveStatus !== REDEEMABLE_STATUS) {
+      if (liveStatus !== REDEEMABLE_STATUS) {
         console.log(
           `[notion] skipping ${retryableUrl}, status is ${
-            notionStatus ?? 'unknown'
+            liveStatus ?? 'unknown'
           }`
         )
         continue
@@ -181,27 +196,31 @@ export const alertUntriagedNotionRetryables = async (
 
       if (isPastTimeout) continue
 
-      const under24HoursLeftToExpire = timeoutRaw
-        ? isNearExpiry(timeoutRaw, 24)
-        : false
-
-      if (under24HoursLeftToExpire) {
+      if (!enableAutoRedeem) {
+        // this run has no mandate to redeem, so a row a human marked for
+        // redemption still needs the nearing-expiry nudge
+        if (!isNearExpiry(timeoutRaw, 24)) continue
         message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Check why it hasn't been executed.`
-      } else if (hoursLeft <= 96) {
-        if (!enableAutoRedeem) continue
-
+      } else if (
+        decision === SHOULD_REDEEM_DECISION &&
+        daysSinceCreation < AUTO_REDEEM_DELAY_DAYS
+      ) {
+        continue
+      } else {
         try {
-          await redeemRetryable(located)
+          await redeemRetryable(parentTxHash, locator)
           await notionClient.pages.update({
             page_id: page.id,
             properties: {
-              Status: { select: { name: NOTION_STATUS.EXECUTED } },
-              Decision: { select: { name: NOTION_DECISION.REDEEMED } },
+              Status: { select: { name: NOTION_EXECUTED_STATUS } },
+              Decision: { select: { name: NOTION_REDEEMED_DECISION } },
               'Bot Redemption Status': {
                 select: { name: 'Bot Success' },
               },
             },
           })
+          redeemedThisRun.push(retryableUrl)
+          continue
         } catch (err) {
           console.error(`[notion] auto-redeem failed for ${parentTxHash}:`, err)
           await notionClient.pages.update({
@@ -212,10 +231,8 @@ export const alertUntriagedNotionRetryables = async (
               },
             },
           })
+          message = `🚨 Auto-redemption FAILED:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ The bot retries on every run until the ticket expires. Set Decision to \`Ignore\` to silence this, or redeem manually.`
         }
-        continue
-      } else {
-        continue
       }
     }
 
@@ -224,6 +241,21 @@ export const alertUntriagedNotionRetryables = async (
       await postSlackMessage({ message })
     } catch {
       // swallow Slack errors to keep loop running
+    }
+  }
+
+  if (redeemedThisRun.length > 0) {
+    const ticketLines = redeemedThisRun.map(url => `\n• ${url}`).join('')
+    try {
+      await postSlackMessage({
+        message: `✅ ${redeemedThisRun.length} retryable${
+          redeemedThisRun.length === 1 ? '' : 's'
+        } auto-redeemed${formatActionRunReference()} at ${formatDate(
+          new Date().toISOString()
+        )}:${ticketLines}`,
+      })
+    } catch {
+      // swallow Slack errors; the redemptions already succeeded
     }
   }
 }
