@@ -201,17 +201,26 @@ const processOrbitChainsConcurrently = async () => {
       options.configPath
     )
 
-    // one sweep covering every chain, never one sweep per chain: concurrent
-    // sweeps read the same rows and would each submit a redemption for them
+    // one sweep at a time: two sweeps running together redeem the same rows
+    // twice, so the next run is queued only once the current one settles
     if (options.continuous) {
       console.log('Activating continuous sweep of Notion database...')
-      setInterval(async () => {
-        await alertUntriagedNotionRetryables(
-          config.childChains,
-          options.autoRedeem,
-          options.configPath
-        )
-      }, 1000 * 60 * 60) // Run every hour
+      const scheduleNextSweep = () => {
+        setTimeout(async () => {
+          try {
+            await alertUntriagedNotionRetryables(
+              config.childChains,
+              options.autoRedeem,
+              options.configPath
+            )
+          } catch (e) {
+            console.error('Notion sweep failed:', e)
+          } finally {
+            scheduleNextSweep()
+          }
+        }, 1000 * 60 * 60) // Run every hour
+      }
+      scheduleNextSweep()
     }
   }
 

@@ -14,11 +14,14 @@ import {
   SEVEN_DAYS_IN_SECONDS,
 } from '@arbitrum/sdk/dist/lib/dataEntities/constants'
 import { ArbRetryableTx__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ArbRetryableTx__factory'
-import { withRetry } from 'utils'
+import { withRetry, processBlockRangeInChunks } from 'utils'
 import { ChildChainTicketReport, ParentChainTicketReport } from './types'
 
 // selector of ArbRetryableTx's NoTicketWithID() custom error
 const NO_TICKET_WITH_ID_SELECTOR = '0x80698456'
+
+// same ceiling the checker scans with, so an RPC that accepts one accepts both
+const REDEEM_SCAN_CHUNK_SIZE = 2000
 
 // keccak256 of ArbRetryableTx's TicketCreated(bytes32) event signature
 export const TICKET_CREATED_TOPIC =
@@ -27,7 +30,7 @@ export const TICKET_CREATED_TOPIC =
 // a submit-retryable tx emits TicketCreated even when its receipt is marked
 // as reverted (e.g. when the requested auto-redeem could not be paid for), so
 // the event is what proves a ticket was actually created
-const hasTicketCreatedEvent = (receipt: TransactionReceipt): boolean =>
+export const hasTicketCreatedEvent = (receipt: TransactionReceipt): boolean =>
   (receipt.logs ?? []).some(
     log =>
       log.address.toLowerCase() === ARB_RETRYABLE_TX_ADDRESS.toLowerCase() &&
@@ -81,6 +84,53 @@ export const getLiveTicketTimeout = async (
   }
 }
 
+/**
+ * Hash of the tx that successfully redeemed the ticket, or undefined.
+ *
+ * Needed because the SDK reports a ticket whose creation receipt is marked
+ * reverted as CREATION_FAILED and returns before it looks for a redemption.
+ */
+export const findSuccessfulRedeem = async (
+  ticketId: string,
+  creationBlockNumber: number,
+  childChainProvider: providers.Provider
+): Promise<string | undefined> => {
+  const arbRetryableTx = ArbRetryableTx__factory.connect(
+    ARB_RETRYABLE_TX_ADDRESS,
+    childChainProvider
+  )
+  const filter = arbRetryableTx.filters.RedeemScheduled(ticketId)
+  const latestBlock = await childChainProvider.getBlockNumber()
+
+  return processBlockRangeInChunks<string | undefined>(
+    creationBlockNumber,
+    latestBlock,
+    REDEEM_SCAN_CHUNK_SIZE,
+    async (fromBlock, toBlock) => {
+      const logs = await withRetry(
+        () => childChainProvider.getLogs({ ...filter, fromBlock, toBlock }),
+        { label: 'ArbRetryableTx.RedeemScheduled' }
+      )
+
+      for (const log of logs) {
+        const { retryTxHash } = arbRetryableTx.interface.parseLog(log).args
+        const receipt = await childChainProvider.getTransactionReceipt(
+          retryTxHash
+        )
+        if (receipt?.status === 1) return retryTxHash
+      }
+
+      return undefined
+    },
+    (prev, next) => prev ?? next,
+    undefined,
+    { stopWhen: found => found !== undefined }
+  )
+}
+
+export const isPastTicketLifetime = (createdAtTimestamp: number): boolean =>
+  Date.now() / 1000 >= createdAtTimestamp + SEVEN_DAYS_IN_SECONDS
+
 export const getParentChainRetryableReport = (
   arbParentTxReceipt: ParentTransactionReceipt,
   retryableMessage: ParentToChildMessageReader
@@ -128,7 +178,7 @@ export const getChildChainRetryableReport = async ({
   if (
     status === ParentToChildMessageStatus.CREATION_FAILED &&
     hasTicketCreatedEvent(childChainTxReceipt) &&
-    Date.now() / 1000 >= Number(timestamp) + SEVEN_DAYS_IN_SECONDS
+    isPastTicketLifetime(Number(timestamp))
   ) {
     status = ParentToChildMessageStatus.EXPIRED
   }
