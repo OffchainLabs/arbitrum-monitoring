@@ -52,36 +52,66 @@ export const alertUntriagedNotionRetryables = async (
   configPath: string = DEFAULT_CONFIG_PATH
 ) => {
   const allowedChainIds = childChains.map(c => c.chainId)
-  const response = await notionClient.databases.query({
-    database_id: databaseId,
-    page_size: 100,
-    filter: {
-      or: [
-        {
-          and: [
-            { property: 'Decision', select: { equals: TRIAGE_DECISION } },
-            {
-              property: 'Status',
-              select: { does_not_equal: 'Executed' },
-            },
-          ],
-        },
-        { property: 'Decision', select: { equals: SHOULD_REDEEM_DECISION } },
-        { property: 'Decision', select: { equals: FORCE_REDEEM_DECISION } },
-      ],
-    },
+
+  // every row this run could act on has to fit in one page, so the chain scope
+  // belongs in the query: filtering it here instead would let another chain's
+  // rows fill the page and starve this one
+  const chainScope = allowedChainIds.map(chainId => ({
+    property: 'ChainID',
+    number: { equals: chainId },
+  }))
+  const scopedToRun = (conditions: any[]) => ({
+    and:
+      chainScope.length > 0 ? [{ or: chainScope }, ...conditions] : conditions,
   })
 
-  const redeemedThisRun: string[] = []
+  // two queries rather than one: Notion only nests compound filters two deep,
+  // and each gets its own page budget
+  const filters = [
+    scopedToRun([
+      {
+        or: [
+          { property: 'Decision', select: { equals: SHOULD_REDEEM_DECISION } },
+          { property: 'Decision', select: { equals: FORCE_REDEEM_DECISION } },
+        ],
+      },
+    ]),
+    scopedToRun([
+      { property: 'Decision', select: { equals: TRIAGE_DECISION } },
+      { property: 'Status', select: { does_not_equal: 'Executed' } },
+    ]),
+  ]
 
-  for (const page of response.results) {
+  const rows: any[] = []
+  for (const filter of filters) {
+    const response = await notionClient.databases.query({
+      database_id: databaseId,
+      page_size: 100,
+      filter,
+    })
+    rows.push(...response.results)
+  }
+
+  const redeemedThisRun: string[] = []
+  const writeFailures: string[] = []
+
+  // a 429 or a malformed row must not end the sweep: the portal runs this once
+  // a day, so an abort costs every later ticket a full retry window
+  const updatePage = async (pageId: string, properties: any) => {
+    try {
+      await notionClient.pages.update({ page_id: pageId, properties })
+      return true
+    } catch (err) {
+      console.error(`[notion] could not update ${pageId}:`, err)
+      writeFailures.push(pageId)
+      return false
+    }
+  }
+
+  for (const page of rows) {
     const props = (page as any).properties
 
-    // skip if chainId not in allowed list
     const chainIdRaw = props?.ChainID?.number
-    if (allowedChainIds.length > 0 && !allowedChainIds.includes(chainIdRaw)) {
-      continue
-    }
 
     const status = props?.Status?.select?.name || '(unknown)'
     if (status?.toLowerCase() === 'expired') continue
@@ -177,10 +207,7 @@ export const alertUntriagedNotionRetryables = async (
         console.log(
           `[notion] ${retryableUrl} ${status}/${decision} -> ${liveStatus}/${liveDecision}`
         )
-        await notionClient.pages.update({
-          page_id: page.id,
-          properties: drift,
-        })
+        await updatePage(page.id, drift)
       }
 
       // only alert or redeem on a confirmed redeemable status; a failed lookup
@@ -207,32 +234,33 @@ export const alertUntriagedNotionRetryables = async (
       ) {
         continue
       } else {
+        // only the transaction belongs in this try: a redeem that succeeded is
+        // a fact about the chain, and failing to write it down must not be
+        // reported as a failed redemption
+        let redeemFailed = false
         try {
           await redeemRetryable(parentTxHash, locator)
-          await notionClient.pages.update({
-            page_id: page.id,
-            properties: {
-              Status: { select: { name: NOTION_EXECUTED_STATUS } },
-              Decision: { select: { name: NOTION_REDEEMED_DECISION } },
-              'Bot Redemption Status': {
-                select: { name: 'Bot Success' },
-              },
-            },
-          })
-          redeemedThisRun.push(retryableUrl)
-          continue
         } catch (err) {
+          redeemFailed = true
           console.error(`[notion] auto-redeem failed for ${parentTxHash}:`, err)
-          await notionClient.pages.update({
-            page_id: page.id,
-            properties: {
-              'Bot Redemption Status': {
-                select: { name: 'Bot Failed' },
-              },
-            },
-          })
-          message = `🚨 Auto-redemption FAILED:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ The bot retries on every run until the ticket expires. Set Decision to \`Ignore\` to silence this, or redeem manually.`
         }
+
+        if (!redeemFailed) {
+          redeemedThisRun.push(retryableUrl)
+          // if this write is lost the row stays redeemable and the next run
+          // reconciles it against the chain, so it is safe to only log
+          await updatePage(page.id, {
+            Status: { select: { name: NOTION_EXECUTED_STATUS } },
+            Decision: { select: { name: NOTION_REDEEMED_DECISION } },
+            'Bot Redemption Status': { select: { name: 'Bot Success' } },
+          })
+          continue
+        }
+
+        await updatePage(page.id, {
+          'Bot Redemption Status': { select: { name: 'Bot Failed' } },
+        })
+        message = `🚨 Auto-redemption FAILED:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ The bot retries on every run until the ticket expires. Set Decision to \`Ignore\` to silence this, or redeem manually.`
       }
     }
 
@@ -257,5 +285,13 @@ export const alertUntriagedNotionRetryables = async (
     } catch {
       // swallow Slack errors; the redemptions already succeeded
     }
+  }
+
+  if (writeFailures.length > 0) {
+    console.error(
+      `[notion] ${
+        writeFailures.length
+      } row(s) could not be updated this run: ${writeFailures.join(', ')}`
+    )
   }
 }
