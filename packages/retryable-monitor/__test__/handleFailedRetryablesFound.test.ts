@@ -97,6 +97,14 @@ describe('handleFailedRetryablesFound', () => {
     expect(reportFailedRetryables).toHaveBeenCalledTimes(1)
   })
 
+  test('alerts when Notion could not preserve an auto-redeem row', async () => {
+    vi.mocked(syncRetryableToNotion).mockResolvedValue(undefined)
+
+    await handleFailedRetryablesFound(buildTicket(), true, true)
+
+    expect(reportFailedRetryables).toHaveBeenCalledTimes(1)
+  })
+
   test('stays quiet on later runs that re-find the same ticket', async () => {
     vi.mocked(syncRetryableToNotion).mockResolvedValue({
       id: 'page-1',

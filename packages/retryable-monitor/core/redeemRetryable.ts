@@ -36,12 +36,13 @@ const locateMessage = async (
     configPath = DEFAULT_CONFIG_PATH,
     retryableCreationId,
     chainId,
-  }: LocateOptions
+  }: LocateOptions,
+  requireSigner = false
 ) => {
   const config = getConfig({ configPath })
 
   const pk = process.env.RETRYABLE_MONITORING_PRIVATE_KEY
-  if (!pk) {
+  if (requireSigner && !pk) {
     throw new Error(
       'RETRYABLE_MONITORING_PRIVATE_KEY env var is required for redeemRetryable'
     )
@@ -66,12 +67,14 @@ const locateMessage = async (
       const childChainProvider = new providers.JsonRpcProvider(
         childChain.orbitRpcUrl
       )
-      const wallet = new Wallet(pk, childChainProvider)
+      const wallet = pk ? new Wallet(pk, childChainProvider) : null
 
       const parentReceipt = new ParentTransactionReceipt(receipt)
       // the SDK filters these by the child chain's inbox, so a ticket never
       // matches a sibling chain sharing the same parent
-      const messages = await parentReceipt.getParentToChildMessages(wallet)
+      const messages = await parentReceipt.getParentToChildMessages(
+        wallet ?? childChainProvider
+      )
       if (!messages || messages.length === 0) continue
 
       // a parent tx can create several tickets; never touch a sibling
@@ -162,7 +165,7 @@ export const redeemRetryable = async (
   options: LocateOptions = {}
 ): Promise<string> => {
   const { message, childChain, childChainProvider, wallet, errors } =
-    await locateMessage(parentTxHash, options)
+    await locateMessage(parentTxHash, options, true)
 
   if (message && childChain && childChainProvider && wallet) {
     try {

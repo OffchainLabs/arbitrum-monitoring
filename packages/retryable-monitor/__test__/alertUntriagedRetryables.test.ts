@@ -112,6 +112,7 @@ const setRows = (...pages: any[]) => {
 describe('alertUntriagedNotionRetryables', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    pagesUpdate.mockReset().mockResolvedValue(undefined)
     setRows(buildPage(48))
     vi.mocked(getLiveRetryableStatus).mockResolvedValue(
       'FUNDS_DEPOSITED_ON_CHILD'
@@ -256,6 +257,33 @@ describe('alertUntriagedNotionRetryables', () => {
     }
   })
 
+  test('reads every page returned by each scoped query', async () => {
+    const first = buildPage(48)
+    first.id = 'page-first'
+    const second = buildPage(48)
+    second.id = 'page-second'
+
+    databasesQuery.mockImplementation(async (args: any) => {
+      const redeemQuery = JSON.stringify(args.filter).includes('Force Redeem')
+      if (!redeemQuery) return { results: [], has_more: false }
+      if (!args.start_cursor) {
+        return {
+          results: [first],
+          has_more: true,
+          next_cursor: 'next-page',
+        }
+      }
+      return { results: [second], has_more: false, next_cursor: null }
+    })
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(redeemRetryable).toHaveBeenCalledTimes(2)
+    expect(databasesQuery).toHaveBeenCalledWith(
+      expect.objectContaining({ start_cursor: 'next-page' })
+    )
+  })
+
   test('forwards the config path it was run with', async () => {
     await alertUntriagedNotionRetryables(CHAINS, true, '../../rh.config.json')
 
@@ -330,6 +358,15 @@ describe('alertUntriagedNotionRetryables', () => {
 
     await alertUntriagedNotionRetryables(CHAINS, true)
 
+    expect(redeemRetryable).toHaveBeenCalled()
+  })
+
+  test('redeems a live kept-alive ticket past its stored timeout', async () => {
+    setRows(buildPage(-24, undefined, 8))
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(getLiveRetryableStatus).toHaveBeenCalled()
     expect(redeemRetryable).toHaveBeenCalled()
   })
 
@@ -420,6 +457,7 @@ describe('alertUntriagedNotionRetryables', () => {
     expect(pagesUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ page_id: 'page-healthy' })
     )
+    await expect(pagesUpdate.mock.results[1].value).resolves.toBeUndefined()
   })
 
   test('posts no summary when a run redeemed nothing', async () => {

@@ -11,14 +11,48 @@ const CHAIN = {
   parentRpcUrl: 'https://parent.example',
   orbitRpcUrl: 'https://child.example',
 }
+const OTHER_CHAIN = {
+  ...CHAIN,
+  chainId: 9999,
+  parentRpcUrl: 'https://other-parent.example',
+  orbitRpcUrl: 'https://other-child.example',
+}
 
-const precompileRedeem = vi.fn()
-const waitForRedeem = vi.fn()
-const getParentToChildMessages = vi.fn()
+const {
+  precompileRedeem,
+  waitForRedeem,
+  getParentToChildMessages,
+  messageStatus,
+  getRetryableCreationReceipt,
+  getTransactionReceipt,
+  getBlock,
+  jsonRpcProvider,
+  getConfig,
+} = vi.hoisted(() => {
+  const getTransactionReceipt = vi.fn()
+  const getBlock = vi.fn()
+  return {
+    precompileRedeem: vi.fn(),
+    waitForRedeem: vi.fn(),
+    getParentToChildMessages: vi.fn(),
+    messageStatus: vi.fn(),
+    getRetryableCreationReceipt: vi.fn(),
+    getTransactionReceipt,
+    getBlock,
+    jsonRpcProvider: vi.fn(() => ({ getTransactionReceipt, getBlock })),
+    getConfig: vi.fn(),
+  }
+})
+
+const message = {
+  retryableCreationId: TICKET_ID,
+  status: messageStatus,
+  getRetryableCreationReceipt,
+}
 
 vi.mock('utils', async importOriginal => ({
   ...(await importOriginal<typeof import('utils')>()),
-  getConfig: vi.fn(() => ({ childChains: [CHAIN] })),
+  getConfig,
 }))
 
 vi.mock('ethers', async importOriginal => {
@@ -27,9 +61,7 @@ vi.mock('ethers', async importOriginal => {
     ...actual,
     providers: {
       ...actual.providers,
-      JsonRpcProvider: vi.fn(() => ({
-        getTransactionReceipt: vi.fn().mockResolvedValue({ logs: [] }),
-      })),
+      JsonRpcProvider: jsonRpcProvider,
     },
     Wallet: vi.fn(() => ({})),
   }
@@ -63,22 +95,37 @@ vi.mock('../core/reportGenerator', () => ({
   getLiveTicketTimeout: vi.fn(),
   hasTicketCreatedEvent: vi.fn(),
   findSuccessfulRedeem: vi.fn(),
+  isPastTicketLifetime: vi.fn(),
 }))
 
-import { redeemRetryable } from '../core/redeemRetryable'
-import { getLiveTicketTimeout } from '../core/reportGenerator'
+import {
+  getLiveRetryableStatus,
+  redeemRetryable,
+} from '../core/redeemRetryable'
+import {
+  findSuccessfulRedeem,
+  getLiveTicketTimeout,
+  hasTicketCreatedEvent,
+  isPastTicketLifetime,
+} from '../core/reportGenerator'
 
 describe('redeemRetryable', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     process.env.RETRYABLE_MONITORING_PRIVATE_KEY = `0x${'01'.repeat(32)}`
 
-    getParentToChildMessages.mockResolvedValue([
-      { retryableCreationId: TICKET_ID },
-    ])
+    getConfig.mockReturnValue({ childChains: [CHAIN] })
+    getTransactionReceipt.mockResolvedValue({ logs: [] })
+    getBlock.mockResolvedValue({ timestamp: 0 })
+    getParentToChildMessages.mockResolvedValue([message])
+    messageStatus.mockResolvedValue(3)
+    getRetryableCreationReceipt.mockResolvedValue({ blockNumber: 1, logs: [] })
     vi.mocked(getLiveTicketTimeout).mockResolvedValue({
       toString: () => '1',
     } as any)
+    vi.mocked(hasTicketCreatedEvent).mockReturnValue(false)
+    vi.mocked(findSuccessfulRedeem).mockResolvedValue(undefined)
+    vi.mocked(isPastTicketLifetime).mockReturnValue(false)
     precompileRedeem.mockResolvedValue({ hash: REDEEM_TX })
     waitForRedeem.mockResolvedValue({ status: 1, transactionHash: RETRY_TX })
   })
@@ -98,6 +145,15 @@ describe('redeemRetryable', () => {
       redeemRetryable(PARENT_TX, { retryableCreationId: TICKET_ID })
     ).rejects.toThrow(/not found\/redeemable/)
 
+    expect(precompileRedeem).not.toHaveBeenCalled()
+  })
+
+  test('requires a signing key to redeem', async () => {
+    delete process.env.RETRYABLE_MONITORING_PRIVATE_KEY
+
+    await expect(redeemRetryable(PARENT_TX)).rejects.toThrow(
+      /RETRYABLE_MONITORING_PRIVATE_KEY/
+    )
     expect(precompileRedeem).not.toHaveBeenCalled()
   })
 
@@ -127,5 +183,107 @@ describe('redeemRetryable', () => {
     ).rejects.toThrow(/not found\/redeemable/)
 
     expect(precompileRedeem).not.toHaveBeenCalled()
+  })
+})
+
+describe('getLiveRetryableStatus', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    process.env.RETRYABLE_MONITORING_PRIVATE_KEY = `0x${'01'.repeat(32)}`
+
+    getConfig.mockReturnValue({ childChains: [CHAIN] })
+    getTransactionReceipt.mockResolvedValue({ logs: [] })
+    getBlock.mockResolvedValue({ timestamp: 100 })
+    getParentToChildMessages.mockResolvedValue([message])
+    messageStatus.mockResolvedValue(2)
+    getRetryableCreationReceipt.mockResolvedValue({ blockNumber: 1, logs: [] })
+    vi.mocked(getLiveTicketTimeout).mockResolvedValue(undefined)
+    vi.mocked(hasTicketCreatedEvent).mockReturnValue(false)
+    vi.mocked(findSuccessfulRedeem).mockResolvedValue(undefined)
+    vi.mocked(isPastTicketLifetime).mockReturnValue(false)
+  })
+
+  test('maps the SDK redeemed status to the Notion executed status', async () => {
+    messageStatus.mockResolvedValue(4)
+
+    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBe('Executed')
+  })
+
+  test.each([
+    [1, 'NOT_YET_CREATED'],
+    [3, 'FUNDS_DEPOSITED_ON_CHILD'],
+    [5, 'EXPIRED'],
+  ])('maps SDK status %s without extra resolution', async (status, name) => {
+    messageStatus.mockResolvedValue(status)
+
+    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBe(name)
+    expect(getRetryableCreationReceipt).not.toHaveBeenCalled()
+  })
+
+  test('returns null when the parent transaction cannot be found', async () => {
+    getTransactionReceipt.mockResolvedValue(null)
+
+    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBeNull()
+    expect(messageStatus).not.toHaveBeenCalled()
+  })
+
+  test('does not require a signing key for a live-status read', async () => {
+    delete process.env.RETRYABLE_MONITORING_PRIVATE_KEY
+    messageStatus.mockResolvedValue(3)
+
+    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBe(
+      'FUNDS_DEPOSITED_ON_CHILD'
+    )
+  })
+
+  test('keeps a genuine creation failure terminal', async () => {
+    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBe(
+      'CREATION_FAILED'
+    )
+
+    expect(getLiveTicketTimeout).not.toHaveBeenCalled()
+  })
+
+  test('treats a reverted creation receipt with a live ticket as redeemable', async () => {
+    vi.mocked(hasTicketCreatedEvent).mockReturnValue(true)
+    vi.mocked(getLiveTicketTimeout).mockResolvedValue({} as any)
+
+    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBe(
+      'FUNDS_DEPOSITED_ON_CHILD'
+    )
+  })
+
+  test('detects a successful manual redeem of a reverted creation receipt', async () => {
+    vi.mocked(hasTicketCreatedEvent).mockReturnValue(true)
+    vi.mocked(findSuccessfulRedeem).mockResolvedValue(RETRY_TX)
+
+    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBe('Executed')
+  })
+
+  test('marks a created but dead ticket expired after its lifetime', async () => {
+    vi.mocked(hasTicketCreatedEvent).mockReturnValue(true)
+    vi.mocked(isPastTicketLifetime).mockReturnValue(true)
+
+    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBe('EXPIRED')
+    expect(isPastTicketLifetime).toHaveBeenCalledWith(100)
+  })
+
+  test('propagates an RPC failure instead of treating the ticket as dead', async () => {
+    vi.mocked(hasTicketCreatedEvent).mockReturnValue(true)
+    vi.mocked(getLiveTicketTimeout).mockRejectedValue(new Error('rpc down'))
+
+    await expect(getLiveRetryableStatus(PARENT_TX)).rejects.toThrow('rpc down')
+  })
+
+  test('only probes the requested chain', async () => {
+    getConfig.mockReturnValue({ childChains: [OTHER_CHAIN, CHAIN] })
+    messageStatus.mockResolvedValue(4)
+
+    await getLiveRetryableStatus(PARENT_TX, { chainId: CHAIN.chainId })
+
+    expect(jsonRpcProvider).toHaveBeenCalledWith(CHAIN.parentRpcUrl)
+    expect(jsonRpcProvider).toHaveBeenCalledWith(CHAIN.orbitRpcUrl)
+    expect(jsonRpcProvider).not.toHaveBeenCalledWith(OTHER_CHAIN.parentRpcUrl)
+    expect(jsonRpcProvider).not.toHaveBeenCalledWith(OTHER_CHAIN.orbitRpcUrl)
   })
 })
