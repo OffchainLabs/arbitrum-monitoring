@@ -55,12 +55,9 @@ vi.mock('@arbitrum/sdk', () => ({
   },
 }))
 
-vi.mock(
-  '@arbitrum/sdk/dist/lib/abi/factories/ArbRetryableTx__factory',
-  () => ({
-    ArbRetryableTx__factory: { connect: () => ({ redeem: precompileRedeem }) },
-  })
-)
+vi.mock('@arbitrum/sdk/dist/lib/abi/factories/ArbRetryableTx__factory', () => ({
+  ArbRetryableTx__factory: { connect: () => ({ redeem: precompileRedeem }) },
+}))
 
 vi.mock('../core/reportGenerator', () => ({
   getLiveTicketTimeout: vi.fn(),
@@ -79,7 +76,9 @@ describe('redeemRetryable', () => {
     getParentToChildMessages.mockResolvedValue([
       { retryableCreationId: TICKET_ID },
     ])
-    vi.mocked(getLiveTicketTimeout).mockResolvedValue({ toString: () => '1' } as any)
+    vi.mocked(getLiveTicketTimeout).mockResolvedValue({
+      toString: () => '1',
+    } as any)
     precompileRedeem.mockResolvedValue({ hash: REDEEM_TX })
     waitForRedeem.mockResolvedValue({ status: 1, transactionHash: RETRY_TX })
   })
