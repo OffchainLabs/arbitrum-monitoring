@@ -8,6 +8,16 @@ import {
   REDEEMABLE_STATUS,
 } from '../../core/redeemRetryable'
 import { DEFAULT_CONFIG_PATH, type ChildNetwork } from 'utils'
+import { formatActionRunReference } from '../slack/slackMessageFormattingUtils'
+
+export const TRIAGE_DECISION = 'Triage'
+export const SHOULD_REDEEM_DECISION = 'Should Redeem'
+export const FORCE_REDEEM_DECISION = 'Force Redeem'
+
+// tickets live seven days; the bot waits four so a human still has time to set
+// Ignore, and a failed attempt still has three days of daily retries left
+export const AUTO_REDEEM_DELAY_DAYS = 4
+const TICKET_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000
 
 const formatDate = (iso: string | undefined) => {
   if (!iso) return '(unknown)'
@@ -42,33 +52,68 @@ export const alertUntriagedNotionRetryables = async (
   configPath: string = DEFAULT_CONFIG_PATH
 ) => {
   const allowedChainIds = childChains.map(c => c.chainId)
-  const response = await notionClient.databases.query({
-    database_id: databaseId,
-    page_size: 100,
-    filter: {
-      or: [
-        {
-          and: [
-            { property: 'Decision', select: { equals: 'Triage' } },
-            {
-              property: 'Status',
-              select: { does_not_equal: 'Executed' },
-            },
-          ],
-        },
-        { property: 'Decision', select: { equals: 'Should Redeem' } },
-      ],
-    },
+
+  // keep unrelated chains out of every page returned to this run
+  const chainScope = allowedChainIds.map(chainId => ({
+    property: 'ChainID',
+    number: { equals: chainId },
+  }))
+  const scopedToRun = (conditions: any[]) => ({
+    and:
+      chainScope.length > 0 ? [{ or: chainScope }, ...conditions] : conditions,
   })
 
-  for (const page of response.results) {
+  // two queries rather than one: Notion only nests compound filters two deep
+  const filters = [
+    scopedToRun([
+      {
+        or: [
+          { property: 'Decision', select: { equals: SHOULD_REDEEM_DECISION } },
+          { property: 'Decision', select: { equals: FORCE_REDEEM_DECISION } },
+        ],
+      },
+    ]),
+    scopedToRun([
+      { property: 'Decision', select: { equals: TRIAGE_DECISION } },
+      { property: 'Status', select: { does_not_equal: 'Executed' } },
+    ]),
+  ]
+
+  const rows: any[] = []
+  for (const filter of filters) {
+    let cursor: string | undefined = undefined
+    do {
+      const response = await notionClient.databases.query({
+        database_id: databaseId,
+        page_size: 100,
+        start_cursor: cursor,
+        filter,
+      })
+      rows.push(...response.results)
+      cursor = response.has_more ? response.next_cursor ?? undefined : undefined
+    } while (cursor)
+  }
+
+  const redeemedThisRun: string[] = []
+  const writeFailures: string[] = []
+
+  // a 429 or a malformed row must not end the sweep: the portal runs this once
+  // a day, so an abort costs every later ticket a full retry window
+  const updatePage = async (pageId: string, properties: any) => {
+    try {
+      await notionClient.pages.update({ page_id: pageId, properties })
+      return true
+    } catch (err) {
+      console.error(`[notion] could not update ${pageId}:`, err)
+      writeFailures.push(pageId)
+      return false
+    }
+  }
+
+  for (const page of rows) {
     const props = (page as any).properties
 
-    // skip if chainId not in allowed list
     const chainIdRaw = props?.ChainID?.number
-    if (allowedChainIds.length > 0 && !allowedChainIds.includes(chainIdRaw)) {
-      continue
-    }
 
     const status = props?.Status?.select?.name || '(unknown)'
     if (status?.toLowerCase() === 'expired') continue
@@ -97,9 +142,17 @@ export const alertUntriagedNotionRetryables = async (
 
     const isPastTimeout = Number.isFinite(hoursLeft) && hoursLeft < 0
 
+    const createdAtRaw = props?.CreatedAt?.date?.start
+    // rows written before CreatedAt existed fall back to the timeout; the
+    // ticket lifetime is fixed, so it resolves to the same instant
+    const createdAtMs = createdAtRaw
+      ? new Date(createdAtRaw).getTime()
+      : expiryTime - TICKET_LIFETIME_MS
+    const daysSinceCreation = (now - createdAtMs) / (1000 * 60 * 60 * 24)
+
     let message = ''
 
-    if (decision === 'Triage') {
+    if (decision === TRIAGE_DECISION) {
       if (isPastTimeout) continue
 
       if (hoursLeft <= 72) {
@@ -107,7 +160,10 @@ export const alertUntriagedNotionRetryables = async (
       } else {
         message = `⚠️ Retryable ticket needs triage:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Please review and decide whether to redeem or ignore.`
       }
-    } else if (decision === 'Should Redeem') {
+    } else if (
+      decision === SHOULD_REDEEM_DECISION ||
+      decision === FORCE_REDEEM_DECISION
+    ) {
       const parentTxHash = extractTxHash(parentTx)
       const retryableCreationId = extractTxHash(retryableUrl)
       // without the row's own ticket id we could redeem a sibling
@@ -153,10 +209,7 @@ export const alertUntriagedNotionRetryables = async (
         console.log(
           `[notion] ${retryableUrl} ${status}/${decision} -> ${liveStatus}/${liveDecision}`
         )
-        await notionClient.pages.update({
-          page_id: page.id,
-          properties: drift,
-        })
+        await updatePage(page.id, drift)
       }
 
       // only alert or redeem on a confirmed redeemable status; a failed lookup
@@ -170,43 +223,44 @@ export const alertUntriagedNotionRetryables = async (
         continue
       }
 
-      if (isPastTimeout) continue
-
-      const under24HoursLeftToExpire = timeoutRaw
-        ? isNearExpiry(timeoutRaw, 24)
-        : false
-
-      if (under24HoursLeftToExpire) {
+      if (!enableAutoRedeem) {
+        // this run has no mandate to redeem, so a row a human marked for
+        // redemption still needs the nearing-expiry nudge
+        if (!isNearExpiry(timeoutRaw, 24)) continue
         message = `🚨 Retryable marked for redemption and nearing expiry:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Check why it hasn't been executed.`
-      } else if (hoursLeft <= 96) {
-        if (!enableAutoRedeem) continue
-
-        try {
-          await redeemRetryable(parentTxHash, locator)
-          await notionClient.pages.update({
-            page_id: page.id,
-            properties: {
-              Status: { select: { name: NOTION_EXECUTED_STATUS } },
-              Decision: { select: { name: NOTION_REDEEMED_DECISION } },
-              'Bot Redemption Status': {
-                select: { name: 'Bot Success' },
-              },
-            },
-          })
-        } catch (err) {
-          console.error(`[notion] auto-redeem failed for ${parentTxHash}:`, err)
-          await notionClient.pages.update({
-            page_id: page.id,
-            properties: {
-              'Bot Redemption Status': {
-                select: { name: 'Bot Failed' },
-              },
-            },
-          })
-        }
+      } else if (
+        decision === SHOULD_REDEEM_DECISION &&
+        daysSinceCreation < AUTO_REDEEM_DELAY_DAYS
+      ) {
         continue
       } else {
-        continue
+        // only the transaction belongs in this try: a redeem that succeeded is
+        // a fact about the chain, and failing to write it down must not be
+        // reported as a failed redemption
+        let redeemFailed = false
+        try {
+          await redeemRetryable(parentTxHash, locator)
+        } catch (err) {
+          redeemFailed = true
+          console.error(`[notion] auto-redeem failed for ${parentTxHash}:`, err)
+        }
+
+        if (!redeemFailed) {
+          redeemedThisRun.push(retryableUrl)
+          // if this write is lost the row stays redeemable and the next run
+          // reconciles it against the chain, so it is safe to only log
+          await updatePage(page.id, {
+            Status: { select: { name: NOTION_EXECUTED_STATUS } },
+            Decision: { select: { name: NOTION_REDEEMED_DECISION } },
+            'Bot Redemption Status': { select: { name: 'Bot Success' } },
+          })
+          continue
+        }
+
+        await updatePage(page.id, {
+          'Bot Redemption Status': { select: { name: 'Bot Failed' } },
+        })
+        message = `🚨 Auto-redemption FAILED:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ The bot retries on every run until the ticket expires. Set Decision to \`Ignore\` to silence this, or redeem manually.`
       }
     }
 
@@ -216,5 +270,28 @@ export const alertUntriagedNotionRetryables = async (
     } catch {
       // swallow Slack errors to keep loop running
     }
+  }
+
+  if (redeemedThisRun.length > 0) {
+    const ticketLines = redeemedThisRun.map(url => `\n• ${url}`).join('')
+    try {
+      await postSlackMessage({
+        message: `✅ ${redeemedThisRun.length} retryable${
+          redeemedThisRun.length === 1 ? '' : 's'
+        } auto-redeemed${formatActionRunReference()} at ${formatDate(
+          new Date().toISOString()
+        )}:${ticketLines}`,
+      })
+    } catch {
+      // swallow Slack errors; the redemptions already succeeded
+    }
+  }
+
+  if (writeFailures.length > 0) {
+    console.error(
+      `[notion] ${
+        writeFailures.length
+      } row(s) could not be updated this run: ${writeFailures.join(', ')}`
+    )
   }
 }
