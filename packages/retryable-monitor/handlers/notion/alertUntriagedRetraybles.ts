@@ -53,9 +53,7 @@ export const alertUntriagedNotionRetryables = async (
 ) => {
   const allowedChainIds = childChains.map(c => c.chainId)
 
-  // every row this run could act on has to fit in one page, so the chain scope
-  // belongs in the query: filtering it here instead would let another chain's
-  // rows fill the page and starve this one
+  // keep unrelated chains out of every page returned to this run
   const chainScope = allowedChainIds.map(chainId => ({
     property: 'ChainID',
     number: { equals: chainId },
@@ -65,8 +63,7 @@ export const alertUntriagedNotionRetryables = async (
       chainScope.length > 0 ? [{ or: chainScope }, ...conditions] : conditions,
   })
 
-  // two queries rather than one: Notion only nests compound filters two deep,
-  // and each gets its own page budget
+  // two queries rather than one: Notion only nests compound filters two deep
   const filters = [
     scopedToRun([
       {
@@ -84,12 +81,17 @@ export const alertUntriagedNotionRetryables = async (
 
   const rows: any[] = []
   for (const filter of filters) {
-    const response = await notionClient.databases.query({
-      database_id: databaseId,
-      page_size: 100,
-      filter,
-    })
-    rows.push(...response.results)
+    let cursor: string | undefined = undefined
+    do {
+      const response = await notionClient.databases.query({
+        database_id: databaseId,
+        page_size: 100,
+        start_cursor: cursor,
+        filter,
+      })
+      rows.push(...response.results)
+      cursor = response.has_more ? response.next_cursor ?? undefined : undefined
+    } while (cursor)
   }
 
   const redeemedThisRun: string[] = []
@@ -220,8 +222,6 @@ export const alertUntriagedNotionRetryables = async (
         )
         continue
       }
-
-      if (isPastTimeout) continue
 
       if (!enableAutoRedeem) {
         // this run has no mandate to redeem, so a row a human marked for

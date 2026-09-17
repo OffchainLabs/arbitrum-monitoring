@@ -133,9 +133,9 @@ export const handleFailedRetryablesFound = async (
     // run routes through the update path instead of being filtered out.
     if (result) addToFetchedNotionRetryables(childTxUrl)
 
-    // auto-redeem runs alert once, when the row first appears: the ticket is
-    // never triaged by hand, so the recurring triage nudge never fires for it
-    if (result?.isNew && enableAutoRedeem) {
+    // alert when the row first appears, or whenever Notion could not preserve
+    // it; otherwise a failed write can make a funded ticket entirely silent
+    if (enableAutoRedeem && (result?.isNew || !result)) {
       await reportFailedRetryables(ticket)
     }
   }
