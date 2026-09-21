@@ -27,6 +27,16 @@ describe('isTransientRpcError', () => {
     expect(isTransientRpcError((alchemy429() as any).cause)).toBe(true)
   })
 
+  test('detects ethers errors nested under error', () => {
+    expect(
+      isTransientRpcError({
+        message: 'could not detect network',
+        cause: new Error('request failed'),
+        error: { status: 503 },
+      })
+    ).toBe(true)
+  })
+
   test('detects transient errors from message text', () => {
     expect(isTransientRpcError(new Error('Status: 429'))).toBe(true)
     expect(isTransientRpcError(new Error('rate limit exceeded'))).toBe(true)
@@ -38,6 +48,9 @@ describe('isTransientRpcError', () => {
     expect(isTransientRpcError(new Error('The request timed out.'))).toBe(true)
     expect(isTransientRpcError(new Error('fetch failed'))).toBe(true)
     expect(isTransientRpcError(new Error('502 Bad Gateway'))).toBe(true)
+    expect(isTransientRpcError({ code: 'NETWORK_ERROR' })).toBe(true)
+    expect(isTransientRpcError({ code: 'ECONNRESET' })).toBe(true)
+    expect(isTransientRpcError({ statusCode: '503' })).toBe(true)
   })
 
   test('does not flag genuine chain/contract errors', () => {

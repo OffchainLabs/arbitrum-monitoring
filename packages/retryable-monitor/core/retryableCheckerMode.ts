@@ -12,7 +12,7 @@ import {
   CheckRetryablesOneOffParams,
   CheckRetryablesContinuousParams,
 } from './types'
-import { ChildNetwork, processBlockRangeInChunks } from 'utils'
+import { ChildNetwork, processBlockRangeInChunks, withRetry } from 'utils'
 import { checkRetryables } from './retryableChecker'
 
 export const getParentChainBlockTime = (childChain: ChildNetwork) => {
@@ -50,7 +50,10 @@ export const checkRetryablesOneOff = async ({
 }: CheckRetryablesOneOffParams): Promise<number> => {
   if (toBlock === 0) {
     try {
-      const currentBlock = await parentChainProvider.getBlockNumber()
+      const currentBlock = await withRetry(
+        () => parentChainProvider.getBlockNumber(),
+        { label: 'parentChain.getBlockNumber' }
+      )
       if (!currentBlock) {
         throw new Error('Failed to retrieve the latest block.')
       }
@@ -129,7 +132,9 @@ export const checkRetryablesContinuous = async ({
     fromBlock = lastBlockChecked + 1
     console.log('Continuing from block:', fromBlock)
 
-    toBlock = await parentChainProvider.getBlockNumber()
+    toBlock = await withRetry(() => parentChainProvider.getBlockNumber(), {
+      label: 'parentChain.getBlockNumber',
+    })
     console.log(`Processed blocks up to ${lastBlockChecked}`)
 
     return lastBlockChecked
