@@ -2,9 +2,7 @@ import { notionClient } from './createNotionClient'
 import { PageObjectResponse } from '@notionhq/client/build/src/api-endpoints'
 import { postSlackMessage } from '../slack/postSlackMessage'
 import { OnRetryableFoundParams } from '../../core/types'
-import { ethers, BigNumber } from 'ethers'
-import { getTokenPrice } from '../slack/slackMessageFormattingUtils'
-import { parseAmount } from 'utils'
+import { formatTokenAmount } from '../slack/slackMessageFormattingUtils'
 import { NOTION_STATUS } from './notionVocabulary'
 
 const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!
@@ -29,29 +27,12 @@ async function buildTokensDepositedDisplay(metadata: any): Promise<string> {
     return metadata?.tokensDeposited ?? '-'
   }
 
-  const amountStr = ethers.utils.formatUnits(
-    metadata.tokenAmountRaw,
-    metadata.tokenDecimals
-  )
-
-  const price = await getTokenPrice(
-    String(metadata.l1TokenAddress).toLowerCase()
-  )
-
-  if (price !== undefined) {
-    const amountBN = parseAmount(amountStr, metadata.tokenDecimals)
-    const usdValue =
-      amountBN
-        .mul(Math.floor(price * 1e6))
-        .div(BigNumber.from(10).pow(metadata.tokenDecimals))
-        .toNumber() / 1e6
-
-    return `${amountStr} ${metadata.tokenSymbol} ($${usdValue.toFixed(2)}) (${
-      metadata.l1TokenAddress
-    })`
-  }
-
-  return `${amountStr} ${metadata.tokenSymbol} (${metadata.l1TokenAddress})`
+  return formatTokenAmount({
+    amountRaw: metadata.tokenAmountRaw,
+    decimals: metadata.tokenDecimals,
+    symbol: metadata.tokenSymbol,
+    address: metadata.l1TokenAddress,
+  })
 }
 
 export async function syncRetryableToNotion(
