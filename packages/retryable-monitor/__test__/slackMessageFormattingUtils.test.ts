@@ -181,6 +181,22 @@ describe('formatTokenAmount', () => {
     expect(axios.get).toHaveBeenCalledTimes(1)
   })
 
+  test('treats a null CoinGecko price as unpriced', async () => {
+    const address = nextAddress()
+    vi.mocked(axios.get).mockResolvedValue({
+      data: { [address.toLowerCase()]: { usd: null } },
+    })
+
+    const msg = await formatTokenAmount({
+      amountRaw: '1',
+      decimals: 0,
+      symbol: 'X',
+      address,
+    })
+
+    expect(msg).not.toContain('$')
+  })
+
   test('drops the USD figure when the price lookup fails, and retries it', async () => {
     const address = nextAddress()
     vi.spyOn(console, 'error').mockImplementation(() => {})
