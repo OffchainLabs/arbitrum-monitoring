@@ -3,11 +3,16 @@ import { postSlackMessage } from '../slack/postSlackMessage'
 import {
   redeemRetryable,
   getLiveRetryableStatus,
-  NOTION_EXECUTED_STATUS,
-  NOTION_REDEEMED_DECISION,
+  locateRetryable,
   REDEEMABLE_STATUS,
+  type LocatedRetryable,
 } from '../../core/redeemRetryable'
 import { DEFAULT_CONFIG_PATH, type ChildNetwork } from 'utils'
+import {
+  NOTION_DECISION,
+  NOTION_STATUS,
+  retryableStatusToNotion,
+} from './notionVocabulary'
 
 const formatDate = (iso: string | undefined) => {
   if (!iso) return '(unknown)'
@@ -52,7 +57,7 @@ export const alertUntriagedNotionRetryables = async (
             { property: 'Decision', select: { equals: 'Triage' } },
             {
               property: 'Status',
-              select: { does_not_equal: 'Executed' },
+              select: { does_not_equal: NOTION_STATUS.EXECUTED },
             },
           ],
         },
@@ -123,9 +128,11 @@ export const alertUntriagedNotionRetryables = async (
       // reconcile before the timeout branches decide anything: a row read only
       // by those branches alerts off stale Notion data in its last 24 hours
       // without the chain ever being consulted
-      let liveStatus: string | null = null
+      let located: LocatedRetryable | null = null
+      let liveStatus = null
       try {
-        liveStatus = await getLiveRetryableStatus(parentTxHash, locator)
+        located = await locateRetryable(parentTxHash, locator)
+        liveStatus = located ? await getLiveRetryableStatus(located) : null
       } catch (err) {
         console.error(
           `[notion] could not read live status for ${retryableUrl}:`,
@@ -134,15 +141,17 @@ export const alertUntriagedNotionRetryables = async (
       }
 
       // a ticket redeemed by anyone, bot or not, is no longer ours to redeem
+      const notionStatus =
+        liveStatus === null ? null : retryableStatusToNotion(liveStatus)
       const liveDecision =
-        liveStatus === NOTION_EXECUTED_STATUS
-          ? NOTION_REDEEMED_DECISION
+        notionStatus === NOTION_STATUS.EXECUTED
+          ? NOTION_DECISION.REDEEMED
           : decision
 
       const drift = {
-        ...(liveStatus &&
-          liveStatus !== status && {
-            Status: { select: { name: liveStatus } },
+        ...(notionStatus &&
+          notionStatus !== status && {
+            Status: { select: { name: notionStatus } },
           }),
         ...(liveDecision !== decision && {
           Decision: { select: { name: liveDecision } },
@@ -151,7 +160,7 @@ export const alertUntriagedNotionRetryables = async (
 
       if (Object.keys(drift).length > 0) {
         console.log(
-          `[notion] ${retryableUrl} ${status}/${decision} -> ${liveStatus}/${liveDecision}`
+          `[notion] ${retryableUrl} ${status}/${decision} -> ${notionStatus}/${liveDecision}`
         )
         await notionClient.pages.update({
           page_id: page.id,
@@ -161,10 +170,10 @@ export const alertUntriagedNotionRetryables = async (
 
       // only alert or redeem on a confirmed redeemable status; a failed lookup
       // is not evidence the ticket is redeemable
-      if (liveStatus !== REDEEMABLE_STATUS) {
+      if (!located || liveStatus !== REDEEMABLE_STATUS) {
         console.log(
           `[notion] skipping ${retryableUrl}, status is ${
-            liveStatus ?? 'unknown'
+            notionStatus ?? 'unknown'
           }`
         )
         continue
@@ -182,12 +191,12 @@ export const alertUntriagedNotionRetryables = async (
         if (!enableAutoRedeem) continue
 
         try {
-          await redeemRetryable(parentTxHash, locator)
+          await redeemRetryable(located)
           await notionClient.pages.update({
             page_id: page.id,
             properties: {
-              Status: { select: { name: NOTION_EXECUTED_STATUS } },
-              Decision: { select: { name: NOTION_REDEEMED_DECISION } },
+              Status: { select: { name: NOTION_STATUS.EXECUTED } },
+              Decision: { select: { name: NOTION_DECISION.REDEEMED } },
               'Bot Redemption Status': {
                 select: { name: 'Bot Success' },
               },

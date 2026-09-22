@@ -55,12 +55,9 @@ vi.mock('@arbitrum/sdk', () => ({
   },
 }))
 
-vi.mock(
-  '@arbitrum/sdk/dist/lib/abi/factories/ArbRetryableTx__factory',
-  () => ({
-    ArbRetryableTx__factory: { connect: () => ({ redeem: precompileRedeem }) },
-  })
-)
+vi.mock('@arbitrum/sdk/dist/lib/abi/factories/ArbRetryableTx__factory', () => ({
+  ArbRetryableTx__factory: { connect: () => ({ redeem: precompileRedeem }) },
+}))
 
 vi.mock('../core/reportGenerator', () => ({
   getLiveTicketTimeout: vi.fn(),
@@ -68,10 +65,18 @@ vi.mock('../core/reportGenerator', () => ({
   findSuccessfulRedeem: vi.fn(),
 }))
 
-import { redeemRetryable } from '../core/redeemRetryable'
+import { locateRetryable, redeemRetryable } from '../core/redeemRetryable'
 import { getLiveTicketTimeout } from '../core/reportGenerator'
 
 describe('redeemRetryable', () => {
+  const locate = async () => {
+    const located = await locateRetryable(PARENT_TX, {
+      retryableCreationId: TICKET_ID,
+    })
+    if (!located) throw new Error('test ticket not found')
+    return located
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     process.env.RETRYABLE_MONITORING_PRIVATE_KEY = `0x${'01'.repeat(32)}`
@@ -79,15 +84,15 @@ describe('redeemRetryable', () => {
     getParentToChildMessages.mockResolvedValue([
       { retryableCreationId: TICKET_ID },
     ])
-    vi.mocked(getLiveTicketTimeout).mockResolvedValue({ toString: () => '1' } as any)
+    vi.mocked(getLiveTicketTimeout).mockResolvedValue({
+      toString: () => '1',
+    } as any)
     precompileRedeem.mockResolvedValue({ hash: REDEEM_TX })
     waitForRedeem.mockResolvedValue({ status: 1, transactionHash: RETRY_TX })
   })
 
   test('redeems via the precompile rather than the SDK status guard', async () => {
-    await expect(
-      redeemRetryable(PARENT_TX, { retryableCreationId: TICKET_ID })
-    ).resolves.toBe(RETRY_TX)
+    await expect(redeemRetryable(await locate())).resolves.toBe(RETRY_TX)
 
     expect(precompileRedeem).toHaveBeenCalledWith(TICKET_ID)
   })
@@ -95,9 +100,9 @@ describe('redeemRetryable', () => {
   test('does not redeem a ticket that no longer exists', async () => {
     vi.mocked(getLiveTicketTimeout).mockResolvedValue(undefined)
 
-    await expect(
-      redeemRetryable(PARENT_TX, { retryableCreationId: TICKET_ID })
-    ).rejects.toThrow(/not found\/redeemable/)
+    await expect(redeemRetryable(await locate())).rejects.toThrow(
+      /not redeemable/
+    )
 
     expect(precompileRedeem).not.toHaveBeenCalled()
   })
@@ -105,17 +110,17 @@ describe('redeemRetryable', () => {
   test('throws when the scheduled retry execution reverted', async () => {
     waitForRedeem.mockResolvedValue({ status: 0, transactionHash: RETRY_TX })
 
-    await expect(
-      redeemRetryable(PARENT_TX, { retryableCreationId: TICKET_ID })
-    ).rejects.toThrow(/did not succeed/)
+    await expect(redeemRetryable(await locate())).rejects.toThrow(
+      /did not succeed/
+    )
   })
 
   test('throws when the retry receipt is missing', async () => {
     waitForRedeem.mockResolvedValue(null)
 
-    await expect(
-      redeemRetryable(PARENT_TX, { retryableCreationId: TICKET_ID })
-    ).rejects.toThrow(/did not succeed/)
+    await expect(redeemRetryable(await locate())).rejects.toThrow(
+      /did not succeed/
+    )
   })
 
   test('never redeems a sibling ticket from the same parent tx', async () => {
@@ -124,8 +129,8 @@ describe('redeemRetryable', () => {
     ])
 
     await expect(
-      redeemRetryable(PARENT_TX, { retryableCreationId: TICKET_ID })
-    ).rejects.toThrow(/not found\/redeemable/)
+      locateRetryable(PARENT_TX, { retryableCreationId: TICKET_ID })
+    ).resolves.toBeNull()
 
     expect(precompileRedeem).not.toHaveBeenCalled()
   })
