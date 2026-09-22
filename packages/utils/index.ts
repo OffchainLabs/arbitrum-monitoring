@@ -13,7 +13,7 @@ export const getErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
 
 const TRANSIENT_RPC_ERROR_REGEX =
-  /status: 429|rate limit|too many requests|compute units|timed? ?out|network[_ ]error|econnreset|econnrefused|eai_again|socket hang up|fetch failed|service unavailable|bad gateway|gateway time-?out/i
+  /status[=: ]+(?:429|5\d\d)|rate limit|too many requests|compute units|timed? ?out|network[_ ]error|econnreset|econnrefused|eai_again|socket hang up|fetch failed|service unavailable|bad gateway|gateway time-?out/i
 
 /**
  * Returns true for retryable RPC-infra failures (rate limits, timeouts,
@@ -38,6 +38,8 @@ export const isTransientRpcError = (error: unknown): boolean => {
       body?: unknown
       cause?: unknown
       error?: unknown
+      response?: unknown
+      serverError?: unknown
     }
     const status = Number(candidate.status ?? candidate.statusCode)
     if (status === 429 || (Number.isFinite(status) && status >= 500)) {
@@ -52,7 +54,12 @@ export const isTransientRpcError = (error: unknown): boolean => {
     ) {
       return true
     }
-    pending.push(candidate.cause, candidate.error)
+    pending.push(
+      candidate.cause,
+      candidate.error,
+      candidate.response,
+      candidate.serverError
+    )
   }
   return false
 }
