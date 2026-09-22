@@ -51,6 +51,7 @@ export const handleFailedRetryablesFound = async (
       childChain,
       parentChainRetryableReport,
     } = ticket
+    const autoRedeem = enableAutoRedeem && childChain.autoRedeem === true
 
     const childChainProvider = new providers.JsonRpcProvider(
       String(childChain.orbitRpcUrl)
@@ -115,7 +116,7 @@ export const handleFailedRetryablesFound = async (
       chain: childChain.name,
       // a run that may redeem needs no human triage call, so the row starts
       // where the bot can act on it
-      decision: enableAutoRedeem ? 'Should Redeem' : 'Triage',
+      decision: autoRedeem ? 'Should Redeem' : 'Triage',
       metadata: {
         tokensDeposited: formattedTokenString,
         gasPriceProvided,
@@ -135,7 +136,7 @@ export const handleFailedRetryablesFound = async (
 
     // alert when the row first appears, or whenever Notion could not preserve
     // it; otherwise a failed write can make a funded ticket entirely silent
-    if (enableAutoRedeem && (result?.isNew || !result)) {
+    if (autoRedeem && (result?.isNew || !result)) {
       await reportFailedRetryables(ticket)
     }
   }

@@ -6,6 +6,8 @@ export interface ChildNetwork extends ArbitrumNetwork {
   orbitRpcUrl: string
   explorerUrl: string
   parentExplorerUrl: string
+  /** Allows retryable-monitor to redeem tickets when --autoRedeem is set. */
+  autoRedeem?: boolean
   /** Operator-run nodes to health-check with node-sync-monitor. Requires referenceRpcUrl. */
   monitoredNodeRpcUrls?: string[]
   /** Trusted RPC that node-sync-monitor compares the monitored nodes against; must be on infrastructure independent of the monitored nodes. */

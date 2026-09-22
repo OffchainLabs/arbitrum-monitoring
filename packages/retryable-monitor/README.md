@@ -1,4 +1,4 @@
-# Retryable Monitor 
+# Retryable Monitor
 
 > For installation and general configuration, see the [main README](../../README.md).
 
@@ -108,16 +108,16 @@ Every failed retryable found during a run — including the zero-value ones that
 
 ## Unattended redemption (`--autoRedeem`)
 
-`--writeToNotion` and `--autoRedeem` are separate on purpose. `--writeToNotion` makes Notion the sink: rows are written, reconciled against the chain, and alerted on. It never sends a transaction. `--autoRedeem` additionally lets the bot redeem, and is meant only for chains that have opted into unattended redemption. It requires `--writeToNotion`, since the Notion sweep is where redemption happens.
+`--writeToNotion` and `--autoRedeem` are separate on purpose. `--writeToNotion` makes Notion the sink: rows are written, reconciled against the chain, and alerted on. It never sends a transaction. `--autoRedeem` additionally lets the bot redeem for child chains whose config sets `autoRedeem: true`. It requires `--writeToNotion`, since the Notion sweep is where redemption happens.
 
 With `--autoRedeem` on, a failed ticket goes through:
 
-| Day | What happens |
-| --- | --- |
-| 0 | Ticket is logged to Notion as `Should Redeem` and alerted once. No triage needed. |
-| 1-3 | Quiet. |
-| 4 | Bot redeems. Success is silent per ticket and reported in one end-of-run summary. |
-| 4-7 | If a redeem fails, the channel is pinged each run until the ticket is redeemed, expires, or is set to `Ignore`. |
+| Day | What happens                                                                                       |
+| --- | -------------------------------------------------------------------------------------------------- |
+| 0   | Ticket is logged to Notion as `Should Redeem` and alerted once. No triage needed.                  |
+| 1-3 | Quiet.                                                                                             |
+| 4   | Bot redeems. Success is silent per ticket and reported in one end-of-run summary.                  |
+| 4-7 | A failed redeem is retried at most once per day. Failures from the sweep are posted as one digest. |
 
 `Decision` drives all of this:
 

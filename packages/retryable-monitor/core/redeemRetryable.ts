@@ -39,7 +39,7 @@ export const locateRetryable = async (
     configPath = DEFAULT_CONFIG_PATH,
     retryableCreationId,
     chainId,
-  }: LocateOptions
+  }: LocateOptions = {}
 ): Promise<LocatedRetryable | null> => {
   const config = getConfig({ configPath })
 

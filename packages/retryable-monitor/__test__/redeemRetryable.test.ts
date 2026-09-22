@@ -100,6 +100,7 @@ vi.mock('../core/reportGenerator', () => ({
 
 import {
   getLiveRetryableStatus,
+  locateRetryable,
   redeemRetryable,
 } from '../core/redeemRetryable'
 import {
@@ -108,6 +109,12 @@ import {
   hasTicketCreatedEvent,
   isPastTicketLifetime,
 } from '../core/reportGenerator'
+
+const locate = async (options = {}) => {
+  const located = await locateRetryable(PARENT_TX, options)
+  if (!located) throw new Error('test ticket not found')
+  return located
+}
 
 describe('redeemRetryable', () => {
   beforeEach(() => {
@@ -132,7 +139,7 @@ describe('redeemRetryable', () => {
 
   test('redeems via the precompile rather than the SDK status guard', async () => {
     await expect(
-      redeemRetryable(PARENT_TX, { retryableCreationId: TICKET_ID })
+      redeemRetryable(await locate({ retryableCreationId: TICKET_ID }))
     ).resolves.toBe(RETRY_TX)
 
     expect(precompileRedeem).toHaveBeenCalledWith(TICKET_ID)
@@ -142,8 +149,8 @@ describe('redeemRetryable', () => {
     vi.mocked(getLiveTicketTimeout).mockResolvedValue(undefined)
 
     await expect(
-      redeemRetryable(PARENT_TX, { retryableCreationId: TICKET_ID })
-    ).rejects.toThrow(/not found\/redeemable/)
+      redeemRetryable(await locate({ retryableCreationId: TICKET_ID }))
+    ).rejects.toThrow(/not redeemable/)
 
     expect(precompileRedeem).not.toHaveBeenCalled()
   })
@@ -151,7 +158,7 @@ describe('redeemRetryable', () => {
   test('requires a signing key to redeem', async () => {
     delete process.env.RETRYABLE_MONITORING_PRIVATE_KEY
 
-    await expect(redeemRetryable(PARENT_TX)).rejects.toThrow(
+    await expect(redeemRetryable(await locate())).rejects.toThrow(
       /RETRYABLE_MONITORING_PRIVATE_KEY/
     )
     expect(precompileRedeem).not.toHaveBeenCalled()
@@ -161,7 +168,7 @@ describe('redeemRetryable', () => {
     waitForRedeem.mockResolvedValue({ status: 0, transactionHash: RETRY_TX })
 
     await expect(
-      redeemRetryable(PARENT_TX, { retryableCreationId: TICKET_ID })
+      redeemRetryable(await locate({ retryableCreationId: TICKET_ID }))
     ).rejects.toThrow(/did not succeed/)
   })
 
@@ -169,7 +176,7 @@ describe('redeemRetryable', () => {
     waitForRedeem.mockResolvedValue(null)
 
     await expect(
-      redeemRetryable(PARENT_TX, { retryableCreationId: TICKET_ID })
+      redeemRetryable(await locate({ retryableCreationId: TICKET_ID }))
     ).rejects.toThrow(/did not succeed/)
   })
 
@@ -179,8 +186,8 @@ describe('redeemRetryable', () => {
     ])
 
     await expect(
-      redeemRetryable(PARENT_TX, { retryableCreationId: TICKET_ID })
-    ).rejects.toThrow(/not found\/redeemable/)
+      locateRetryable(PARENT_TX, { retryableCreationId: TICKET_ID })
+    ).resolves.toBeNull()
 
     expect(precompileRedeem).not.toHaveBeenCalled()
   })
@@ -203,27 +210,26 @@ describe('getLiveRetryableStatus', () => {
     vi.mocked(isPastTicketLifetime).mockReturnValue(false)
   })
 
-  test('maps the SDK redeemed status to the Notion executed status', async () => {
+  test('returns the SDK redeemed status', async () => {
     messageStatus.mockResolvedValue(4)
 
-    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBe('Executed')
+    await expect(getLiveRetryableStatus(await locate())).resolves.toBe(4)
   })
 
-  test.each([
-    [1, 'NOT_YET_CREATED'],
-    [3, 'FUNDS_DEPOSITED_ON_CHILD'],
-    [5, 'EXPIRED'],
-  ])('maps SDK status %s without extra resolution', async (status, name) => {
-    messageStatus.mockResolvedValue(status)
+  test.each([1, 3, 5])(
+    'returns SDK status %s without extra resolution',
+    async status => {
+      messageStatus.mockResolvedValue(status)
 
-    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBe(name)
-    expect(getRetryableCreationReceipt).not.toHaveBeenCalled()
-  })
+      await expect(getLiveRetryableStatus(await locate())).resolves.toBe(status)
+      expect(getRetryableCreationReceipt).not.toHaveBeenCalled()
+    }
+  )
 
   test('returns null when the parent transaction cannot be found', async () => {
     getTransactionReceipt.mockResolvedValue(null)
 
-    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBeNull()
+    await expect(locateRetryable(PARENT_TX)).resolves.toBeNull()
     expect(messageStatus).not.toHaveBeenCalled()
   })
 
@@ -231,15 +237,11 @@ describe('getLiveRetryableStatus', () => {
     delete process.env.RETRYABLE_MONITORING_PRIVATE_KEY
     messageStatus.mockResolvedValue(3)
 
-    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBe(
-      'FUNDS_DEPOSITED_ON_CHILD'
-    )
+    await expect(getLiveRetryableStatus(await locate())).resolves.toBe(3)
   })
 
   test('keeps a genuine creation failure terminal', async () => {
-    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBe(
-      'CREATION_FAILED'
-    )
+    await expect(getLiveRetryableStatus(await locate())).resolves.toBe(2)
 
     expect(getLiveTicketTimeout).not.toHaveBeenCalled()
   })
@@ -248,23 +250,21 @@ describe('getLiveRetryableStatus', () => {
     vi.mocked(hasTicketCreatedEvent).mockReturnValue(true)
     vi.mocked(getLiveTicketTimeout).mockResolvedValue({} as any)
 
-    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBe(
-      'FUNDS_DEPOSITED_ON_CHILD'
-    )
+    await expect(getLiveRetryableStatus(await locate())).resolves.toBe(3)
   })
 
   test('detects a successful manual redeem of a reverted creation receipt', async () => {
     vi.mocked(hasTicketCreatedEvent).mockReturnValue(true)
     vi.mocked(findSuccessfulRedeem).mockResolvedValue(RETRY_TX)
 
-    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBe('Executed')
+    await expect(getLiveRetryableStatus(await locate())).resolves.toBe(4)
   })
 
   test('marks a created but dead ticket expired after its lifetime', async () => {
     vi.mocked(hasTicketCreatedEvent).mockReturnValue(true)
     vi.mocked(isPastTicketLifetime).mockReturnValue(true)
 
-    await expect(getLiveRetryableStatus(PARENT_TX)).resolves.toBe('EXPIRED')
+    await expect(getLiveRetryableStatus(await locate())).resolves.toBe(5)
     expect(isPastTicketLifetime).toHaveBeenCalledWith(100)
   })
 
@@ -272,14 +272,16 @@ describe('getLiveRetryableStatus', () => {
     vi.mocked(hasTicketCreatedEvent).mockReturnValue(true)
     vi.mocked(getLiveTicketTimeout).mockRejectedValue(new Error('rpc down'))
 
-    await expect(getLiveRetryableStatus(PARENT_TX)).rejects.toThrow('rpc down')
+    await expect(getLiveRetryableStatus(await locate())).rejects.toThrow(
+      'rpc down'
+    )
   })
 
   test('only probes the requested chain', async () => {
     getConfig.mockReturnValue({ childChains: [OTHER_CHAIN, CHAIN] })
     messageStatus.mockResolvedValue(4)
 
-    await getLiveRetryableStatus(PARENT_TX, { chainId: CHAIN.chainId })
+    await getLiveRetryableStatus(await locate({ chainId: CHAIN.chainId }))
 
     expect(jsonRpcProvider).toHaveBeenCalledWith(CHAIN.parentRpcUrl)
     expect(jsonRpcProvider).toHaveBeenCalledWith(CHAIN.orbitRpcUrl)

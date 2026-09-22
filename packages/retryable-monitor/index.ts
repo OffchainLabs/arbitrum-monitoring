@@ -81,7 +81,7 @@ if (options.autoRedeem && !options.writeToNotion) {
 
 if (options.autoRedeem && options.writeToNotion) {
   console.log(
-    '[retryable-monitor] --autoRedeem is on: new tickets are logged as "Should Redeem" ' +
+    '[retryable-monitor] --autoRedeem is on: opted-in chains log new tickets as "Should Redeem" ' +
       `and redeemed by the bot ${AUTO_REDEEM_DELAY_DAYS} days after creation. ` +
       'Pass this only for chains that have opted into unattended redemption.'
   )
