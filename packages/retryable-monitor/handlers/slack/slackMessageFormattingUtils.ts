@@ -360,10 +360,12 @@ export const getTokenPrice = async (
     return undefined
   }
 
-  const usd = Number(response.data?.[addr]?.usd)
+  const price = response.data?.[addr]?.usd
+  const usd = price == null ? undefined : Number(price)
   // an unlisted token is cached as unpriced so a run full of its tickets
   // does not re-query CoinGecko once per ticket
-  tokenPriceCache[addr] = Number.isFinite(usd) ? usd : undefined
+  tokenPriceCache[addr] =
+    usd !== undefined && Number.isFinite(usd) ? usd : undefined
 
   return tokenPriceCache[addr]
 }
