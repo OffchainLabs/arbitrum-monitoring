@@ -37,6 +37,24 @@ describe('isTransientRpcError', () => {
     ).toBe(true)
   })
 
+  test('detects HTTP status text and nested transport errors', () => {
+    expect(isTransientRpcError(new Error('bad response (status=503)'))).toBe(
+      true
+    )
+    expect(
+      isTransientRpcError({
+        code: 'SERVER_ERROR',
+        response: { status: 503 },
+      })
+    ).toBe(true)
+    expect(
+      isTransientRpcError({
+        code: 'SERVER_ERROR',
+        serverError: { code: 'ECONNRESET' },
+      })
+    ).toBe(true)
+  })
+
   test('detects transient errors from message text', () => {
     expect(isTransientRpcError(new Error('Status: 429'))).toBe(true)
     expect(isTransientRpcError(new Error('rate limit exceeded'))).toBe(true)
