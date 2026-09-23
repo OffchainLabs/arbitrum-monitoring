@@ -148,13 +148,15 @@ export const getChildChainRetryableReport = async ({
   childChainTxReceipt,
   retryableMessage,
   childChainProvider,
+  status: initialStatus,
 }: {
   childChainTx: providers.TransactionResponse
   childChainTxReceipt: TransactionReceipt
   retryableMessage: ParentToChildMessageReader
   childChainProvider: providers.Provider
+  status: ParentToChildMessageStatus
 }): Promise<ChildChainTicketReport> => {
-  let status = await retryableMessage.status()
+  let status = initialStatus
   let onChainTimeout: BigNumber | undefined = undefined
 
   if (status === ParentToChildMessageStatus.CREATION_FAILED) {
@@ -168,7 +170,10 @@ export const getChildChainRetryableReport = async ({
   }
 
   const timestamp = (
-    await childChainProvider.getBlock(childChainTxReceipt.blockNumber)
+    await withRetry(
+      () => childChainProvider.getBlock(childChainTxReceipt.blockNumber),
+      { label: 'childChain.getBlock' }
+    )
   ).timestamp
 
   // a ticket that was created (TicketCreated emitted) but no longer exists
@@ -185,8 +190,11 @@ export const getChildChainRetryableReport = async ({
 
   const childChainTicketReport = {
     id: retryableMessage.retryableCreationId,
-    retryTxHash: (await retryableMessage.getAutoRedeemAttempt())
-      ?.transactionHash,
+    retryTxHash: (
+      await withRetry(() => retryableMessage.getAutoRedeemAttempt(), {
+        label: 'retryableMessage.getAutoRedeemAttempt',
+      })
+    )?.transactionHash,
     // in seconds, same unit as timeoutTimestamp
     createdAtTimestamp: String(timestamp),
     createdAtBlockNumber: childChainTxReceipt.blockNumber,

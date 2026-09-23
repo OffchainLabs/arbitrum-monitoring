@@ -1,13 +1,18 @@
-import { describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { BigNumber, providers, utils } from 'ethers'
 import type { ParentTransactionReceipt } from '@arbitrum/sdk'
 import type { ParentToChildMessageReader } from '@arbitrum/sdk'
 
+const { symbol, decimals } = vi.hoisted(() => ({
+  symbol: vi.fn(),
+  decimals: vi.fn(),
+}))
+
 vi.mock('@arbitrum/sdk/dist/lib/abi/factories/ERC20__factory', () => ({
   ERC20__factory: {
     connect: vi.fn(() => ({
-      symbol: () => Promise.resolve('DF'),
-      decimals: () => Promise.resolve(18),
+      symbol,
+      decimals,
     })),
   },
 }))
@@ -105,6 +110,14 @@ describe('getTokenDepositData', () => {
 
   const parentChainProvider = {} as providers.Provider
 
+  beforeEach(() => {
+    vi.clearAllMocks()
+    symbol.mockResolvedValue('DF')
+    decimals.mockResolvedValue(18)
+  })
+
+  afterEach(() => vi.restoreAllMocks())
+
   test('known parent tx: DepositInitiated + matching ERC20 transfer resolves token and amount', async () => {
     const requestIdBody =
       '000000000000000000000000000000000000000000000000000000000023498c'
@@ -156,5 +169,30 @@ describe('getTokenDepositData', () => {
     expect(result).toBeDefined()
     expect(result!.l1Token.id.toLowerCase()).toBe(DF_TOKEN.toLowerCase())
     expect(result!.tokenAmount).toBe(AMOUNT_RAW)
+  })
+
+  test('retries transient token metadata failures', async () => {
+    symbol
+      .mockRejectedValueOnce(new Error('rate limit exceeded'))
+      .mockResolvedValue('DF')
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void) => {
+      cb()
+      return 0 as unknown as NodeJS.Timeout
+    }) as typeof setTimeout)
+
+    const result = await getTokenDepositData({
+      childChainTx: { data: '0x' } as providers.TransactionResponse,
+      retryableMessage,
+      parentTxReceipt: {
+        logs: [buildDfTransferLog()],
+      } as providers.TransactionReceipt,
+      arbParentTxReceipt,
+      depositsInitiatedLogs: [],
+      gatewayAddresses,
+      parentChainProvider,
+    })
+
+    expect(result?.l1Token.symbol).toBe('DF')
+    expect(symbol).toHaveBeenCalledTimes(2)
   })
 })

@@ -1,5 +1,9 @@
-import { describe, expect, test, vi } from 'vitest'
-import { isTransientRpcError, withRetry } from '../index'
+import { afterEach, describe, expect, test, vi } from 'vitest'
+import {
+  isTransientRpcError,
+  processBlockRangeInChunks,
+  withRetry,
+} from '../index'
 
 // mirrors the error shape viem builds for an Alchemy 429 (HttpRequestError
 // wrapped in a ContractFunctionExecutionError)
@@ -15,10 +19,40 @@ const alchemy429 = () => {
   return wrapped
 }
 
+afterEach(() => vi.restoreAllMocks())
+
 describe('isTransientRpcError', () => {
   test('detects 429 status on the error or its cause chain', () => {
     expect(isTransientRpcError(alchemy429())).toBe(true)
     expect(isTransientRpcError((alchemy429() as any).cause)).toBe(true)
+  })
+
+  test('detects ethers errors nested under error', () => {
+    expect(
+      isTransientRpcError({
+        message: 'could not detect network',
+        cause: new Error('request failed'),
+        error: { status: 503 },
+      })
+    ).toBe(true)
+  })
+
+  test('detects HTTP status text and nested transport errors', () => {
+    expect(isTransientRpcError(new Error('bad response (status=503)'))).toBe(
+      true
+    )
+    expect(
+      isTransientRpcError({
+        code: 'SERVER_ERROR',
+        response: { status: 503 },
+      })
+    ).toBe(true)
+    expect(
+      isTransientRpcError({
+        code: 'SERVER_ERROR',
+        serverError: { code: 'ECONNRESET' },
+      })
+    ).toBe(true)
   })
 
   test('detects transient errors from message text', () => {
@@ -32,6 +66,9 @@ describe('isTransientRpcError', () => {
     expect(isTransientRpcError(new Error('The request timed out.'))).toBe(true)
     expect(isTransientRpcError(new Error('fetch failed'))).toBe(true)
     expect(isTransientRpcError(new Error('502 Bad Gateway'))).toBe(true)
+    expect(isTransientRpcError({ code: 'NETWORK_ERROR' })).toBe(true)
+    expect(isTransientRpcError({ code: 'ECONNRESET' })).toBe(true)
+    expect(isTransientRpcError({ statusCode: '503' })).toBe(true)
   })
 
   test('does not flag genuine chain/contract errors', () => {
@@ -87,5 +124,63 @@ describe('withRetry', () => {
       withRetry(fn, { retries: 2, initialDelayMs: 1 })
     ).rejects.toThrow('HTTP request failed.')
     expect(fn).toHaveBeenCalledTimes(3) // initial attempt + 2 retries
+  })
+
+  test('caps the exponential delay at maxDelayMs', async () => {
+    vi.useFakeTimers()
+    try {
+      const delays: number[] = []
+      vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+        cb: () => void,
+        ms: number
+      ) => {
+        delays.push(ms)
+        cb()
+        return 0 as unknown as NodeJS.Timeout
+      }) as unknown as typeof setTimeout)
+
+      const fn = vi.fn().mockRejectedValue(alchemy429())
+
+      await expect(
+        withRetry(fn, { retries: 4, initialDelayMs: 1000, maxDelayMs: 3000 })
+      ).rejects.toThrow('HTTP request failed.')
+
+      expect(delays).toEqual([1000, 2000, 3000, 3000])
+    } finally {
+      vi.restoreAllMocks()
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('processBlockRangeInChunks', () => {
+  test('splits ranges after transient errors by default', async () => {
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void) => {
+      cb()
+      return 0 as unknown as NodeJS.Timeout
+    }) as typeof setTimeout)
+    const fn = vi.fn().mockRejectedValueOnce(alchemy429()).mockResolvedValue([])
+
+    await processBlockRangeInChunks(1, 2, 2, fn, () => [], [], {
+      minChunkSize: 1,
+    })
+
+    expect(fn.mock.calls).toEqual([
+      [1, 2],
+      [1, 1],
+      [2, 2],
+    ])
+  })
+
+  test('can avoid splitting ranges after transient errors', async () => {
+    const fn = vi.fn().mockRejectedValue(alchemy429())
+
+    await expect(
+      processBlockRangeInChunks(1, 2, 2, fn, () => false, false, {
+        minChunkSize: 1,
+        splitOnTransientError: false,
+      })
+    ).rejects.toThrow('HTTP request failed.')
+    expect(fn).toHaveBeenCalledTimes(1)
   })
 })
