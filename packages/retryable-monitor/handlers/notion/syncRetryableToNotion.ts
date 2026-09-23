@@ -5,6 +5,7 @@ import { OnRetryableFoundParams } from '../../core/types'
 import { ethers, BigNumber } from 'ethers'
 import { getTokenPrice } from '../slack/slackMessageFormattingUtils'
 import { parseAmount } from 'utils'
+import { NOTION_STATUS } from './notionVocabulary'
 
 const databaseId = process.env.RETRYABLE_MONITORING_NOTION_DB_ID!
 const NOTION_RICH_TEXT_MAX = 2000
@@ -176,9 +177,9 @@ export async function syncRetryableToNotion(
           : undefined
 
       // ✅ Handle Executed updates
-      if (status === 'Executed') {
+      if (status === NOTION_STATUS.EXECUTED) {
         const executedProps: Record<string, any> = {
-          Status: { select: { name: 'Executed' } },
+          Status: { select: { name: NOTION_STATUS.EXECUTED } },
         }
 
         if (input.timeout) {
@@ -205,7 +206,7 @@ export async function syncRetryableToNotion(
           properties: executedProps,
         })
 
-        return { id: page.id, status: 'Executed', isNew: false }
+        return { id: page.id, status: NOTION_STATUS.EXECUTED, isNew: false }
       }
 
       notionProps['Status'] = { select: { name: status } }
@@ -226,7 +227,7 @@ export async function syncRetryableToNotion(
     }
 
     // If not found and Executed, skip creation
-    if (!isRetryableFoundInNotion && status === 'Executed') {
+    if (!isRetryableFoundInNotion && status === NOTION_STATUS.EXECUTED) {
       return undefined
     }
 

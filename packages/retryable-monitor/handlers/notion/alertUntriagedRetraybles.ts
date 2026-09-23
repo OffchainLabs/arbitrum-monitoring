@@ -1,7 +1,18 @@
 import { notionClient, databaseId } from './createNotionClient'
 import { postSlackMessage } from '../slack/postSlackMessage'
-import { redeemRetryable } from '../../core/redeemRetryable'
+import {
+  redeemRetryable,
+  getLiveRetryableStatus,
+  locateRetryable,
+  REDEEMABLE_STATUS,
+  type LocatedRetryable,
+} from '../../core/redeemRetryable'
 import { DEFAULT_CONFIG_PATH, type ChildNetwork } from 'utils'
+import {
+  NOTION_DECISION,
+  NOTION_STATUS,
+  retryableStatusToNotion,
+} from './notionVocabulary'
 
 const formatDate = (iso: string | undefined) => {
   if (!iso) return '(unknown)'
@@ -40,17 +51,17 @@ export const alertUntriagedNotionRetryables = async (
     database_id: databaseId,
     page_size: 100,
     filter: {
-      and: [
+      or: [
         {
-          or: [
+          and: [
             { property: 'Decision', select: { equals: 'Triage' } },
-            { property: 'Decision', select: { equals: 'Should Redeem' } },
+            {
+              property: 'Status',
+              select: { does_not_equal: NOTION_STATUS.EXECUTED },
+            },
           ],
         },
-        {
-          property: 'Status',
-          select: { does_not_equal: 'Executed' },
-        },
+        { property: 'Decision', select: { equals: 'Should Redeem' } },
       ],
     },
   })
@@ -89,18 +100,87 @@ export const alertUntriagedNotionRetryables = async (
     const expiryTime = timeoutRaw ? new Date(timeoutRaw).getTime() : Infinity
     const hoursLeft = (expiryTime - now) / (1000 * 60 * 60)
 
-    // If a timeout exists and it's already past, skip
-    if (Number.isFinite(hoursLeft) && hoursLeft < 0) continue
+    const isPastTimeout = Number.isFinite(hoursLeft) && hoursLeft < 0
 
     let message = ''
 
     if (decision === 'Triage') {
+      if (isPastTimeout) continue
+
       if (hoursLeft <= 72) {
         message = `🚨🚨 Retryable ticket needs IMMEDIATE triage (expires soon!):\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Please triage urgently.`
       } else {
         message = `⚠️ Retryable ticket needs triage:\n• Retryable: ${retryableUrl}\n• Timeout: ${timeoutStr}\n• Parent Tx: ${parentTx}\n• Total value deposited: ${deposit}\n→ Please review and decide whether to redeem or ignore.`
       }
     } else if (decision === 'Should Redeem') {
+      const parentTxHash = extractTxHash(parentTx)
+      const retryableCreationId = extractTxHash(retryableUrl)
+      // without the row's own ticket id we could redeem a sibling
+      if (!parentTxHash || !retryableCreationId) {
+        console.error(
+          `[notion] skipping auto-redeem, could not read tx hashes (parent: "${parentTx}", ticket: "${retryableUrl}")`
+        )
+        continue
+      }
+
+      const locator = { configPath, retryableCreationId, chainId: chainIdRaw }
+
+      // reconcile before the timeout branches decide anything: a row read only
+      // by those branches alerts off stale Notion data in its last 24 hours
+      // without the chain ever being consulted
+      let located: LocatedRetryable | null = null
+      let liveStatus = null
+      try {
+        located = await locateRetryable(parentTxHash, locator)
+        liveStatus = located ? await getLiveRetryableStatus(located) : null
+      } catch (err) {
+        console.error(
+          `[notion] could not read live status for ${retryableUrl}:`,
+          err
+        )
+      }
+
+      // a ticket redeemed by anyone, bot or not, is no longer ours to redeem
+      const notionStatus =
+        liveStatus === null ? null : retryableStatusToNotion(liveStatus)
+      const liveDecision =
+        notionStatus === NOTION_STATUS.EXECUTED
+          ? NOTION_DECISION.REDEEMED
+          : decision
+
+      const drift = {
+        ...(notionStatus &&
+          notionStatus !== status && {
+            Status: { select: { name: notionStatus } },
+          }),
+        ...(liveDecision !== decision && {
+          Decision: { select: { name: liveDecision } },
+        }),
+      }
+
+      if (Object.keys(drift).length > 0) {
+        console.log(
+          `[notion] ${retryableUrl} ${status}/${decision} -> ${notionStatus}/${liveDecision}`
+        )
+        await notionClient.pages.update({
+          page_id: page.id,
+          properties: drift,
+        })
+      }
+
+      // only alert or redeem on a confirmed redeemable status; a failed lookup
+      // is not evidence the ticket is redeemable
+      if (!located || liveStatus !== REDEEMABLE_STATUS) {
+        console.log(
+          `[notion] skipping ${retryableUrl}, status is ${
+            notionStatus ?? 'unknown'
+          }`
+        )
+        continue
+      }
+
+      if (isPastTimeout) continue
+
       const under24HoursLeftToExpire = timeoutRaw
         ? isNearExpiry(timeoutRaw, 24)
         : false
@@ -110,25 +190,13 @@ export const alertUntriagedNotionRetryables = async (
       } else if (hoursLeft <= 96) {
         if (!enableAutoRedeem) continue
 
-        const parentTxHash = extractTxHash(parentTx)
-        const retryableCreationId = extractTxHash(retryableUrl)
-        // never fall back to redeeming an arbitrary ticket: without the
-        // row's own ticket id we could redeem a sibling from the same parent tx
-        if (!parentTxHash || !retryableCreationId) {
-          console.error(
-            `[notion] skipping auto-redeem, could not read tx hashes (parent: "${parentTx}", ticket: "${retryableUrl}")`
-          )
-          continue
-        }
-
         try {
-          await redeemRetryable(parentTxHash, {
-            configPath,
-            retryableCreationId,
-          })
+          await redeemRetryable(located)
           await notionClient.pages.update({
             page_id: page.id,
             properties: {
+              Status: { select: { name: NOTION_STATUS.EXECUTED } },
+              Decision: { select: { name: NOTION_DECISION.REDEEMED } },
               'Bot Redemption Status': {
                 select: { name: 'Bot Success' },
               },
