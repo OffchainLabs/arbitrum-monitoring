@@ -71,7 +71,9 @@ describe('formatCreatedAt', () => {
   test('renders a sane date from a timestamp in seconds', () => {
     // 13 Jul 2026 13:55:53 UTC — regression test for the ms-vs-s unit bug
     // that rendered creation dates in the year 58501
-    const msg = formatCreatedAt(buildTicket({ createdAtTimestamp: '1783950953' }))
+    const msg = formatCreatedAt(
+      buildTicket({ createdAtTimestamp: '1783950953' })
+    )
     expect(msg).toContain('13 Jul 2026')
   })
 })

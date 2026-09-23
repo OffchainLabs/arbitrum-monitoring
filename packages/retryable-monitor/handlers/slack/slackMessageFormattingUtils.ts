@@ -309,9 +309,9 @@ export const formatExpiration = (ticket: ChildChainTicketReport) => {
     ticket.status ===
     ParentToChildMessageStatus[ParentToChildMessageStatus.EXPIRED]
 
-  let msg = `\n\t *${
-    isExpired ? `Expired` : `Expires`
-  } at:* ${timestampToDate(+ticket.timeoutTimestamp)}`
+  let msg = `\n\t *${isExpired ? `Expired` : `Expires`} at:* ${timestampToDate(
+    +ticket.timeoutTimestamp
+  )}`
 
   if (
     ticket.status ===
