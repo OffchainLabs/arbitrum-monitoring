@@ -1,4 +1,4 @@
-import { BigNumber, ethers, providers } from 'ethers'
+import { ethers, providers } from 'ethers'
 import { getExplorerUrlPrefixes } from 'utils'
 import { OnFailedRetryableFoundParams } from '../core/types'
 import { reportFailedRetryables } from './reportFailedRetryables'
@@ -7,8 +7,8 @@ import { syncRetryableToNotion } from './notion/syncRetryableToNotion'
 import { addToFetchedNotionRetryables } from './notion/fetchedNotionRetryablesUtils'
 import {
   formatL2Callvalue,
+  formatTokenAmount,
   getGasInfo,
-  getTokenPrice,
 } from './slack/slackMessageFormattingUtils'
 
 const handledTicketKeys = new Set<string>()
@@ -71,18 +71,12 @@ export const handleFailedRetryablesFound = async (
 
     let formattedTokenString: string | undefined = undefined
     if (tokenDepositData?.tokenAmount && tokenDepositData?.l1Token) {
-      const amount = BigNumber.from(tokenDepositData.tokenAmount)
-      const decimals = tokenDepositData.l1Token.decimals
-      const symbol = tokenDepositData.l1Token.symbol
-      const address = tokenDepositData.l1Token.id
-
-      const humanAmount = Number(amount) / 10 ** decimals
-      const price = (await getTokenPrice(address)) ?? 1
-      const usdValue = humanAmount * price
-
-      formattedTokenString = `${humanAmount.toFixed(
-        6
-      )} ${symbol} ($${usdValue.toFixed(2)}) (${address})`
+      formattedTokenString = await formatTokenAmount({
+        amountRaw: tokenDepositData.tokenAmount,
+        decimals: tokenDepositData.l1Token.decimals,
+        symbol: tokenDepositData.l1Token.symbol,
+        address: tokenDepositData.l1Token.id,
+      })
     }
 
     const { l2GasPrice, l2GasPriceAtCreation } = await getGasInfo(
