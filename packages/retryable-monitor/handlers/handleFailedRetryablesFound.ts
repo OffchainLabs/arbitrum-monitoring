@@ -30,7 +30,8 @@ export const ticketAlreadyHandled = (
 
 export const handleFailedRetryablesFound = async (
   ticket: OnFailedRetryableFoundParams,
-  writeToNotion: boolean
+  writeToNotion: boolean,
+  enableAutoRedeem = false
 ) => {
   if (ticketAlreadyHandled(ticket)) return
 
@@ -50,6 +51,7 @@ export const handleFailedRetryablesFound = async (
       childChain,
       parentChainRetryableReport,
     } = ticket
+    const autoRedeem = enableAutoRedeem && childChain.autoRedeem === true
 
     const childChainProvider = new providers.JsonRpcProvider(
       String(childChain.orbitRpcUrl)
@@ -112,7 +114,9 @@ export const handleFailedRetryablesFound = async (
       status: childChainRetryableReport.status,
       chainId: childChain.chainId,
       chain: childChain.name,
-      decision: 'Triage',
+      // a run that may redeem needs no human triage call, so the row starts
+      // where the bot can act on it
+      decision: autoRedeem ? 'Should Redeem' : 'Triage',
       metadata: {
         tokensDeposited: formattedTokenString,
         gasPriceProvided,
@@ -129,5 +133,11 @@ export const handleFailedRetryablesFound = async (
     // Keep the fetched (locally cached) set coherent so a redemption event later in the same
     // run routes through the update path instead of being filtered out.
     if (result) addToFetchedNotionRetryables(childTxUrl)
+
+    // alert when the row first appears, or whenever Notion could not preserve
+    // it; otherwise a failed write can make a funded ticket entirely silent
+    if (autoRedeem && (result?.isNew || !result)) {
+      await reportFailedRetryables(ticket)
+    }
   }
 }

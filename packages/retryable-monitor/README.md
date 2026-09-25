@@ -1,4 +1,4 @@
-# Retryable Monitor 
+# Retryable Monitor
 
 > For installation and general configuration, see the [main README](../../README.md).
 
@@ -22,11 +22,13 @@ Options:
   --toBlock          Ending block number for monitoring                [number]
   --continuous       Run monitor continuously                          [boolean] [default: false]
   --writeToNotion	   Sync ticket metadata to Notion	                   [boolean] [default: false]
+  --autoRedeem       Let the bot redeem tickets unattended             [boolean] [default: false]
 
 Examples:
   pnpm retryable-monitor --continuous                    Run continuous monitoring
   pnpm retryable-monitor --fromBlock=1000 --toBlock=2000 Check specific block range
   pnpm retryable-monitor --enableAlerting --writeToNotion           Enables Slack alerts and syncs retryable data to Notion
+  pnpm retryable-monitor --enableAlerting --writeToNotion --autoRedeem   Adds unattended redemption (enterprise chains only)
 
 Environment Variables:
   RETRYABLE_MONITORING_SLACK_TOKEN    Slack API token for alerts
@@ -103,6 +105,30 @@ Funded tickets (callvalue or token deposit) are buffered during the chain's run 
 ### JSON run report
 
 Every failed retryable found during a run — including the zero-value ones that only appear in the digest — is written to `retryable-run-report.json` in the package directory. Each entry contains the parent chain transaction hash (the input needed to redeem the ticket), ticket ID, explorer links, sender, destination, value/token data, and expiry. CI can upload this file as a run artifact so tickets can be referenced or redeemed after the run.
+
+## Unattended redemption (`--autoRedeem`)
+
+`--writeToNotion` and `--autoRedeem` are separate on purpose. `--writeToNotion` makes Notion the sink: rows are written, reconciled against the chain, and alerted on. It never sends a transaction. `--autoRedeem` additionally lets the bot redeem for child chains whose config sets `autoRedeem: true`. It requires `--writeToNotion`, since the Notion sweep is where redemption happens.
+
+With `--autoRedeem` on, a failed ticket goes through:
+
+| Day | What happens                                                                                       |
+| --- | -------------------------------------------------------------------------------------------------- |
+| 0   | Ticket is logged to Notion as `Should Redeem` and alerted once. No triage needed.                  |
+| 1-3 | Quiet.                                                                                             |
+| 4   | Bot redeems. Success is silent per ticket and reported in one end-of-run summary.                  |
+| 4-7 | A failed redeem is retried at most once per day. Failures from the sweep are posted as one digest. |
+
+`Decision` drives all of this:
+
+- `Should Redeem` (the default for these runs) is redeemed on day 4.
+- `Force Redeem`, set by hand, skips the wait and is redeemed on the next run.
+- `Ignore` stops the bot touching the row at all.
+- `Redeemed` is written by the bot once a redemption succeeds.
+
+Every attempt is gated on the ticket's live chain status first, so a ticket that was never created, was already redeemed, or has expired is reconciled in Notion and skipped rather than attempted. `Force Redeem` does not bypass that check.
+
+Without `--autoRedeem`, rows are logged as `Triage` and the sweep keeps posting the triage and nearing-expiry alerts instead, leaving the redemption call to a human.
 
 ## About the Notion Database
 

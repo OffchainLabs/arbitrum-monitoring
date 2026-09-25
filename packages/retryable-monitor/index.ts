@@ -13,7 +13,10 @@ import {
   checkRetryablesContinuous,
 } from './core/retryableCheckerMode'
 import { postSlackMessage } from './handlers/slack/postSlackMessage'
-import { alertUntriagedNotionRetryables } from './handlers/notion/alertUntriagedRetraybles'
+import {
+  alertUntriagedNotionRetryables,
+  AUTO_REDEEM_DELAY_DAYS,
+} from './handlers/notion/alertUntriagedRetraybles'
 import { fetchNotionRetryables } from './handlers/notion/fetchedNotionRetryablesUtils'
 import { handleFailedRetryablesFound } from './handlers/handleFailedRetryablesFound'
 import { handleRedeemedRetryablesFound } from './handlers/handleRedeemedRetryablesFound'
@@ -76,6 +79,14 @@ if (options.autoRedeem && !options.writeToNotion) {
   )
 }
 
+if (options.autoRedeem && options.writeToNotion) {
+  console.log(
+    '[retryable-monitor] --autoRedeem is on: opted-in chains log new tickets as "Should Redeem" ' +
+      `and redeemed by the bot ${AUTO_REDEEM_DELAY_DAYS} days after creation. ` +
+      'Pass this only for chains that have opted into unattended redemption.'
+  )
+}
+
 const config = getConfig({ configPath: options.configPath })
 
 // Function to process a child chain and check for retryable transactions
@@ -87,7 +98,8 @@ const processChildChain = async (
   toBlock: number,
   enableAlerting: boolean,
   continuous: boolean,
-  writeToNotion: boolean
+  writeToNotion: boolean,
+  autoRedeem = false
 ) => {
   if (continuous) {
     console.log('Activating continuous check for retryables...')
@@ -100,7 +112,7 @@ const processChildChain = async (
       enableAlerting,
       continuous,
       onFailedRetryableFound: async ticket => {
-        await handleFailedRetryablesFound(ticket, writeToNotion)
+        await handleFailedRetryablesFound(ticket, writeToNotion, autoRedeem)
       },
       onRedeemedRetryableFound: async ticket => {
         await handleRedeemedRetryablesFound(ticket, writeToNotion)
@@ -116,7 +128,7 @@ const processChildChain = async (
       toBlock,
       enableAlerting,
       onFailedRetryableFound: async ticket => {
-        await handleFailedRetryablesFound(ticket, writeToNotion)
+        await handleFailedRetryablesFound(ticket, writeToNotion, autoRedeem)
       },
       onRedeemedRetryableFound: async ticket => {
         await handleRedeemedRetryablesFound(ticket, writeToNotion)
@@ -170,7 +182,8 @@ const processOrbitChainsConcurrently = async () => {
         options.toBlock,
         options.enableAlerting,
         options.continuous,
-        options.writeToNotion
+        options.writeToNotion,
+        options.autoRedeem
       )
     } catch (e) {
       const errorStr = `Retryable monitor - Error processing chain [${childChain.name}]: ${e.message}`

@@ -1,5 +1,4 @@
-import type { QueryDatabaseResponse } from '@notionhq/client/build/src/api-endpoints'
-import { notionClient, databaseId } from './createNotionClient'
+import { getPageTitle, queryAllPages } from './notionRetryableRows'
 
 // In-memory record of `ChildTx` values (full explorer URLs) that currently
 // exist in the Notion database. Populated once at startup by
@@ -20,37 +19,18 @@ export const addToFetchedNotionRetryables = (childTx: string) => {
 
 export const fetchNotionRetryables = async () => {
   const fresh = new Set<string>()
-  let cursor: string | undefined = undefined
-  let pageCount = 0
 
   try {
-    do {
-      const res: QueryDatabaseResponse = await notionClient.databases.query({
-        database_id: databaseId,
-        page_size: 100,
-        start_cursor: cursor,
-      })
-
-      for (const page of res.results) {
-        const titleProp = (page as any).properties?.ChildTx
-        const childTx =
-          titleProp?.title?.[0]?.plain_text ??
-          titleProp?.title?.[0]?.text?.content
-        if (typeof childTx === 'string' && childTx.length > 0) {
-          fresh.add(childTx)
-        }
-      }
-
-      cursor = res.has_more ? res.next_cursor ?? undefined : undefined
-      pageCount++
-    } while (cursor)
+    const pages = await queryAllPages()
+    for (const page of pages) {
+      const childTx = getPageTitle(page, 'ChildTx')
+      if (childTx) fresh.add(childTx)
+    }
 
     fetchedRetryables.clear()
     for (const v of fresh) fetchedRetryables.add(v)
     hasFetched = true
-    console.log(
-      `[notion] fetched ${fetchedRetryables.size} existing retryable(s) across ${pageCount} query page(s)`
-    )
+    console.log(`[notion] fetched ${fetchedRetryables.size} retryable(s)`)
   } catch (err) {
     // Safe degradation: leave `hasFetched` false so the gatekeeper falls
     // through to the original query-per-ticket path instead of silently
