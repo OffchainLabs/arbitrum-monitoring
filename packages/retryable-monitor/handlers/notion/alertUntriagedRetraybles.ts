@@ -177,14 +177,12 @@ const assessRows = async (
 
 const executeActions = async (
   assessed: AssessedRow[],
-  autoRedeemChainIds: Set<number>,
+  autoRedeem: boolean,
   updatePage: UpdatePage
 ) => {
   const redeemed: string[] = []
   const failed: string[] = []
   for (const { row, located, liveStatus } of assessed) {
-    const autoRedeem =
-      row.chainId !== undefined && autoRedeemChainIds.has(row.chainId)
     const action = decideRetryableAction(row, liveStatus, autoRedeem)
     if (action.type === 'skip') continue
     if (action.type === 'alert') {
@@ -237,7 +235,7 @@ const postRunSummaries = async (redeemed: string[], failed: string[]) => {
 
 export const alertUntriagedNotionRetryables = async (
   childChains: ChildNetwork[] = [],
-  enableAutoRedeem = false,
+  autoRedeem = false,
   configPath: string = DEFAULT_CONFIG_PATH
 ) => {
   const pages: PageObjectResponse[] = []
@@ -250,16 +248,9 @@ export const alertUntriagedNotionRetryables = async (
   const writeFailures: string[] = []
   const updatePage = createPageUpdater(writeFailures)
   const assessed = await assessRows(rows, configPath, updatePage)
-  const autoRedeemChainIds = new Set(
-    enableAutoRedeem
-      ? childChains
-          .filter(chain => chain.autoRedeem)
-          .map(chain => chain.chainId)
-      : []
-  )
   const { redeemed, failed } = await executeActions(
     assessed,
-    autoRedeemChainIds,
+    autoRedeem,
     updatePage
   )
   await postRunSummaries(redeemed, failed)

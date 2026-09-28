@@ -108,7 +108,7 @@ Every failed retryable found during a run — including the zero-value ones that
 
 ## Unattended redemption (`--autoRedeem`)
 
-`--writeToNotion` and `--autoRedeem` are separate on purpose. `--writeToNotion` makes Notion the sink: rows are written, reconciled against the chain, and alerted on. It never sends a transaction. `--autoRedeem` additionally lets the bot redeem for child chains whose config sets `autoRedeem: true`. It requires `--writeToNotion`, since the Notion sweep is where redemption happens.
+`--writeToNotion` and `--autoRedeem` are separate on purpose. `--writeToNotion` makes Notion the sink: rows are written, reconciled against the chain, and alerted on. It never sends a transaction. `--autoRedeem` additionally lets the bot redeem tickets on every chain in the run's config. It requires `--writeToNotion`, since the Notion sweep is where redemption happens.
 
 With `--autoRedeem` on, a failed ticket goes through:
 
