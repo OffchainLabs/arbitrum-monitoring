@@ -31,7 +31,7 @@ export const ticketAlreadyHandled = (
 export const handleFailedRetryablesFound = async (
   ticket: OnFailedRetryableFoundParams,
   writeToNotion: boolean,
-  enableAutoRedeem = false
+  autoRedeem = false
 ) => {
   if (ticketAlreadyHandled(ticket)) return
 
@@ -51,8 +51,6 @@ export const handleFailedRetryablesFound = async (
       childChain,
       parentChainRetryableReport,
     } = ticket
-    const autoRedeem = enableAutoRedeem && childChain.autoRedeem === true
-
     const childChainProvider = new providers.JsonRpcProvider(
       String(childChain.orbitRpcUrl)
     )

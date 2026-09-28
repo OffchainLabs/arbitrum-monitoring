@@ -48,7 +48,6 @@ const buildTicket = () => {
       parentRpcUrl: 'https://parent',
       explorerUrl: 'https://arbiscan.io',
       parentExplorerUrl: 'https://etherscan.io',
-      autoRedeem: true,
     },
     childChainRetryableReport: {
       id: `0x${String(ticketCounter).padStart(64, '0')}`,
@@ -90,18 +89,6 @@ describe('handleFailedRetryablesFound', () => {
     expect(syncRetryableToNotion).toHaveBeenCalledWith(
       expect.objectContaining({ decision: 'Should Redeem' })
     )
-  })
-
-  test('requires the chain to opt into auto-redemption', async () => {
-    const ticket = buildTicket()
-    ticket.childChain.autoRedeem = false
-
-    await handleFailedRetryablesFound(ticket, true, true)
-
-    expect(syncRetryableToNotion).toHaveBeenCalledWith(
-      expect.objectContaining({ decision: 'Triage' })
-    )
-    expect(reportFailedRetryables).not.toHaveBeenCalled()
   })
 
   test('alerts once when an auto-redeem row first appears', async () => {

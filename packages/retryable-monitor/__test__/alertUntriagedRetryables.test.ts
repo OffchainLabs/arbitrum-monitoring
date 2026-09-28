@@ -37,7 +37,7 @@ const PARENT_TX_HASH =
 const CHILD_TX_HASH =
   '0xa0922360dad7e9d29b6aecd543f323cb9524e30edd2d1a45d758fcd8fa786a9e'
 
-const CHAINS = [{ chainId: 42161, autoRedeem: true }] as any
+const CHAINS = [{ chainId: 42161 }] as any
 const LOCATED = { message: {}, childChain: CHAINS[0], childChainProvider: {} }
 
 const HOUR_MS = 60 * 60 * 1000
@@ -237,10 +237,7 @@ describe('alertUntriagedNotionRetryables', () => {
 
   test('scopes both queries to the chains the run was given', async () => {
     await alertUntriagedNotionRetryables(
-      [
-        { chainId: 42161, autoRedeem: true },
-        { chainId: 4663, autoRedeem: true },
-      ] as any,
+      [{ chainId: 42161 }, { chainId: 4663 }] as any,
       true
     )
 
@@ -358,15 +355,6 @@ describe('alertUntriagedNotionRetryables', () => {
     expect(postSlackMessage).toHaveBeenCalledWith({
       message: expect.stringContaining('nearing expiry'),
     })
-    expect(redeemRetryable).not.toHaveBeenCalled()
-  })
-
-  test('does not redeem for a chain that has not opted in', async () => {
-    await alertUntriagedNotionRetryables(
-      [{ chainId: 42161, autoRedeem: false }] as any,
-      true
-    )
-
     expect(redeemRetryable).not.toHaveBeenCalled()
   })
 
