@@ -7,6 +7,7 @@ import {
   formatPrefix,
   formatCreatedAt,
   formatExpiration,
+  formatL2Callvalue,
   formatTokenAmount,
   formatTokenDepositData,
 } from '../handlers/slack/slackMessageFormattingUtils'
@@ -232,5 +233,29 @@ describe('formatTokenDepositData', () => {
 
     expect(await formatTokenDepositData(deposit)).toContain('-')
     expect(axios.get).not.toHaveBeenCalled()
+  })
+})
+
+describe('formatL2Callvalue', () => {
+  beforeEach(() => {
+    vi.mocked(axios.get).mockReset()
+  })
+
+  test('drops the USD figure when the ETH price lookup fails, and retries it', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(axios.get).mockRejectedValueOnce(new Error('429 rate limited'))
+    const ticket = buildTicket({ deposit: '1500000000000000000' })
+    const childChain = {} as any
+
+    expect(await formatL2Callvalue(ticket, childChain, {} as any)).toBe(
+      '\n\t *Child chain callvalue:* 1.5 ETH'
+    )
+
+    vi.mocked(axios.get).mockResolvedValue({
+      data: { ethereum: { usd: 2000 } },
+    })
+    expect(await formatL2Callvalue(ticket, childChain, {} as any)).toBe(
+      '\n\t *Child chain callvalue:* 1.5 ETH ($3000.00)'
+    )
   })
 })

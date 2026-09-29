@@ -14,7 +14,7 @@ import {
   ParentChainTicketReport,
   TokenDepositData,
 } from '../../core/types'
-import { ChildNetwork, getExplorerUrlPrefixes, parseAmount } from 'utils'
+import { ChildNetwork, getExplorerUrlPrefixes } from 'utils'
 
 /**
  *
@@ -25,7 +25,7 @@ import { ChildNetwork, getExplorerUrlPrefixes, parseAmount } from 'utils'
  *
  */
 
-let ethPriceCache: number
+let ethPriceCache: number | undefined
 let tokenPriceCache: { [key: string]: number | undefined } = {}
 
 export const getTimeDifference = (timestampInSeconds: number) => {
@@ -188,17 +188,11 @@ export const formatL2Callvalue = async (
   } else {
     const ethAmountStr = ethers.utils.formatEther(ticket.deposit)
     const ethPrice = await getEthPrice()
+    const msg = `\n\t *Child chain callvalue:* ${ethAmountStr} ETH`
+    if (ethPrice === undefined) return msg
 
-    const ethAmountBN = parseAmount(ethAmountStr, 18)
-    const usdValue =
-      ethAmountBN
-        .mul(Math.floor(ethPrice * 1e6))
-        .div(BigNumber.from(10).pow(18))
-        .toNumber() / 1e6
-
-    return `\n\t *Child chain callvalue:* ${ethAmountStr} ETH ($${usdValue.toFixed(
-      2
-    )})`
+    const usdValue = Number(ethAmountStr) * ethPrice
+    return `${msg} ($${usdValue.toFixed(2)})`
   }
 }
 
@@ -327,16 +321,23 @@ export const formatExpiration = (ticket: ChildChainTicketReport) => {
   return msg
 }
 
-export const getEthPrice = async () => {
+export const getEthPrice = async (): Promise<number | undefined> => {
   if (ethPriceCache !== undefined) {
     return ethPriceCache
   }
 
   const url =
     'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd'
-  const response = await axios.get(url)
-  ethPriceCache = +response.data['ethereum'].usd
-  return ethPriceCache
+  try {
+    const response = await axios.get(url)
+    const usd = Number(response.data?.ethereum?.usd)
+    if (!Number.isFinite(usd)) return undefined
+    ethPriceCache = usd
+    return ethPriceCache
+  } catch (error) {
+    console.error('Could not fetch ETH price:', error)
+    return undefined
+  }
 }
 
 export const getTokenPrice = async (
