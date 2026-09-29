@@ -13,55 +13,31 @@ export const getErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
 
 const TRANSIENT_RPC_ERROR_REGEX =
-  /status[=: ]+(?:429|5\d\d)|rate limit|too many requests|compute units|timed? ?out|network[_ ]error|econnreset|econnrefused|eai_again|socket hang up|fetch failed|service unavailable|bad gateway|gateway time-?out/i
+  /status: 429|rate limit|too many requests|compute units|timed? ?out|econnreset|econnrefused|socket hang up|fetch failed|service unavailable|bad gateway|gateway time-?out/i
 
-const RATE_LIMIT_RPC_ERROR_REGEX =
-  /status[=: ]+429|rate limit|too many requests|compute units/i
+const TRANSIENT_ETHERS_ERROR_CODES = ['TIMEOUT', 'NETWORK_ERROR']
 
-const matchesRpcError = (
+type RpcErrorFields = {
+  code?: unknown
+  status?: unknown
+  message?: unknown
+  details?: unknown
+  cause?: unknown
+}
+
+// viem nests the transport error under cause; ethers v5 puts code and status on the top-level error
+const someInCauseChain = (
   error: unknown,
-  isMatchingStatus: (status: number) => boolean,
-  pattern: RegExp
+  predicate: (candidate: RpcErrorFields) => boolean
 ): boolean => {
-  // clients wrap transport errors under cause or error, sometimes both
-  const pending: unknown[] = [error]
-  for (let visited = 0; pending.length > 0 && visited < 50; visited++) {
-    const current = pending.shift()
-    if (typeof current !== 'object' || current === null) {
-      if (pattern.test(String(current))) return true
-      continue
+  let current: unknown = error
+  for (let depth = 0; current != null && depth < 10; depth++) {
+    if (typeof current !== 'object') {
+      return predicate({ message: current })
     }
-    const candidate = current as {
-      status?: unknown
-      statusCode?: unknown
-      code?: unknown
-      message?: unknown
-      details?: unknown
-      body?: unknown
-      cause?: unknown
-      error?: unknown
-      response?: unknown
-      serverError?: unknown
-    }
-    const status = Number(candidate.status ?? candidate.statusCode)
-    if (Number.isFinite(status) && isMatchingStatus(status)) return true
-    if (
-      pattern.test(
-        `${candidate.code ?? ''} ${candidate.message ?? ''} ${
-          candidate.details ?? ''
-        } ${candidate.body ?? ''}`
-      )
-    ) {
-      return true
-    }
-    for (const child of [
-      candidate.cause,
-      candidate.error,
-      candidate.response,
-      candidate.serverError,
-    ]) {
-      if (child != null) pending.push(child)
-    }
+    const candidate = current as RpcErrorFields
+    if (predicate(candidate)) return true
+    current = candidate.cause
   }
   return false
 }
@@ -71,18 +47,21 @@ const matchesRpcError = (
  * gateway/network errors), as opposed to genuine chain/contract errors.
  */
 export const isTransientRpcError = (error: unknown): boolean =>
-  matchesRpcError(
+  someInCauseChain(
     error,
-    status => status === 429 || status >= 500,
-    TRANSIENT_RPC_ERROR_REGEX
+    ({ code, status, message, details }) =>
+      status === 429 ||
+      (typeof status === 'number' && status >= 500) ||
+      TRANSIENT_ETHERS_ERROR_CODES.includes(code as string) ||
+      TRANSIENT_RPC_ERROR_REGEX.test(`${message ?? ''} ${details ?? ''}`)
   )
 
 /**
- * Returns true only for throttling (429, rate limit, compute units). Timeouts
- * and gateway errors are excluded since they often mean the request was too big.
+ * Returns true only for an HTTP 429. Timeouts and gateway errors are excluded
+ * since they often mean the request was too big.
  */
 export const isRateLimitRpcError = (error: unknown): boolean =>
-  matchesRpcError(error, status => status === 429, RATE_LIMIT_RPC_ERROR_REGEX)
+  someInCauseChain(error, ({ status }) => status === 429)
 
 /**
  * Retries `fn` with exponential backoff on transient RPC errors;

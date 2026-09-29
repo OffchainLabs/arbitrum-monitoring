@@ -23,37 +23,30 @@ const alchemy429 = () => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('isTransientRpcError', () => {
-  test('detects 429 status on the error or its cause chain', () => {
+  test('detects a 429 status on the error or its cause chain', () => {
     expect(isTransientRpcError(alchemy429())).toBe(true)
     expect(isTransientRpcError((alchemy429() as any).cause)).toBe(true)
   })
 
-  test('detects ethers errors nested under error', () => {
-    expect(
-      isTransientRpcError({
-        message: 'could not detect network',
-        cause: new Error('request failed'),
-        error: { status: 503 },
-      })
-    ).toBe(true)
-  })
-
-  test('detects HTTP status text and nested transport errors', () => {
-    expect(isTransientRpcError(new Error('bad response (status=503)'))).toBe(
+  test('detects ethers v5 transport errors by code and status', () => {
+    expect(isTransientRpcError({ code: 'SERVER_ERROR', status: 429 })).toBe(
       true
     )
+    expect(isTransientRpcError({ code: 'SERVER_ERROR', status: 503 })).toBe(
+      true
+    )
+    expect(isTransientRpcError({ code: 'TIMEOUT' })).toBe(true)
+    expect(isTransientRpcError({ code: 'NETWORK_ERROR' })).toBe(true)
+  })
+
+  test('does not retry ethers JSON-RPC errors returned in a 200', () => {
     expect(
       isTransientRpcError({
         code: 'SERVER_ERROR',
-        response: { status: 503 },
+        message: 'processing response error',
+        error: { code: -32602, message: 'query exceeds max block range' },
       })
-    ).toBe(true)
-    expect(
-      isTransientRpcError({
-        code: 'SERVER_ERROR',
-        serverError: { code: 'ECONNRESET' },
-      })
-    ).toBe(true)
+    ).toBe(false)
   })
 
   test('detects transient errors from message text', () => {
@@ -67,9 +60,6 @@ describe('isTransientRpcError', () => {
     expect(isTransientRpcError(new Error('The request timed out.'))).toBe(true)
     expect(isTransientRpcError(new Error('fetch failed'))).toBe(true)
     expect(isTransientRpcError(new Error('502 Bad Gateway'))).toBe(true)
-    expect(isTransientRpcError({ code: 'NETWORK_ERROR' })).toBe(true)
-    expect(isTransientRpcError({ code: 'ECONNRESET' })).toBe(true)
-    expect(isTransientRpcError({ statusCode: '503' })).toBe(true)
   })
 
   test('does not flag genuine chain/contract errors', () => {
@@ -107,13 +97,14 @@ describe('isTransientRpcError', () => {
 describe('isRateLimitRpcError', () => {
   test('detects throttling', () => {
     expect(isRateLimitRpcError(alchemy429())).toBe(true)
-    expect(isRateLimitRpcError(new Error('rate limit exceeded'))).toBe(true)
-    expect(isRateLimitRpcError({ error: { status: 429 } })).toBe(true)
+    expect(isRateLimitRpcError({ code: 'SERVER_ERROR', status: 429 })).toBe(
+      true
+    )
   })
 
   test('ignores timeouts and gateway errors', () => {
     expect(isRateLimitRpcError(new Error('The request timed out.'))).toBe(false)
-    expect(isRateLimitRpcError(new Error('service unavailable'))).toBe(false)
+    expect(isRateLimitRpcError({ code: 'TIMEOUT' })).toBe(false)
     expect(isRateLimitRpcError({ status: 504 })).toBe(false)
   })
 })
