@@ -95,7 +95,7 @@ export const checkRetryablesOneOff = async ({
       ),
     (prev, next) => prev || next,
     false,
-    { splitOnTransientError: false }
+    { splitOnRateLimit: false }
   )
 
   return toBlock

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import {
+  isRateLimitRpcError,
   isTransientRpcError,
   processBlockRangeInChunks,
   withRetry,
@@ -86,10 +87,34 @@ describe('isTransientRpcError', () => {
     expect(isTransientRpcError(undefined)).toBe(false)
   })
 
+  test('follows a deep cause chain', () => {
+    let error: unknown = alchemy429()
+    for (let i = 0; i < 8; i++) {
+      const wrapper = new Error(`wrapper ${i}`) as Error & { cause: unknown }
+      wrapper.cause = error
+      error = wrapper
+    }
+    expect(isTransientRpcError(error)).toBe(true)
+  })
+
   test('handles non-Error throws', () => {
     expect(isTransientRpcError('rate limit exceeded')).toBe(true)
     expect(isTransientRpcError('something else broke')).toBe(false)
     expect(isTransientRpcError(42)).toBe(false)
+  })
+})
+
+describe('isRateLimitRpcError', () => {
+  test('detects throttling', () => {
+    expect(isRateLimitRpcError(alchemy429())).toBe(true)
+    expect(isRateLimitRpcError(new Error('rate limit exceeded'))).toBe(true)
+    expect(isRateLimitRpcError({ error: { status: 429 } })).toBe(true)
+  })
+
+  test('ignores timeouts and gateway errors', () => {
+    expect(isRateLimitRpcError(new Error('The request timed out.'))).toBe(false)
+    expect(isRateLimitRpcError(new Error('service unavailable'))).toBe(false)
+    expect(isRateLimitRpcError({ status: 504 })).toBe(false)
   })
 })
 
@@ -172,15 +197,37 @@ describe('processBlockRangeInChunks', () => {
     ])
   })
 
-  test('can avoid splitting ranges after transient errors', async () => {
+  test('can avoid splitting ranges after rate limits', async () => {
     const fn = vi.fn().mockRejectedValue(alchemy429())
 
     await expect(
       processBlockRangeInChunks(1, 2, 2, fn, () => false, false, {
         minChunkSize: 1,
-        splitOnTransientError: false,
+        splitOnRateLimit: false,
       })
     ).rejects.toThrow('HTTP request failed.')
     expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  test('still splits timeouts when rate-limit splitting is off', async () => {
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void) => {
+      cb()
+      return 0 as unknown as NodeJS.Timeout
+    }) as typeof setTimeout)
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('The request timed out.'))
+      .mockResolvedValue(false)
+
+    await processBlockRangeInChunks(1, 2, 2, fn, (a, b) => a || b, false, {
+      minChunkSize: 1,
+      splitOnRateLimit: false,
+    })
+
+    expect(fn.mock.calls).toEqual([
+      [1, 2],
+      [1, 1],
+      [2, 2],
+    ])
   })
 })

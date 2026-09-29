@@ -14,7 +14,12 @@ import {
   ParentChainTicketReport,
   TokenDepositData,
 } from '../../core/types'
-import { ChildNetwork, getExplorerUrlPrefixes, parseAmount } from 'utils'
+import {
+  ChildNetwork,
+  getExplorerUrlPrefixes,
+  parseAmount,
+  withRetry,
+} from 'utils'
 
 /**
  *
@@ -397,7 +402,10 @@ export async function getGasInfo(
   )
 
   // get current gas price
-  const gasComponents = await arbGasInfo.callStatic.getPricesInWei()
+  const gasComponents = await withRetry(
+    () => arbGasInfo.callStatic.getPricesInWei(),
+    { label: 'arbGasInfo.getPricesInWei' }
+  )
   const l2GasPrice = gasComponents[5]
 
   // get gas price when retryable was created

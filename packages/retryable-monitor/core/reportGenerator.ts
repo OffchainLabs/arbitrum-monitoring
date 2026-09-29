@@ -100,7 +100,10 @@ export const findSuccessfulRedeem = async (
     childChainProvider
   )
   const filter = arbRetryableTx.filters.RedeemScheduled(ticketId)
-  const latestBlock = await childChainProvider.getBlockNumber()
+  const latestBlock = await withRetry(
+    () => childChainProvider.getBlockNumber(),
+    { label: 'childChain.getBlockNumber' }
+  )
 
   return processBlockRangeInChunks<string | undefined>(
     creationBlockNumber,

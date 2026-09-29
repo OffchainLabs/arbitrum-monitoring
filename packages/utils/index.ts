@@ -15,18 +15,20 @@ export const getErrorMessage = (error: unknown): string =>
 const TRANSIENT_RPC_ERROR_REGEX =
   /status[=: ]+(?:429|5\d\d)|rate limit|too many requests|compute units|timed? ?out|network[_ ]error|econnreset|econnrefused|eai_again|socket hang up|fetch failed|service unavailable|bad gateway|gateway time-?out/i
 
-/**
- * Returns true for retryable RPC-infra failures (rate limits, timeouts,
- * gateway/network errors), as opposed to genuine chain/contract errors.
- */
-export const isTransientRpcError = (error: unknown): boolean => {
+const RATE_LIMIT_RPC_ERROR_REGEX =
+  /status[=: ]+429|rate limit|too many requests|compute units/i
+
+const matchesRpcError = (
+  error: unknown,
+  isMatchingStatus: (status: number) => boolean,
+  pattern: RegExp
+): boolean => {
   // clients wrap transport errors under cause or error, sometimes both
   const pending: unknown[] = [error]
-  for (let depth = 0; pending.length > 0 && depth < 10; depth++) {
+  for (let visited = 0; pending.length > 0 && visited < 50; visited++) {
     const current = pending.shift()
-    if (current == null) continue
-    if (typeof current !== 'object') {
-      if (TRANSIENT_RPC_ERROR_REGEX.test(String(current))) return true
+    if (typeof current !== 'object' || current === null) {
+      if (pattern.test(String(current))) return true
       continue
     }
     const candidate = current as {
@@ -42,11 +44,9 @@ export const isTransientRpcError = (error: unknown): boolean => {
       serverError?: unknown
     }
     const status = Number(candidate.status ?? candidate.statusCode)
-    if (status === 429 || (Number.isFinite(status) && status >= 500)) {
-      return true
-    }
+    if (Number.isFinite(status) && isMatchingStatus(status)) return true
     if (
-      TRANSIENT_RPC_ERROR_REGEX.test(
+      pattern.test(
         `${candidate.code ?? ''} ${candidate.message ?? ''} ${
           candidate.details ?? ''
         } ${candidate.body ?? ''}`
@@ -54,15 +54,35 @@ export const isTransientRpcError = (error: unknown): boolean => {
     ) {
       return true
     }
-    pending.push(
+    for (const child of [
       candidate.cause,
       candidate.error,
       candidate.response,
-      candidate.serverError
-    )
+      candidate.serverError,
+    ]) {
+      if (child != null) pending.push(child)
+    }
   }
   return false
 }
+
+/**
+ * Returns true for retryable RPC-infra failures (rate limits, timeouts,
+ * gateway/network errors), as opposed to genuine chain/contract errors.
+ */
+export const isTransientRpcError = (error: unknown): boolean =>
+  matchesRpcError(
+    error,
+    status => status === 429 || status >= 500,
+    TRANSIENT_RPC_ERROR_REGEX
+  )
+
+/**
+ * Returns true only for throttling (429, rate limit, compute units). Timeouts
+ * and gateway errors are excluded since they often mean the request was too big.
+ */
+export const isRateLimitRpcError = (error: unknown): boolean =>
+  matchesRpcError(error, status => status === 429, RATE_LIMIT_RPC_ERROR_REGEX)
 
 /**
  * Retries `fn` with exponential backoff on transient RPC errors;
@@ -114,7 +134,7 @@ export const processBlockRangeInChunks = async <T>(
     minChunkSize?: number
     reverse?: boolean
     stopWhen?: (result: T) => boolean
-    splitOnTransientError?: boolean
+    splitOnRateLimit?: boolean
   }
 ): Promise<T> => {
   const minChunkSize = options?.minChunkSize ?? 500
@@ -135,8 +155,7 @@ export const processBlockRangeInChunks = async <T>(
     } catch (error) {
       if (
         chunkSize > minChunkSize &&
-        (options?.splitOnTransientError !== false ||
-          !isTransientRpcError(error))
+        (options?.splitOnRateLimit !== false || !isRateLimitRpcError(error))
       ) {
         const smallerChunk = Math.floor(chunkSize / 2)
         console.warn(
