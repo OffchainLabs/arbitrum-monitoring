@@ -15,40 +15,53 @@ export const getErrorMessage = (error: unknown): string =>
 const TRANSIENT_RPC_ERROR_REGEX =
   /status: 429|rate limit|too many requests|compute units|timed? ?out|econnreset|econnrefused|socket hang up|fetch failed|service unavailable|bad gateway|gateway time-?out/i
 
-/**
- * Returns true for retryable RPC-infra failures (rate limits, timeouts,
- * gateway/network errors), as opposed to genuine chain/contract errors.
- */
-export const isTransientRpcError = (error: unknown): boolean => {
-  // viem wraps the underlying HttpRequestError, so walk the cause chain
+const TRANSIENT_ETHERS_ERROR_CODES = ['TIMEOUT', 'NETWORK_ERROR']
+
+type RpcErrorFields = {
+  code?: unknown
+  status?: unknown
+  message?: unknown
+  details?: unknown
+  cause?: unknown
+}
+
+// viem nests the transport error under cause; ethers v5 puts code and status on the top-level error
+const someInCauseChain = (
+  error: unknown,
+  predicate: (candidate: RpcErrorFields) => boolean
+): boolean => {
   let current: unknown = error
   for (let depth = 0; current != null && depth < 10; depth++) {
     if (typeof current !== 'object') {
-      return TRANSIENT_RPC_ERROR_REGEX.test(String(current))
+      return predicate({ message: current })
     }
-    const candidate = current as {
-      status?: unknown
-      message?: unknown
-      details?: unknown
-      cause?: unknown
-    }
-    if (
-      candidate.status === 429 ||
-      (typeof candidate.status === 'number' && candidate.status >= 500)
-    ) {
-      return true
-    }
-    if (
-      TRANSIENT_RPC_ERROR_REGEX.test(
-        `${candidate.message ?? ''} ${candidate.details ?? ''}`
-      )
-    ) {
-      return true
-    }
+    const candidate = current as RpcErrorFields
+    if (predicate(candidate)) return true
     current = candidate.cause
   }
   return false
 }
+
+/**
+ * Returns true for retryable RPC-infra failures (rate limits, timeouts,
+ * gateway/network errors), as opposed to genuine chain/contract errors.
+ */
+export const isTransientRpcError = (error: unknown): boolean =>
+  someInCauseChain(
+    error,
+    ({ code, status, message, details }) =>
+      status === 429 ||
+      (typeof status === 'number' && status >= 500) ||
+      TRANSIENT_ETHERS_ERROR_CODES.includes(code as string) ||
+      TRANSIENT_RPC_ERROR_REGEX.test(`${message ?? ''} ${details ?? ''}`)
+  )
+
+/**
+ * Returns true only for an HTTP 429. Timeouts and gateway errors are excluded
+ * since they often mean the request was too big.
+ */
+export const isRateLimitRpcError = (error: unknown): boolean =>
+  someInCauseChain(error, ({ status }) => status === 429)
 
 /**
  * Retries `fn` with exponential backoff on transient RPC errors;
@@ -56,10 +69,16 @@ export const isTransientRpcError = (error: unknown): boolean => {
  */
 export const withRetry = async <T>(
   fn: () => Promise<T>,
-  options?: { retries?: number; initialDelayMs?: number; label?: string }
+  options?: {
+    retries?: number
+    initialDelayMs?: number
+    maxDelayMs?: number
+    label?: string
+  }
 ): Promise<T> => {
   const retries = options?.retries ?? 3
   const initialDelayMs = options?.initialDelayMs ?? 2000
+  const maxDelayMs = options?.maxDelayMs ?? 15_000
   for (let attempt = 0; ; attempt++) {
     try {
       return await fn()
@@ -67,7 +86,7 @@ export const withRetry = async <T>(
       if (attempt >= retries || !isTransientRpcError(error)) {
         throw error
       }
-      const delayMs = initialDelayMs * 2 ** attempt
+      const delayMs = Math.min(initialDelayMs * 2 ** attempt, maxDelayMs)
       console.warn(
         `${
           options?.label ?? 'RPC call'
@@ -94,6 +113,7 @@ export const processBlockRangeInChunks = async <T>(
     minChunkSize?: number
     reverse?: boolean
     stopWhen?: (result: T) => boolean
+    splitOnRateLimit?: boolean
   }
 ): Promise<T> => {
   const minChunkSize = options?.minChunkSize ?? 500
@@ -112,7 +132,10 @@ export const processBlockRangeInChunks = async <T>(
       if (options?.stopWhen?.(result)) return result
       await sleep(100)
     } catch (error) {
-      if (chunkSize > minChunkSize) {
+      if (
+        chunkSize > minChunkSize &&
+        (options?.splitOnRateLimit !== false || !isRateLimitRpcError(error))
+      ) {
         const smallerChunk = Math.floor(chunkSize / 2)
         console.warn(
           `Block range [${rangeFrom}-${rangeTo}] failed, retrying with chunk size ${smallerChunk}`

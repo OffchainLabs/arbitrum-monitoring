@@ -7,6 +7,7 @@ import {
 } from '@arbitrum/sdk'
 import { ERC20__factory } from '@arbitrum/sdk/dist/lib/abi/factories/ERC20__factory'
 import { TokenDepositData } from './types'
+import { withRetry } from 'utils'
 
 const ERC20_TRANSFER_TOPIC = utils.id('Transfer(address,address,uint256)')
 
@@ -35,7 +36,9 @@ export const getTokenDepositData = async ({
   const sender = arbParentTxReceipt.from.toLowerCase()
   const gatewaySet = new Set(
     gatewayAddresses
-      .filter((addr): addr is string => typeof addr === 'string' && addr.length > 0)
+      .filter(
+        (addr): addr is string => typeof addr === 'string' && addr.length > 0
+      )
       .map(addr => addr.toLowerCase())
   )
 
@@ -93,7 +96,8 @@ export const getTokenDepositData = async ({
     transfer => transfer.from === sender
   )
   // Priority: exact deposit-match transfer > sender->gateway transfer > any sender transfer
-  const selectedTransfer = correlatedTransfer ?? preferredTransfer ?? fallbackTransfer
+  const selectedTransfer =
+    correlatedTransfer ?? preferredTransfer ?? fallbackTransfer
 
   // DepositInitiated remains the primary source for token/amount when available
   if (selectedDepositEvent?.event?.[0]) {
@@ -117,10 +121,10 @@ export const getTokenDepositData = async ({
         parentChainErc20Address,
         parentChainProvider
       )
-      const [symbol, decimals] = await Promise.all([
-        erc20.symbol(),
-        erc20.decimals(),
-      ])
+      const [symbol, decimals] = await withRetry(
+        () => Promise.all([erc20.symbol(), erc20.decimals()]),
+        { label: 'ERC20 metadata' }
+      )
       tokenDepositData = {
         l2TicketId: retryableMessage.retryableCreationId,
         tokenAmount,

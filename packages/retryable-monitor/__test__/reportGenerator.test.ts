@@ -31,6 +31,7 @@ const buildArgs = (
   status: ParentToChildMessageStatus,
   receiptLogs: unknown[] = []
 ) => ({
+  status,
   childChainTx: {
     maxFeePerGas: BigNumber.from(200000000),
     gasLimit: BigNumber.from(300000),
@@ -38,7 +39,6 @@ const buildArgs = (
   childChainTxReceipt: { blockNumber: 123, logs: receiptLogs } as any,
   retryableMessage: {
     retryableCreationId: '0xticket',
-    status: async () => status,
     getAutoRedeemAttempt: async () => null,
     messageData: {
       l2CallValue: BigNumber.from(0),
@@ -59,6 +59,7 @@ describe('getChildChainRetryableReport', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.useRealTimers()
   })
 
@@ -75,6 +76,27 @@ describe('getChildChainRetryableReport', () => {
     expect(report.timeoutTimestamp).toBe(
       String(CREATED_AT + SEVEN_DAYS_IN_SECONDS)
     )
+  })
+
+  test('retries transient report RPC failures', async () => {
+    const args = buildArgs(ParentToChildMessageStatus.FUNDS_DEPOSITED_ON_CHILD)
+    args.childChainProvider.getBlock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('rate limit exceeded'))
+      .mockResolvedValue({ timestamp: CREATED_AT })
+    args.retryableMessage.getAutoRedeemAttempt = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('rate limit exceeded'))
+      .mockResolvedValue(null)
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((cb: () => void) => {
+      cb()
+      return 0 as unknown as NodeJS.Timeout
+    }) as typeof setTimeout)
+
+    await getChildChainRetryableReport(args)
+
+    expect(args.childChainProvider.getBlock).toHaveBeenCalledTimes(2)
+    expect(args.retryableMessage.getAutoRedeemAttempt).toHaveBeenCalledTimes(2)
   })
 
   test('reports CREATION_FAILED tickets that are live on-chain as unredeemed, with their actual timeout', async () => {
