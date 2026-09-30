@@ -46,7 +46,7 @@ function formatDuration(seconds: number): string {
 function getAssertionBacklogThresholdSeconds(chainInfo: ChainInfo): number {
   return Math.max(
     RECENT_ACTIVITY_SECONDS,
-    2 * (chainInfo.assertionIntervalSeconds ?? 0)
+    2 * (chainInfo.bridgeUiConfig?.assertionIntervalSeconds ?? 0)
   )
 }
 

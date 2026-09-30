@@ -222,7 +222,7 @@ describe('Assertion Health Monitoring', () => {
       const chainState = createBaseChainState()
       const dailyAssertingChain = {
         ...mockChainInfo,
-        assertionIntervalSeconds: 24 * 60 * 60,
+        bridgeUiConfig: { assertionIntervalSeconds: 24 * 60 * 60 },
       }
       chainState.childFirstUnassertedBlock = {
         ...chainState.childFirstUnassertedBlock!,
