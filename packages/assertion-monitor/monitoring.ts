@@ -13,11 +13,13 @@ import {
 import {
   CHALLENGE_PERIOD_SECONDS,
   RECENT_ACTIVITY_SECONDS,
+  UNCONFIRMED_ASSERTION_GRACE_SECONDS,
   VALIDATOR_AFK_BLOCKS,
 } from './constants'
 import {
   getBlockTimeForChain,
   getChainFromId,
+  getConfirmPeriodSeconds,
   getRollupBlockTimeForChain,
 } from './chains'
 import type { ChainState } from './types'
@@ -191,14 +193,14 @@ export const generateConditionsForAlerts = (
     parentCurrentBlock,
     parentBlockAtConfirmation,
     childFirstUnassertedBlock,
-    parentBlockAtOldestCreation,
+    parentBlockAtConfirmableCreation,
     recentConfirmationEvent,
   } = chainState
 
   const rollupBlockTime = getRollupBlockTimeForChain(
     getChainFromId(chainInfo.parentChainId)
   )
-  const confirmPeriodSeconds = chainInfo.confirmPeriodBlocks * rollupBlockTime
+  const confirmPeriodSeconds = getConfirmPeriodSeconds(chainInfo)
   const assertionBacklogThresholdSeconds =
     getAssertionBacklogThresholdSeconds(chainInfo)
 
@@ -241,16 +243,16 @@ export const generateConditionsForAlerts = (
     assertionBacklogSeconds > assertionBacklogThresholdSeconds
 
   /**
-   * Only alerts once the oldest assertion in the window should already have
-   * been confirmed, so a freshly deployed or migrated rollup does not alert
-   * while its first assertions are still inside the confirm period.
+   * Only alerts once some assertion should already have been confirmed, so a
+   * freshly deployed or migrated rollup does not alert while its first
+   * assertions are still inside the confirm period.
    */
   const noConfirmationsWithCreationEvents =
     doesLatestChildCreatedBlockExist &&
     !recentConfirmationEvent &&
-    !!parentBlockAtOldestCreation &&
-    currentTimeSeconds - Number(parentBlockAtOldestCreation.timestamp) >
-      confirmPeriodSeconds + assertionBacklogThresholdSeconds
+    !!parentBlockAtConfirmableCreation &&
+    currentTimeSeconds - Number(parentBlockAtConfirmableCreation.timestamp) >
+      confirmPeriodSeconds + UNCONFIRMED_ASSERTION_GRACE_SECONDS
 
   /**
    * Detects an inconsistent state where confirmation events exist but no confirmed blocks are recorded

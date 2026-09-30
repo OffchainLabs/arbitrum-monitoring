@@ -1,4 +1,5 @@
 import { Chain } from 'viem'
+import type { ChildNetwork as ChainInfo } from 'utils'
 import {
   mainnet,
   arbitrum,
@@ -66,6 +67,10 @@ export const getRollupBlockTimeForChain = (chain: Chain): number => {
       return getBlockTimeForChain(chain)
   }
 }
+
+export const getConfirmPeriodSeconds = (chainInfo: ChainInfo): number =>
+  chainInfo.confirmPeriodBlocks *
+  getRollupBlockTimeForChain(getChainFromId(chainInfo.parentChainId))
 
 /** Scales the log chunk size so each chunk spans roughly the same wall-clock time on fast parent chains. */
 export const getLogChunkSizeForChain = (chain: Chain): bigint => {

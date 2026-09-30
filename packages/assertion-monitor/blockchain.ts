@@ -17,7 +17,16 @@ import {
   boldABI,
   rollupABI,
 } from './abi'
-import { CHUNK_SIZE, MIN_BASE_STAKE_THRESHOLD } from './constants'
+import {
+  getBlockTimeForChain,
+  getChainFromId,
+  getConfirmPeriodSeconds,
+} from './chains'
+import {
+  CHUNK_SIZE,
+  MIN_BASE_STAKE_THRESHOLD,
+  UNCONFIRMED_ASSERTION_GRACE_SECONDS,
+} from './constants'
 import { ChainState, ConfirmationEvent, CreationEvent } from './types'
 import { extractBoldBlockHash, extractClassicBlockHash } from './utils'
 
@@ -247,34 +256,42 @@ export async function fetchMostRecentCreationEvent<T extends CreationEvent>(
 }
 
 /**
- * Fetches the oldest creation event (assertion or node) within a block range.
+ * Fetches the newest creation event old enough to have been confirmed by now.
+ * The search reaches one confirm period before fromBlock: a creation that
+ * recent can only be confirmed within [fromBlock, toBlock], so when that range
+ * has no confirmation events the creation found is still unconfirmed.
  */
-export async function fetchOldestCreationEvent<T extends CreationEvent>(
+export async function fetchConfirmableCreationEvent<T extends CreationEvent>(
   fromBlock: bigint,
   toBlock: bigint,
   client: PublicClient,
-  rollupAddress: string,
+  childChainInfo: ChainInfo,
   isBold: boolean,
   chunkSize: bigint = CHUNK_SIZE
 ): Promise<T | null> {
-  const event = isBold ? ASSERTION_CREATED_EVENT : NODE_CREATED_EVENT
+  const parentBlockTime = getBlockTimeForChain(
+    getChainFromId(childChainInfo.parentChainId)
+  )
+  const toParentBlocks = (seconds: number) =>
+    BigInt(Math.ceil(seconds / parentBlockTime))
 
-  return processBlockRangeInChunks<T | null>(
-    Number(fromBlock),
-    Number(toBlock),
-    Number(chunkSize),
-    async (from, to) => {
-      const logs = await client.getLogs({
-        address: rollupAddress as `0x${string}`,
-        fromBlock: BigInt(from),
-        toBlock: BigInt(to),
-        event,
-      })
-      return (logs[0] as T | undefined) ?? null
-    },
-    (prev, next) => prev ?? next,
-    null,
-    { stopWhen: result => result !== null, minChunkSize: 100 }
+  const confirmPeriodSeconds = getConfirmPeriodSeconds(childChainInfo)
+  const searchFrom = fromBlock - toParentBlocks(confirmPeriodSeconds)
+  const searchTo =
+    toBlock -
+    toParentBlocks(confirmPeriodSeconds + UNCONFIRMED_ASSERTION_GRACE_SECONDS)
+
+  if (searchTo < 0n) {
+    return null
+  }
+
+  return fetchMostRecentCreationEvent<T>(
+    searchFrom > 0n ? searchFrom : 0n,
+    searchTo,
+    client,
+    childChainInfo.ethBridge.rollup,
+    isBold,
+    chunkSize
   )
 }
 
@@ -389,19 +406,19 @@ export const fetchChainState = async ({
     })
   }
 
-  let parentBlockAtOldestCreation
+  let parentBlockAtConfirmableCreation
   if (recentCreationEvent && !recentConfirmationEvent) {
-    const oldestCreationEvent = await fetchOldestCreationEvent(
+    const confirmableCreationEvent = await fetchConfirmableCreationEvent(
       fromBlock,
       toBlock,
       parentClient,
-      childChainInfo.ethBridge.rollup,
+      childChainInfo,
       isBold,
       chunkSize
     )
-    if (oldestCreationEvent) {
-      parentBlockAtOldestCreation = await parentClient.getBlock({
-        blockNumber: oldestCreationEvent.blockNumber,
+    if (confirmableCreationEvent) {
+      parentBlockAtConfirmableCreation = await parentClient.getBlock({
+        blockNumber: confirmableCreationEvent.blockNumber,
       })
     }
   }
@@ -424,7 +441,7 @@ export const fetchChainState = async ({
     parentBlockAtCreation,
     parentBlockAtConfirmation,
     childFirstUnassertedBlock,
-    parentBlockAtOldestCreation,
+    parentBlockAtConfirmableCreation,
     recentCreationEvent,
     recentConfirmationEvent,
     isValidatorWhitelistDisabled,

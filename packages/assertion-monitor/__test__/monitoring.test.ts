@@ -21,6 +21,7 @@ vi.mock('../constants', () => ({
   CHALLENGE_PERIOD_SECONDS: 6.4 * 24 * 60 * 60, // 6.4 days in seconds
   SEARCH_WINDOW_SECONDS: 7 * 24 * 60 * 60, // 7 days in seconds
   RECENT_ACTIVITY_SECONDS: 4 * 60 * 60, // 4 hours in seconds
+  UNCONFIRMED_ASSERTION_GRACE_SECONDS: 4 * 60 * 60,
   VALIDATOR_AFK_BLOCKS: 50, // Add the validator AFK blocks constant
 }))
 
@@ -182,7 +183,7 @@ describe('Assertion Health Monitoring', () => {
       const chainState = createBaseChainState()
       chainState.childLatestConfirmedBlock = undefined
       chainState.parentBlockAtConfirmation = undefined
-      chainState.parentBlockAtOldestCreation = {
+      chainState.parentBlockAtConfirmableCreation = {
         number: 10n,
         timestamp: NOW - BigInt(5 * 60 * 60) - 1200n,
         hash: '0xparent4' as `0x${string}`,
@@ -251,7 +252,7 @@ describe('Assertion Health Monitoring', () => {
       const chainState = createBaseChainState()
       chainState.childLatestConfirmedBlock = undefined
       chainState.parentBlockAtConfirmation = undefined
-      chainState.parentBlockAtOldestCreation = {
+      chainState.parentBlockAtConfirmableCreation = {
         number: 10n,
         timestamp: NOW - BigInt(5 * 60 * 60) - 1200n,
         hash: '0xparent4' as `0x${string}`,
@@ -273,7 +274,7 @@ describe('Assertion Health Monitoring', () => {
       const chainState = createBaseChainState()
       chainState.childLatestConfirmedBlock = undefined
       chainState.parentBlockAtConfirmation = undefined
-      chainState.parentBlockAtOldestCreation = {
+      chainState.parentBlockAtConfirmableCreation = {
         number: 10n,
         timestamp: NOW - 1000n,
         hash: '0xparent4' as `0x${string}`,
@@ -287,6 +288,30 @@ describe('Assertion Health Monitoring', () => {
       )
 
       expect(alerts).not.toContain(NO_CONFIRMATION_EVENTS_ALERT)
+    })
+
+    test('should alert on missing confirmations for a chain that asserts less often', async () => {
+      const chainState = createBaseChainState()
+      const dailyAssertingChain = {
+        ...mockChainInfo,
+        bridgeUiConfig: { assertionIntervalSeconds: 24 * 60 * 60 },
+      }
+      chainState.childLatestConfirmedBlock = undefined
+      chainState.parentBlockAtConfirmation = undefined
+      chainState.parentBlockAtConfirmableCreation = {
+        number: 10n,
+        timestamp: NOW - BigInt(5 * 60 * 60) - 1200n,
+        hash: '0xparent4' as `0x${string}`,
+        parentHash: '0x0000' as `0x${string}`,
+      } as Block
+
+      const alerts = await analyzeAssertionEvents(
+        chainState,
+        dailyAssertingChain,
+        true
+      )
+
+      expect(alerts).toContain(NO_CONFIRMATION_EVENTS_ALERT)
     })
 
     test('should alert when confirmation delay exceeds period', async () => {
@@ -676,7 +701,7 @@ describe('Assertion Health Monitoring', () => {
       const chainState = createBaseChainState()
       chainState.childLatestConfirmedBlock = undefined
       chainState.parentBlockAtConfirmation = undefined
-      chainState.parentBlockAtOldestCreation = {
+      chainState.parentBlockAtConfirmableCreation = {
         number: 10n,
         timestamp: NOW - BigInt(5 * 60 * 60) - 1200n,
         hash: '0xparent4' as `0x${string}`,
