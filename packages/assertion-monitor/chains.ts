@@ -9,6 +9,7 @@ import {
   arbitrumSepolia,
   baseSepolia,
 } from 'viem/chains'
+import { CHUNK_SIZE } from './constants'
 
 export const supportedParentChains = [
   mainnet,
@@ -45,4 +46,33 @@ export const getBlockTimeForChain = (chain: Chain): number => {
     default:
       return 1
   }
+}
+
+/**
+ * Block time of the clock rollup contracts count confirmPeriodBlocks in.
+ * On Arbitrum parent chains block.number returns the L1 block number, so
+ * rollup periods tick at L1 speed rather than at the parent chain's block time.
+ */
+export const getRollupBlockTimeForChain = (chain: Chain): number => {
+  switch (chain) {
+    case arbitrum:
+    case arbitrumNova:
+      return getBlockTimeForChain(mainnet)
+
+    case arbitrumSepolia:
+      return getBlockTimeForChain(sepolia)
+
+    default:
+      return getBlockTimeForChain(chain)
+  }
+}
+
+/** Scales the log chunk size so each chunk spans roughly the same wall-clock time on fast parent chains. */
+export const getLogChunkSizeForChain = (chain: Chain): bigint => {
+  const blockTime = getBlockTimeForChain(chain)
+  const multiplier = Math.max(
+    1,
+    Math.round(getBlockTimeForChain(mainnet) / blockTime)
+  )
+  return CHUNK_SIZE * BigInt(multiplier)
 }

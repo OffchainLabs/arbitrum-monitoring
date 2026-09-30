@@ -27,6 +27,7 @@ vi.mock('../constants', () => ({
 // Mock chain info
 const mockChainInfo = {
   name: 'Test Chain',
+  parentChainId: 1,
   confirmPeriodBlocks: 100,
   ethBridge: {
     rollup: '0x1234567890123456789012345678901234567890',
@@ -35,6 +36,12 @@ const mockChainInfo = {
 
 // Base timestamp for tests (current time)
 const NOW = 1672531200n // 2023-01-01 00:00:00 UTC as bigint
+
+// (confirmPeriodBlocks(100) + VALIDATOR_AFK_BLOCKS(50)) * 12s L1 block time
+const CONFIRMATION_THRESHOLD_SECONDS = 150n * 12n
+
+const hasChainActivityAlert = (alerts: string[]) =>
+  alerts.some(alert => alert.startsWith(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT))
 
 describe('Assertion Health Monitoring', () => {
   // Mock Date.now() to return a consistent timestamp
@@ -85,9 +92,15 @@ describe('Assertion Health Monitoring', () => {
       } as Block,
       parentBlockAtConfirmation: {
         number: 130n,
-        timestamp: NOW - 7200n, // 2 hours ago
+        timestamp: NOW - 600n, // 10 minutes ago
         hash: '0xparent3' as `0x${string}`,
         parentHash: '0x0000' as `0x${string}`,
+      } as Block,
+      childFirstUnassertedBlock: {
+        number: 901n,
+        timestamp: NOW - 1800n, // 30 minutes ago
+        hash: '0xabce' as `0x${string}`,
+        parentHash: '0xabcd' as `0x${string}`,
       } as Block,
       recentCreationEvent: null,
       recentConfirmationEvent: null,
@@ -144,9 +157,12 @@ describe('Assertion Health Monitoring', () => {
     test('should alert when chain has activity but no recent creation events', async () => {
       const chainState = createBaseChainState()
       // Set creation event to be older than the recent activity threshold (4 hours)
+      chainState.childFirstUnassertedBlock = {
+        ...chainState.childFirstUnassertedBlock!,
+        timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
+      } as Block
       chainState.childLatestCreatedBlock = {
         ...chainState.childLatestCreatedBlock!,
-        timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
       } as Block
 
       const alerts = await analyzeAssertionEvents(
@@ -159,12 +175,19 @@ describe('Assertion Health Monitoring', () => {
       expect(alerts.length).toBeGreaterThan(0)
 
       // Check for expected alert
-      expect(alerts).toContain(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
+      expect(hasChainActivityAlert(alerts)).toBe(true)
     })
 
     test('should alert when no confirmation events exist', async () => {
       const chainState = createBaseChainState()
       chainState.childLatestConfirmedBlock = undefined
+      chainState.parentBlockAtConfirmation = undefined
+      chainState.parentBlockAtOldestCreation = {
+        number: 10n,
+        timestamp: NOW - BigInt(5 * 60 * 60) - 1200n,
+        hash: '0xparent4' as `0x${string}`,
+        parentHash: '0x0000' as `0x${string}`,
+      } as Block
 
       const alerts = await analyzeAssertionEvents(
         chainState,
@@ -177,6 +200,93 @@ describe('Assertion Health Monitoring', () => {
 
       // Check for expected alert
       expect(alerts).toContain(NO_CONFIRMATION_EVENTS_ALERT)
+    })
+
+    test('should not alert on a sparse chain whose latest asserted block is old', async () => {
+      const chainState = createBaseChainState()
+      chainState.childLatestCreatedBlock = {
+        ...chainState.childLatestCreatedBlock!,
+        timestamp: NOW - BigInt(9 * 60 * 60),
+      } as Block
+
+      const alerts = await analyzeAssertionEvents(
+        chainState,
+        mockChainInfo,
+        true
+      )
+
+      expect(hasChainActivityAlert(alerts)).toBe(false)
+    })
+
+    test('should scale the unasserted block threshold with the configured assertion interval', async () => {
+      const chainState = createBaseChainState()
+      const dailyAssertingChain = {
+        ...mockChainInfo,
+        assertionIntervalSeconds: 24 * 60 * 60,
+      }
+      chainState.childFirstUnassertedBlock = {
+        ...chainState.childFirstUnassertedBlock!,
+        timestamp: NOW - BigInt(30 * 60 * 60),
+      } as Block
+
+      expect(
+        hasChainActivityAlert(
+          await analyzeAssertionEvents(chainState, dailyAssertingChain, true)
+        )
+      ).toBe(false)
+
+      chainState.childFirstUnassertedBlock = {
+        ...chainState.childFirstUnassertedBlock!,
+        timestamp: NOW - BigInt(49 * 60 * 60),
+      } as Block
+
+      expect(
+        hasChainActivityAlert(
+          await analyzeAssertionEvents(chainState, dailyAssertingChain, true)
+        )
+      ).toBe(true)
+    })
+
+    test('should report missing confirmations only once', async () => {
+      const chainState = createBaseChainState()
+      chainState.childLatestConfirmedBlock = undefined
+      chainState.parentBlockAtConfirmation = undefined
+      chainState.parentBlockAtOldestCreation = {
+        number: 10n,
+        timestamp: NOW - BigInt(5 * 60 * 60) - 1200n,
+        hash: '0xparent4' as `0x${string}`,
+        parentHash: '0x0000' as `0x${string}`,
+      } as Block
+
+      const alerts = await analyzeAssertionEvents(
+        chainState,
+        mockChainInfo,
+        true
+      )
+
+      expect(
+        alerts.filter(alert => alert === NO_CONFIRMATION_EVENTS_ALERT)
+      ).toHaveLength(1)
+    })
+
+    test('should not alert on missing confirmations while assertions are within the confirm period', async () => {
+      const chainState = createBaseChainState()
+      chainState.childLatestConfirmedBlock = undefined
+      chainState.parentBlockAtConfirmation = undefined
+      chainState.parentBlockAtOldestCreation = {
+        number: 10n,
+        timestamp: NOW - 1000n,
+        hash: '0xparent4' as `0x${string}`,
+        parentHash: '0x0000' as `0x${string}`,
+      } as Block
+
+      const alerts = await analyzeAssertionEvents(
+        chainState,
+        mockChainInfo,
+        true
+      )
+
+      expect(alerts).not.toContain(NO_CONFIRMATION_EVENTS_ALERT)
     })
 
     test('should alert when confirmation delay exceeds period', async () => {
@@ -201,7 +311,8 @@ describe('Assertion Health Monitoring', () => {
 
       chainState.parentBlockAtConfirmation = {
         ...chainState.parentBlockAtConfirmation!,
-        number: 100n, // 200 blocks behind, exceeds confirmPeriodBlocks(100) + VALIDATOR_AFK_BLOCKS(50)
+        number: 100n,
+        timestamp: NOW - CONFIRMATION_THRESHOLD_SECONDS - 1n,
       } as Block
 
       const alerts = await analyzeAssertionEvents(
@@ -257,7 +368,8 @@ describe('Assertion Health Monitoring', () => {
 
       chainState.parentBlockAtConfirmation = {
         ...chainState.parentBlockAtConfirmation!,
-        number: 100n, // 200 blocks behind, exceeds confirmPeriodBlocks(100) + VALIDATOR_AFK_BLOCKS(50)
+        number: 100n,
+        timestamp: NOW - CONFIRMATION_THRESHOLD_SECONDS - 1n,
       } as Block
 
       chainState.isBaseStakeBelowThreshold = true
@@ -289,9 +401,12 @@ describe('Assertion Health Monitoring', () => {
       const chainState = createBaseChainState()
 
       // Set creation event to be older than the recent activity threshold
+      chainState.childFirstUnassertedBlock = {
+        ...chainState.childFirstUnassertedBlock!,
+        timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
+      } as Block
       chainState.childLatestCreatedBlock = {
         ...chainState.childLatestCreatedBlock!,
-        timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
         number: 1800n,
       } as Block
 
@@ -314,7 +429,8 @@ describe('Assertion Health Monitoring', () => {
 
       chainState.parentBlockAtConfirmation = {
         ...chainState.parentBlockAtConfirmation!,
-        number: 100n, // 200 blocks behind, exceeds confirmPeriodBlocks(100) + VALIDATOR_AFK_BLOCKS(50)
+        number: 100n,
+        timestamp: NOW - CONFIRMATION_THRESHOLD_SECONDS - 1n,
       } as Block
 
       const alerts = await analyzeAssertionEvents(
@@ -327,7 +443,7 @@ describe('Assertion Health Monitoring', () => {
       expect(alerts.length).toBeGreaterThan(1)
 
       // Check for expected alerts
-      expect(alerts).toContain(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
+      expect(hasChainActivityAlert(alerts)).toBe(true)
       expect(alerts).toContain(CONFIRMATION_DELAY_ALERT)
     })
 
@@ -353,7 +469,8 @@ describe('Assertion Health Monitoring', () => {
 
       chainState.parentBlockAtConfirmation = {
         ...chainState.parentBlockAtConfirmation!,
-        number: 100n, // 200 blocks behind, exceeds confirmPeriodBlocks(100) + VALIDATOR_AFK_BLOCKS(50)
+        number: 100n,
+        timestamp: NOW - CONFIRMATION_THRESHOLD_SECONDS - 1n,
       } as Block
 
       const alerts = await analyzeAssertionEvents(
@@ -378,6 +495,7 @@ describe('Assertion Health Monitoring', () => {
       chainState.parentBlockAtConfirmation = {
         ...chainState.parentBlockAtConfirmation!,
         number: 200n, // Same as current block, so no delay
+        timestamp: NOW,
       } as Block
 
       // Set child blocks to indicate a delay (which would have triggered an alert in the old implementation)
@@ -433,8 +551,7 @@ describe('Assertion Health Monitoring', () => {
         true
       )
 
-      // Should contain both the standard no confirmation events alert and the specific inconsistency alert
-      expect(alerts).toContain(NO_CONFIRMATION_EVENTS_ALERT)
+      expect(alerts).not.toContain(NO_CONFIRMATION_EVENTS_ALERT)
       expect(alerts).toContain(NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT)
     
     })
@@ -534,9 +651,12 @@ describe('Assertion Health Monitoring', () => {
     test('should alert when no recent creation events for non-BOLD chain', async () => {
       const chainState = createBaseChainState()
       // Set creation event to be older than the recent activity threshold (4 hours)
+      chainState.childFirstUnassertedBlock = {
+        ...chainState.childFirstUnassertedBlock!,
+        timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
+      } as Block
       chainState.childLatestCreatedBlock = {
         ...chainState.childLatestCreatedBlock!,
-        timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
       } as Block
 
       const alerts = await analyzeAssertionEvents(
@@ -555,6 +675,13 @@ describe('Assertion Health Monitoring', () => {
     test('should alert when no confirmation events exist for non-BOLD chain', async () => {
       const chainState = createBaseChainState()
       chainState.childLatestConfirmedBlock = undefined
+      chainState.parentBlockAtConfirmation = undefined
+      chainState.parentBlockAtOldestCreation = {
+        number: 10n,
+        timestamp: NOW - BigInt(5 * 60 * 60) - 1200n,
+        hash: '0xparent4' as `0x${string}`,
+        parentHash: '0x0000' as `0x${string}`,
+      } as Block
 
       const alerts = await analyzeAssertionEvents(
         chainState,
@@ -580,7 +707,8 @@ describe('Assertion Health Monitoring', () => {
 
       chainState.parentBlockAtConfirmation = {
         ...chainState.parentBlockAtConfirmation!,
-        number: 100n, // 200 blocks behind, exceeds confirmPeriodBlocks(100) + VALIDATOR_AFK_BLOCKS(50)
+        number: 100n,
+        timestamp: NOW - CONFIRMATION_THRESHOLD_SECONDS - 1n,
       } as Block
 
       // Also set child blocks to have a huge gap (but this shouldn't matter anymore)
@@ -606,6 +734,10 @@ describe('Assertion Health Monitoring', () => {
 
     test('should not alert for challenge period on non-BOLD chain', async () => {
       const chainState = createBaseChainState()
+      chainState.childFirstUnassertedBlock = {
+        ...chainState.childFirstUnassertedBlock!,
+        timestamp: NOW - BigInt(7 * 24 * 60 * 60),
+      } as Block
       // Set creation event to be older than the challenge period (6.4 days)
       chainState.childLatestCreatedBlock = {
         ...chainState.childLatestCreatedBlock!,
@@ -628,9 +760,12 @@ describe('Assertion Health Monitoring', () => {
     test('should generate alerts when extreme conditions are met for non-BOLD chain', async () => {
       const chainState = createBaseChainState()
       // Set creation event to be older than the recent activity threshold
+      chainState.childFirstUnassertedBlock = {
+        ...chainState.childFirstUnassertedBlock!,
+        timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
+      } as Block
       chainState.childLatestCreatedBlock = {
         ...chainState.childLatestCreatedBlock!,
-        timestamp: NOW - BigInt(5 * 60 * 60), // 5 hours ago
         number: 900n,
       } as Block
 
@@ -642,7 +777,8 @@ describe('Assertion Health Monitoring', () => {
 
       chainState.parentBlockAtConfirmation = {
         ...chainState.parentBlockAtConfirmation!,
-        number: 100n, // 200 blocks behind, exceeds confirmPeriodBlocks(100) + VALIDATOR_AFK_BLOCKS(50)
+        number: 100n,
+        timestamp: NOW - CONFIRMATION_THRESHOLD_SECONDS - 1n,
       } as Block
 
       // Also set child blocks to have a huge gap (but this shouldn't matter anymore)
@@ -663,7 +799,7 @@ describe('Assertion Health Monitoring', () => {
       )
 
       // Check for required alerts
-      expect(alerts).toContain(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
+      expect(hasChainActivityAlert(alerts)).toBe(true)
       expect(alerts).toContain(NON_BOLD_NO_RECENT_CREATION_ALERT)
       expect(alerts).toContain(CONFIRMATION_DELAY_ALERT)
     })
@@ -731,8 +867,7 @@ describe('Assertion Health Monitoring', () => {
         false // isBold = false for non-BOLD chain
       )
 
-      // Should contain both the standard no confirmation events alert and the specific inconsistency alert
-      expect(alerts).toContain(NO_CONFIRMATION_EVENTS_ALERT)
+      expect(alerts).not.toContain(NO_CONFIRMATION_EVENTS_ALERT)
       expect(alerts).toContain(NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT)
     })
   })

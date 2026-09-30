@@ -247,6 +247,38 @@ export async function fetchMostRecentCreationEvent<T extends CreationEvent>(
 }
 
 /**
+ * Fetches the oldest creation event (assertion or node) within a block range.
+ */
+export async function fetchOldestCreationEvent<T extends CreationEvent>(
+  fromBlock: bigint,
+  toBlock: bigint,
+  client: PublicClient,
+  rollupAddress: string,
+  isBold: boolean,
+  chunkSize: bigint = CHUNK_SIZE
+): Promise<T | null> {
+  const event = isBold ? ASSERTION_CREATED_EVENT : NODE_CREATED_EVENT
+
+  return processBlockRangeInChunks<T | null>(
+    Number(fromBlock),
+    Number(toBlock),
+    Number(chunkSize),
+    async (from, to) => {
+      const logs = await client.getLogs({
+        address: rollupAddress as `0x${string}`,
+        fromBlock: BigInt(from),
+        toBlock: BigInt(to),
+        event,
+      })
+      return (logs[0] as T | undefined) ?? null
+    },
+    (prev, next) => prev ?? next,
+    null,
+    { stopWhen: result => result !== null, minChunkSize: 100 }
+  )
+}
+
+/**
  * Fetches the most recent confirmation event (assertion or node) within a block range.
  * Uses exponential backoff and retries to ensure robustness.
  */
@@ -284,6 +316,7 @@ export const fetchChainState = async ({
   isBold,
   fromBlock,
   toBlock,
+  chunkSize = CHUNK_SIZE,
 }: {
   childChainClient: PublicClient
   parentClient: PublicClient
@@ -291,6 +324,7 @@ export const fetchChainState = async ({
   isBold: boolean
   fromBlock: bigint
   toBlock: bigint
+  chunkSize?: bigint
 }): Promise<ChainState> => {
   const childCurrentBlock = await childChainClient.getBlock({
     blockTag: 'latest',
@@ -305,7 +339,8 @@ export const fetchChainState = async ({
     toBlock,
     parentClient,
     childChainInfo.ethBridge.rollup,
-    isBold
+    isBold,
+    chunkSize
   )
 
   const recentConfirmationEvent = await fetchMostRecentConfirmationEvent(
@@ -313,7 +348,8 @@ export const fetchChainState = async ({
     toBlock,
     parentClient,
     childChainInfo.ethBridge.rollup,
-    isBold
+    isBold,
+    chunkSize
   )
 
   const childLatestConfirmedBlock = await getLatestConfirmedBlock(
@@ -342,6 +378,34 @@ export const fetchChainState = async ({
     })
   }
 
+  let childFirstUnassertedBlock
+  if (
+    childLatestCreatedBlock?.number != null &&
+    childCurrentBlock.number != null &&
+    childCurrentBlock.number > childLatestCreatedBlock.number
+  ) {
+    childFirstUnassertedBlock = await childChainClient.getBlock({
+      blockNumber: childLatestCreatedBlock.number + 1n,
+    })
+  }
+
+  let parentBlockAtOldestCreation
+  if (recentCreationEvent && !recentConfirmationEvent) {
+    const oldestCreationEvent = await fetchOldestCreationEvent(
+      fromBlock,
+      toBlock,
+      parentClient,
+      childChainInfo.ethBridge.rollup,
+      isBold,
+      chunkSize
+    )
+    if (oldestCreationEvent) {
+      parentBlockAtOldestCreation = await parentClient.getBlock({
+        blockNumber: oldestCreationEvent.blockNumber,
+      })
+    }
+  }
+
   const isValidatorWhitelistDisabled = await getValidatorWhitelistDisabled(
     parentClient,
     childChainInfo.ethBridge.rollup
@@ -359,6 +423,8 @@ export const fetchChainState = async ({
     parentCurrentBlock,
     parentBlockAtCreation,
     parentBlockAtConfirmation,
+    childFirstUnassertedBlock,
+    parentBlockAtOldestCreation,
     recentCreationEvent,
     recentConfirmationEvent,
     isValidatorWhitelistDisabled,

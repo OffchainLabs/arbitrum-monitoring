@@ -15,9 +15,12 @@ import {
   RECENT_ACTIVITY_SECONDS,
   VALIDATOR_AFK_BLOCKS,
 } from './constants'
-import { getBlockTimeForChain, getChainFromId } from './chains'
+import {
+  getBlockTimeForChain,
+  getChainFromId,
+  getRollupBlockTimeForChain,
+} from './chains'
 import type { ChainState } from './types'
-import { isEventRecent } from './utils'
 
 /**
  * Formats duration in a human-readable format
@@ -34,6 +37,17 @@ function formatDuration(seconds: number): string {
     const hours = Math.round((seconds % 86400) / 3600)
     return hours > 0 ? `${days}d ${hours}h` : `${days}d`
   }
+}
+
+/**
+ * How long child blocks may stay unasserted before alerting. Chains that are
+ * configured to assert less often get a proportionally longer threshold.
+ */
+function getAssertionBacklogThresholdSeconds(chainInfo: ChainInfo): number {
+  return Math.max(
+    RECENT_ACTIVITY_SECONDS,
+    2 * (chainInfo.assertionIntervalSeconds ?? 0)
+  )
 }
 
 /**
@@ -102,8 +116,9 @@ export const analyzeAssertionEvents = async (
 
   const {
     doesLatestChildCreatedBlockExist,
-    doesLatestChildConfirmedBlockExist,
     hasActivityWithoutRecentAssertions,
+    assertionBacklogSeconds,
+    assertionBacklogThresholdSeconds,
     noConfirmationsWithCreationEvents,
     noConfirmedBlocksWithConfirmationEvents,
     confirmationDelayExceedsPeriod,
@@ -125,16 +140,16 @@ export const analyzeAssertionEvents = async (
     alerts.push(createNoCreationEventsAlert(chainState, chainInfo))
   }
 
-  if (!doesLatestChildConfirmedBlockExist) {
-    alerts.push(NO_CONFIRMATION_EVENTS_ALERT)
-  }
-
   if (noConfirmedBlocksWithConfirmationEvents) {
     alerts.push(NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT)
   }
 
   if (hasActivityWithoutRecentAssertions) {
-    alerts.push(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT)
+    alerts.push(
+      `${CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT} (oldest unasserted block is ${formatDuration(
+        assertionBacklogSeconds
+      )} old, threshold ${formatDuration(assertionBacklogThresholdSeconds)})`
+    )
   }
 
   if (noConfirmationsWithCreationEvents) {
@@ -175,29 +190,23 @@ export const generateConditionsForAlerts = (
     childLatestConfirmedBlock,
     parentCurrentBlock,
     parentBlockAtConfirmation,
-    recentCreationEvent,
+    childFirstUnassertedBlock,
+    parentBlockAtOldestCreation,
     recentConfirmationEvent,
   } = chainState
+
+  const rollupBlockTime = getRollupBlockTimeForChain(
+    getChainFromId(chainInfo.parentChainId)
+  )
+  const confirmPeriodSeconds = chainInfo.confirmPeriodBlocks * rollupBlockTime
+  const assertionBacklogThresholdSeconds =
+    getAssertionBacklogThresholdSeconds(chainInfo)
 
   /**
    * Critical for both chain types as assertions are fundamental to the rollup mechanism
    * No assertions indicates severe validator issues or extreme chain inactivity
    */
   const doesLatestChildCreatedBlockExist = !!childLatestCreatedBlock
-
-  /**
-   * For BOLD: Critical for bounded finality guarantees
-   * For Classic: Indicates active validation
-   *
-   * Always compare with current timestamp, not child chain latest block timestamp
-   */
-  const hasRecentCreationEvents =
-    childLatestCreatedBlock &&
-    isEventRecent(
-      childLatestCreatedBlock.timestamp,
-      currentTimestamp / 1000n,
-      RECENT_ACTIVITY_SECONDS
-    )
 
   /**
    * Missing confirmations may indicate challenge period in progress or
@@ -215,18 +224,33 @@ export const generateConditionsForAlerts = (
     childCurrentBlock.number > childLatestCreatedBlock.number
 
   /**
+   * Age of the oldest child block not yet covered by an assertion. Measured on
+   * the unasserted block rather than the asserted one, so sparse chains whose
+   * latest asserted block is naturally old do not alert.
+   */
+  const assertionBacklogSeconds = childFirstUnassertedBlock
+    ? currentTimeSeconds - Number(childFirstUnassertedBlock.timestamp)
+    : 0
+
+  /**
    * Critical for BOLD due to finality implications
    * Indicates validator issues for both chain types
    */
   const hasActivityWithoutRecentAssertions =
-    hasActivityWithoutAssertions && !hasRecentCreationEvents
+    !!hasActivityWithoutAssertions &&
+    assertionBacklogSeconds > assertionBacklogThresholdSeconds
 
   /**
-   * May indicate active challenges or technical issues with confirmation
-   * Could also be normal in low-activity chains where assertions are waiting for challenge period
+   * Only alerts once the oldest assertion in the window should already have
+   * been confirmed, so a freshly deployed or migrated rollup does not alert
+   * while its first assertions are still inside the confirm period.
    */
   const noConfirmationsWithCreationEvents =
-    doesLatestChildCreatedBlockExist && !doesLatestChildConfirmedBlockExist
+    doesLatestChildCreatedBlockExist &&
+    !recentConfirmationEvent &&
+    !!parentBlockAtOldestCreation &&
+    currentTimeSeconds - Number(parentBlockAtOldestCreation.timestamp) >
+      confirmPeriodSeconds + assertionBacklogThresholdSeconds
 
   /**
    * Detects an inconsistent state where confirmation events exist but no confirmed blocks are recorded
@@ -237,29 +261,24 @@ export const generateConditionsForAlerts = (
     recentConfirmationEvent && !doesLatestChildConfirmedBlockExist
 
   /**
-   * Parent chain block gap since last confirmation
-   * This is the direct, accurate measure of confirmation delay in terms of parent chain blocks
+   * Time since the last confirmation, from parent chain block timestamps
    */
-  const parentBlocksSinceLastConfirmation =
-    (parentCurrentBlock?.number &&
-      parentBlockAtConfirmation?.number &&
-      parentCurrentBlock.number - parentBlockAtConfirmation.number) ??
-    0n
+  const secondsSinceLastConfirmation =
+    parentCurrentBlock && parentBlockAtConfirmation
+      ? Number(
+          parentCurrentBlock.timestamp - parentBlockAtConfirmation.timestamp
+        )
+      : 0
 
   /**
-   * Confirmation threshold in parent chain blocks
-   * This is the exact, chain-appropriate threshold without any approximation multipliers
+   * Confirmation threshold in seconds. Compared in time because confirm
+   * periods tick in L1 blocks even when the parent chain is an Arbitrum chain.
    */
-  const parentConfirmationThreshold = BigInt(
-    chainInfo.confirmPeriodBlocks + VALIDATOR_AFK_BLOCKS
-  )
+  const confirmationThresholdSeconds =
+    (chainInfo.confirmPeriodBlocks + VALIDATOR_AFK_BLOCKS) * rollupBlockTime
 
-  /**
-   * Confirmation delay check using direct parent chain comparison
-   * We now assume parent chain data is always available
-   */
   const confirmationDelayExceedsPeriod =
-    parentBlocksSinceLastConfirmation > parentConfirmationThreshold
+    secondsSinceLastConfirmation > confirmationThresholdSeconds
 
   /**
    * Identifies assertions exceeding challenge period (6.4 days) without confirmation
@@ -277,9 +296,7 @@ export const generateConditionsForAlerts = (
    * May be normal for low-activity chains, hence contextual consideration required
    */
   const nonBoldMissingRecentCreation =
-    !isBold &&
-    (!childLatestCreatedBlock ||
-      (!hasRecentCreationEvents && hasActivityWithoutAssertions))
+    !isBold && (!childLatestCreatedBlock || hasActivityWithoutRecentAssertions)
 
   /**
    * Whether a Classic chain's validator whitelist is disabled, allowing
@@ -300,8 +317,9 @@ export const generateConditionsForAlerts = (
   return {
     doesLatestChildCreatedBlockExist,
     doesLatestChildConfirmedBlockExist,
-    hasRecentCreationEvents,
     hasActivityWithoutRecentAssertions,
+    assertionBacklogSeconds,
+    assertionBacklogThresholdSeconds,
     noConfirmationsWithCreationEvents,
     noConfirmedBlocksWithConfirmationEvents,
     confirmationDelayExceedsPeriod,

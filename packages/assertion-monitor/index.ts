@@ -11,7 +11,12 @@ import {
   fetchChainState,
   isBoldEnabled,
 } from './blockchain'
-import { getBlockTimeForChain, getChainFromId } from './chains'
+import {
+  getBlockTimeForChain,
+  getChainFromId,
+  getLogChunkSizeForChain,
+  getRollupBlockTimeForChain,
+} from './chains'
 import {
   MAXIMUM_SEARCH_DAYS,
   SAFETY_BUFFER_DAYS,
@@ -66,7 +71,8 @@ function calculateSearchWindow(
 
   const initialBlocksToSearch =
     childChainInfo.confirmPeriodBlocks + VALIDATOR_AFK_BLOCKS
-  const timespan = blockTime * initialBlocksToSearch
+  const timespan =
+    getRollupBlockTimeForChain(parentChain) * initialBlocksToSearch
 
   const blocksInDays = timespan / (60 * 60 * 24)
   const blocksInDaysMinusSafety = Math.max(blocksInDays - SAFETY_BUFFER_DAYS, 0)
@@ -81,7 +87,10 @@ function calculateSearchWindow(
   )
 
   // Adjust blocks to the maximum of 7 days
-  const adjustedBlocks = Math.min(initialBlocksToSearch, maxSearchableBlocks)
+  const adjustedBlocks = Math.min(
+    Math.floor(timespan / blockTime),
+    maxSearchableBlocks
+  )
 
   return {
     days: daysAdjustedForMax,
@@ -155,6 +164,7 @@ export const checkChainForAssertionIssues = async (
     isBold,
     fromBlock,
     toBlock,
+    chunkSize: getLogChunkSizeForChain(parentChain),
   })
 
   const alerts = await analyzeAssertionEvents(
