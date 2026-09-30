@@ -60,12 +60,7 @@ const resolveAmountDisplay = async (
   parentChainProvider?: providers.Provider
 ): Promise<AmountDisplay> => {
   if (!childChain.nativeToken) {
-    try {
-      return { unit: 'ETH', decimals: 18, ethPriceUsd: await getEthPrice() }
-    } catch {
-      // the digest must still post when the price API is down
-      return { unit: 'ETH', decimals: 18 }
-    }
+    return { unit: 'ETH', decimals: 18, ethPriceUsd: await getEthPrice() }
   }
 
   if (parentChainProvider) {

@@ -14,7 +14,7 @@ import {
   ParentChainTicketReport,
   TokenDepositData,
 } from '../../core/types'
-import { ChildNetwork, getExplorerUrlPrefixes, parseAmount } from 'utils'
+import { ChildNetwork, getExplorerUrlPrefixes, withRetry } from 'utils'
 
 /**
  *
@@ -25,8 +25,8 @@ import { ChildNetwork, getExplorerUrlPrefixes, parseAmount } from 'utils'
  *
  */
 
-let ethPriceCache: number
-let tokenPriceCache: { [key: string]: number } = {}
+let ethPriceCache: number | undefined
+let tokenPriceCache: { [key: string]: number | undefined } = {}
 
 export const getTimeDifference = (timestampInSeconds: number) => {
   const now = new Date().getTime() / 1000
@@ -188,54 +188,58 @@ export const formatL2Callvalue = async (
   } else {
     const ethAmountStr = ethers.utils.formatEther(ticket.deposit)
     const ethPrice = await getEthPrice()
+    const msg = `\n\t *Child chain callvalue:* ${ethAmountStr} ETH`
+    if (ethPrice === undefined) return msg
 
-    const ethAmountBN = parseAmount(ethAmountStr, 18)
-    const usdValue =
-      ethAmountBN
-        .mul(Math.floor(ethPrice * 1e6))
-        .div(BigNumber.from(10).pow(18))
-        .toNumber() / 1e6
-
-    return `\n\t *Child chain callvalue:* ${ethAmountStr} ETH ($${usdValue.toFixed(
-      2
-    )})`
+    const usdValue = Number(ethAmountStr) * ethPrice
+    return `${msg} ($${usdValue.toFixed(2)})`
   }
+}
+
+/**
+ * Renders a token amount, appending a USD value only when the token has a
+ * known price. An unpriced token must render without a USD figure: assuming
+ * any rate makes an unlisted token's amount read as its dollar value.
+ */
+export const formatTokenAmount = async ({
+  amountRaw,
+  decimals,
+  symbol,
+  address,
+}: {
+  amountRaw: ethers.BigNumberish
+  decimals: number
+  symbol: string
+  address: string
+}) => {
+  const amountStr = ethers.utils.formatUnits(amountRaw, decimals)
+  const price = await getTokenPrice(address)
+
+  if (price === undefined) {
+    return `${amountStr} ${symbol} (${address})`
+  }
+
+  const usdValue = Number(amountStr) * price
+  return `${amountStr} ${symbol} ($${usdValue.toFixed(2)}) (${address})`
 }
 
 export const formatTokenDepositData = async (
   deposit: TokenDepositData | undefined
 ) => {
-  let msg = '\n\t *Tokens deposited:* '
+  const msg = '\n\t *Tokens deposited:* '
 
-  if (deposit === undefined) {
+  if (deposit === undefined || !deposit.tokenAmount) {
     return msg + '-'
   }
 
-  const amountStr = deposit.tokenAmount
-    ? ethers.utils.formatUnits(deposit.tokenAmount, deposit.l1Token.decimals)
-    : '-'
+  const formatted = await formatTokenAmount({
+    amountRaw: deposit.tokenAmount,
+    decimals: deposit.l1Token.decimals,
+    symbol: deposit.l1Token.symbol,
+    address: deposit.l1Token.id,
+  })
 
-  if (amountStr === '-') return msg + '-'
-
-  const tokenPriceInUSD = await getTokenPrice(deposit.l1Token.id)
-  if (tokenPriceInUSD !== undefined) {
-    const amountBN = parseAmount(
-      amountStr,
-      deposit.l1Token.decimals
-    )
-    const usdValue =
-      amountBN
-        .mul(Math.floor(tokenPriceInUSD * 1e6))
-        .div(BigNumber.from(10).pow(deposit.l1Token.decimals))
-        .toNumber() / 1e6
-
-    const depositWorthInUSD = usdValue.toFixed(2)
-    msg = `${msg} ${amountStr} ${deposit.l1Token.symbol} ($${depositWorthInUSD}) (${deposit.l1Token.id})`
-  } else {
-    msg = `${msg} ${amountStr} ${deposit.l1Token.symbol} (${deposit.l1Token.id})`
-  }
-
-  return msg
+  return `${msg} ${formatted}`
 }
 
 export const formatDestination = async (
@@ -299,9 +303,9 @@ export const formatExpiration = (ticket: ChildChainTicketReport) => {
     ticket.status ===
     ParentToChildMessageStatus[ParentToChildMessageStatus.EXPIRED]
 
-  let msg = `\n\t *${
-    isExpired ? `Expired` : `Expires`
-  } at:* ${timestampToDate(+ticket.timeoutTimestamp)}`
+  let msg = `\n\t *${isExpired ? `Expired` : `Expires`} at:* ${timestampToDate(
+    +ticket.timeoutTimestamp
+  )}`
 
   if (
     ticket.status ===
@@ -317,32 +321,53 @@ export const formatExpiration = (ticket: ChildChainTicketReport) => {
   return msg
 }
 
-export const getEthPrice = async () => {
+export const getEthPrice = async (): Promise<number | undefined> => {
   if (ethPriceCache !== undefined) {
     return ethPriceCache
   }
 
   const url =
     'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd'
-  const response = await axios.get(url)
-  ethPriceCache = +response.data['ethereum'].usd
-  return ethPriceCache
+  try {
+    const response = await axios.get(url)
+    const usd = Number(response.data?.ethereum?.usd)
+    if (!Number.isFinite(usd)) return undefined
+    ethPriceCache = usd
+    return ethPriceCache
+  } catch (error) {
+    console.error('Could not fetch ETH price:', error)
+    return undefined
+  }
 }
 
-export const getTokenPrice = async (tokenAddress: string) => {
+export const getTokenPrice = async (
+  tokenAddress: string
+): Promise<number | undefined> => {
   const addr = tokenAddress.toLowerCase()
 
-  if (tokenPriceCache[addr] !== undefined) {
+  if (addr in tokenPriceCache) {
     return tokenPriceCache[addr]
   }
 
   const url = `https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=${addr}&vs_currencies=usd`
 
-  const { data } = await axios.get(url)
-  const entry = data[addr]
-  if (entry == null || entry.usd == null) return undefined
+  let response
+  try {
+    response = await axios.get(url)
+  } catch (error) {
+    // a lookup that failed is not an answer, so it stays uncached and the
+    // next ticket retries it
+    console.error(`Could not fetch price for ${addr}:`, error)
+    return undefined
+  }
 
-  tokenPriceCache[addr] = Number(entry.usd)
+  const price = response.data?.[addr]?.usd
+  const usd = price == null ? undefined : Number(price)
+  // an unlisted token is cached as unpriced so a run full of its tickets
+  // does not re-query CoinGecko once per ticket
+  tokenPriceCache[addr] =
+    usd !== undefined && Number.isFinite(usd) ? usd : undefined
+
   return tokenPriceCache[addr]
 }
 
@@ -397,7 +422,10 @@ export async function getGasInfo(
   )
 
   // get current gas price
-  const gasComponents = await arbGasInfo.callStatic.getPricesInWei()
+  const gasComponents = await withRetry(
+    () => arbGasInfo.callStatic.getPricesInWei(),
+    { label: 'arbGasInfo.getPricesInWei' }
+  )
   const l2GasPrice = gasComponents[5]
 
   // get gas price when retryable was created
