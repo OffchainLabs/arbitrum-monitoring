@@ -10,4 +10,8 @@ export interface ChildNetwork extends ArbitrumNetwork {
   monitoredNodeRpcUrls?: string[]
   /** Trusted RPC that node-sync-monitor compares the monitored nodes against; must be on infrastructure independent of the monitored nodes. */
   referenceRpcUrl?: string
+  /** Passed through from the portal's chain config. assertionIntervalSeconds is the expected time between assertions. */
+  bridgeUiConfig?: {
+    assertionIntervalSeconds?: number
+  }
 }

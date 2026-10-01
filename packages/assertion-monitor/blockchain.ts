@@ -17,7 +17,16 @@ import {
   boldABI,
   rollupABI,
 } from './abi'
-import { CHUNK_SIZE, MIN_BASE_STAKE_THRESHOLD } from './constants'
+import {
+  getBlockTimeForChain,
+  getChainFromId,
+  getConfirmPeriodSeconds,
+} from './chains'
+import {
+  CHUNK_SIZE,
+  MIN_BASE_STAKE_THRESHOLD,
+  UNCONFIRMED_ASSERTION_GRACE_SECONDS,
+} from './constants'
 import { ChainState, ConfirmationEvent, CreationEvent } from './types'
 import { extractBoldBlockHash, extractClassicBlockHash } from './utils'
 
@@ -247,6 +256,46 @@ export async function fetchMostRecentCreationEvent<T extends CreationEvent>(
 }
 
 /**
+ * Fetches the newest creation event old enough to have been confirmed by now.
+ * The search reaches one confirm period before fromBlock: a creation that
+ * recent can only be confirmed within [fromBlock, toBlock], so when that range
+ * has no confirmation events the creation found is still unconfirmed.
+ */
+export async function fetchConfirmableCreationEvent<T extends CreationEvent>(
+  fromBlock: bigint,
+  toBlock: bigint,
+  client: PublicClient,
+  childChainInfo: ChainInfo,
+  isBold: boolean,
+  chunkSize: bigint = CHUNK_SIZE
+): Promise<T | null> {
+  const parentBlockTime = getBlockTimeForChain(
+    getChainFromId(childChainInfo.parentChainId)
+  )
+  const toParentBlocks = (seconds: number) =>
+    BigInt(Math.ceil(seconds / parentBlockTime))
+
+  const confirmPeriodSeconds = getConfirmPeriodSeconds(childChainInfo)
+  const searchFrom = fromBlock - toParentBlocks(confirmPeriodSeconds)
+  const searchTo =
+    toBlock -
+    toParentBlocks(confirmPeriodSeconds + UNCONFIRMED_ASSERTION_GRACE_SECONDS)
+
+  if (searchTo < 0n) {
+    return null
+  }
+
+  return fetchMostRecentCreationEvent<T>(
+    searchFrom > 0n ? searchFrom : 0n,
+    searchTo,
+    client,
+    childChainInfo.ethBridge.rollup,
+    isBold,
+    chunkSize
+  )
+}
+
+/**
  * Fetches the most recent confirmation event (assertion or node) within a block range.
  * Uses exponential backoff and retries to ensure robustness.
  */
@@ -284,6 +333,7 @@ export const fetchChainState = async ({
   isBold,
   fromBlock,
   toBlock,
+  chunkSize = CHUNK_SIZE,
 }: {
   childChainClient: PublicClient
   parentClient: PublicClient
@@ -291,6 +341,7 @@ export const fetchChainState = async ({
   isBold: boolean
   fromBlock: bigint
   toBlock: bigint
+  chunkSize?: bigint
 }): Promise<ChainState> => {
   const childCurrentBlock = await childChainClient.getBlock({
     blockTag: 'latest',
@@ -305,7 +356,8 @@ export const fetchChainState = async ({
     toBlock,
     parentClient,
     childChainInfo.ethBridge.rollup,
-    isBold
+    isBold,
+    chunkSize
   )
 
   const recentConfirmationEvent = await fetchMostRecentConfirmationEvent(
@@ -313,7 +365,8 @@ export const fetchChainState = async ({
     toBlock,
     parentClient,
     childChainInfo.ethBridge.rollup,
-    isBold
+    isBold,
+    chunkSize
   )
 
   const childLatestConfirmedBlock = await getLatestConfirmedBlock(
@@ -342,6 +395,34 @@ export const fetchChainState = async ({
     })
   }
 
+  let childFirstUnassertedBlock
+  if (
+    childLatestCreatedBlock?.number != null &&
+    childCurrentBlock.number != null &&
+    childCurrentBlock.number > childLatestCreatedBlock.number
+  ) {
+    childFirstUnassertedBlock = await childChainClient.getBlock({
+      blockNumber: childLatestCreatedBlock.number + 1n,
+    })
+  }
+
+  let parentBlockAtConfirmableCreation
+  if (recentCreationEvent && !recentConfirmationEvent) {
+    const confirmableCreationEvent = await fetchConfirmableCreationEvent(
+      fromBlock,
+      toBlock,
+      parentClient,
+      childChainInfo,
+      isBold,
+      chunkSize
+    )
+    if (confirmableCreationEvent) {
+      parentBlockAtConfirmableCreation = await parentClient.getBlock({
+        blockNumber: confirmableCreationEvent.blockNumber,
+      })
+    }
+  }
+
   const isValidatorWhitelistDisabled = await getValidatorWhitelistDisabled(
     parentClient,
     childChainInfo.ethBridge.rollup
@@ -359,6 +440,8 @@ export const fetchChainState = async ({
     parentCurrentBlock,
     parentBlockAtCreation,
     parentBlockAtConfirmation,
+    childFirstUnassertedBlock,
+    parentBlockAtConfirmableCreation,
     recentCreationEvent,
     recentConfirmationEvent,
     isValidatorWhitelistDisabled,

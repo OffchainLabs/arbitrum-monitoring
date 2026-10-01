@@ -57,6 +57,8 @@ export interface ChainState {
   parentCurrentBlock?: Block
   parentBlockAtCreation?: Block 
   parentBlockAtConfirmation?: Block
+  childFirstUnassertedBlock?: Block
+  parentBlockAtConfirmableCreation?: Block
   recentCreationEvent: CreationEvent | null
   recentConfirmationEvent: ConfirmationEvent | null
   isValidatorWhitelistDisabled: boolean
