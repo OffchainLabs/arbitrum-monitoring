@@ -48,7 +48,7 @@ export const getBlockTimeForChain = (chain: Chain): number => {
       return 0.25
 
     default:
-      return 1
+      throw new Error(`No block time configured for chain ${chain.id}`)
   }
 }
 

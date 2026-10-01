@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
-import { arbitrum, base, mainnet } from 'viem/chains'
+import { arbitrum, base, mainnet, optimism } from 'viem/chains'
 import {
+  getBlockTimeForChain,
   getChainFromId,
   getConfirmPeriodSeconds,
   getLogChunkSizeForChain,
@@ -41,5 +42,13 @@ describe('getConfirmPeriodSeconds', () => {
         confirmPeriodBlocks: 45818,
       } as any)
     ).toBe(45818 * 12)
+  })
+})
+
+describe('getBlockTimeForChain', () => {
+  test('throws on a chain without a configured block time', () => {
+    expect(() => getBlockTimeForChain(optimism)).toThrow(
+      'No block time configured'
+    )
   })
 })
