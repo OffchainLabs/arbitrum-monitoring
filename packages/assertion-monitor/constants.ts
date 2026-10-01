@@ -28,6 +28,9 @@ export const SEARCH_WINDOW_SECONDS = MAXIMUM_SEARCH_DAYS * SECONDS_IN_A_DAY
 /** Recent activity threshold in seconds (4 hours) */
 export const RECENT_ACTIVITY_SECONDS = RECENT_CREATION_CHECK_HOURS * 60 * 60
 
+/** Upper bound on the configured assertion interval, so a bad config value cannot silently disable the backlog alert */
+export const MAX_ASSERTION_INTERVAL_SECONDS = 2 * 24 * 60 * 60
+
 /** Time after the confirm period an assertion may stay unconfirmed before alerting */
 export const UNCONFIRMED_ASSERTION_GRACE_SECONDS = 4 * 60 * 60
 

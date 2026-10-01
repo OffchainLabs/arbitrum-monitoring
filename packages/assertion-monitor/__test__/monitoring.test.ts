@@ -22,6 +22,7 @@ vi.mock('../constants', () => ({
   SEARCH_WINDOW_SECONDS: 7 * 24 * 60 * 60, // 7 days in seconds
   RECENT_ACTIVITY_SECONDS: 4 * 60 * 60, // 4 hours in seconds
   UNCONFIRMED_ASSERTION_GRACE_SECONDS: 4 * 60 * 60,
+  MAX_ASSERTION_INTERVAL_SECONDS: 2 * 24 * 60 * 60,
   VALIDATOR_AFK_BLOCKS: 50, // Add the validator AFK blocks constant
 }))
 
@@ -244,6 +245,24 @@ describe('Assertion Health Monitoring', () => {
       expect(
         hasChainActivityAlert(
           await analyzeAssertionEvents(chainState, dailyAssertingChain, true)
+        )
+      ).toBe(true)
+    })
+
+    test('should cap the configured assertion interval', async () => {
+      const chainState = createBaseChainState()
+      const intervalInMilliseconds = {
+        ...mockChainInfo,
+        bridgeUiConfig: { assertionIntervalSeconds: 24 * 60 * 60 * 1000 },
+      }
+      chainState.childFirstUnassertedBlock = {
+        ...chainState.childFirstUnassertedBlock!,
+        timestamp: NOW - BigInt(5 * 24 * 60 * 60),
+      } as Block
+
+      expect(
+        hasChainActivityAlert(
+          await analyzeAssertionEvents(chainState, intervalInMilliseconds, true)
         )
       ).toBe(true)
     })

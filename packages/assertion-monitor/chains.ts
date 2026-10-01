@@ -24,8 +24,11 @@ export const supportedParentChains = [
 ]
 
 export const getChainFromId = (chainId: number): Chain => {
-  const chain = supportedParentChains.filter(chain => chain.id === chainId)
-  return chain[0] ?? null
+  const chain = supportedParentChains.find(chain => chain.id === chainId)
+  if (!chain) {
+    throw new Error(`Unsupported parent chain id ${chainId}`)
+  }
+  return chain
 }
 
 export const getBlockTimeForChain = (chain: Chain): number => {

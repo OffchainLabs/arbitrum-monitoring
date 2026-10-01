@@ -12,6 +12,7 @@ import {
 } from './alerts'
 import {
   CHALLENGE_PERIOD_SECONDS,
+  MAX_ASSERTION_INTERVAL_SECONDS,
   RECENT_ACTIVITY_SECONDS,
   UNCONFIRMED_ASSERTION_GRACE_SECONDS,
   VALIDATOR_AFK_BLOCKS,
@@ -48,7 +49,11 @@ function formatDuration(seconds: number): string {
 function getAssertionBacklogThresholdSeconds(chainInfo: ChainInfo): number {
   return Math.max(
     RECENT_ACTIVITY_SECONDS,
-    2 * (chainInfo.bridgeUiConfig?.assertionIntervalSeconds ?? 0)
+    2 *
+      Math.min(
+        chainInfo.bridgeUiConfig?.assertionIntervalSeconds ?? 0,
+        MAX_ASSERTION_INTERVAL_SECONDS
+      )
   )
 }
 
