@@ -9,6 +9,7 @@ import {
 } from './slack/slackMessageFormattingUtils'
 import { generateFailedRetryableSlackMessage } from './slack/slackMessageGenerator'
 import { countBy, STATUS_LABELS, shortTicketId } from './zeroValueTicketDigest'
+import { createRpcProvider } from '../core/rpcProvider'
 
 // up to this many funded tickets per chain per run get the full per-ticket
 // alert; beyond that the run posts a single digest instead, so a burst of
@@ -216,12 +217,8 @@ export const postFundedTicketAlerts = async (childChain: ChildNetwork) => {
 
   if (!tickets || tickets.length === 0) return
 
-  const childChainProvider = new providers.JsonRpcProvider(
-    String(childChain.orbitRpcUrl)
-  )
-  const parentChainProvider = new providers.JsonRpcProvider(
-    String(childChain.parentRpcUrl)
-  )
+  const childChainProvider = createRpcProvider(String(childChain.orbitRpcUrl))
+  const parentChainProvider = createRpcProvider(String(childChain.parentRpcUrl))
 
   if (tickets.length > MAX_INDIVIDUAL_FUNDED_ALERTS) {
     try {

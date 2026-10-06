@@ -24,13 +24,7 @@ vi.mock('../handlers/slack/slackMessageFormattingUtils', () => ({
   getTokenPrice: vi.fn().mockResolvedValue(1),
 }))
 
-vi.mock('ethers', async importOriginal => {
-  const actual = await importOriginal<typeof import('ethers')>()
-  return {
-    ...actual,
-    providers: { JsonRpcProvider: vi.fn() },
-  }
-})
+vi.mock('../core/rpcProvider', () => ({ createRpcProvider: vi.fn() }))
 
 import { handleFailedRetryablesFound } from '../handlers/handleFailedRetryablesFound'
 import { syncRetryableToNotion } from '../handlers/notion/syncRetryableToNotion'

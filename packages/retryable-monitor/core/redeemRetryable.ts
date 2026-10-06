@@ -15,6 +15,7 @@ import {
   findSuccessfulRedeem,
   isPastTicketLifetime,
 } from './reportGenerator'
+import { createRpcProvider } from './rpcProvider'
 
 dotenv.config()
 
@@ -49,17 +50,13 @@ export const locateRetryable = async (
 
   for (const childChain of candidates) {
     try {
-      const parentChainProvider = new providers.JsonRpcProvider(
-        childChain.parentRpcUrl
-      )
+      const parentChainProvider = createRpcProvider(childChain.parentRpcUrl)
       const receipt = await parentChainProvider.getTransactionReceipt(
         parentTxHash
       )
       if (!receipt) continue
 
-      const childChainProvider = new providers.JsonRpcProvider(
-        childChain.orbitRpcUrl
-      )
+      const childChainProvider = createRpcProvider(childChain.orbitRpcUrl)
       const parentReceipt = new ParentTransactionReceipt(receipt)
       // the SDK filters these by the child chain's inbox, so a ticket never
       // matches a sibling chain sharing the same parent

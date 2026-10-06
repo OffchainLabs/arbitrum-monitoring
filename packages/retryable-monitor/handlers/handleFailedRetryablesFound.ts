@@ -1,4 +1,4 @@
-import { ethers, providers } from 'ethers'
+import { ethers } from 'ethers'
 import { getExplorerUrlPrefixes } from 'utils'
 import { OnFailedRetryableFoundParams } from '../core/types'
 import { reportFailedRetryables } from './reportFailedRetryables'
@@ -10,6 +10,7 @@ import {
   formatTokenAmount,
   getGasInfo,
 } from './slack/slackMessageFormattingUtils'
+import { createRpcProvider } from '../core/rpcProvider'
 
 const handledTicketKeys = new Set<string>()
 
@@ -51,10 +52,8 @@ export const handleFailedRetryablesFound = async (
       childChain,
       parentChainRetryableReport,
     } = ticket
-    const childChainProvider = new providers.JsonRpcProvider(
-      String(childChain.orbitRpcUrl)
-    )
-    const parentChainProvider = new providers.JsonRpcProvider(
+    const childChainProvider = createRpcProvider(String(childChain.orbitRpcUrl))
+    const parentChainProvider = createRpcProvider(
       String(childChain.parentRpcUrl)
     )
 

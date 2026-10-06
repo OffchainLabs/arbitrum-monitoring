@@ -23,6 +23,7 @@ import { handleRedeemedRetryablesFound } from './handlers/handleRedeemedRetryabl
 import { postZeroValueDigest } from './handlers/zeroValueTicketDigest'
 import { postFundedTicketAlerts } from './handlers/fundedTicketDigest'
 import { writeRunReport } from './handlers/runReport'
+import { createRpcProvider, logRpcStats } from './core/rpcProvider'
 
 // Path for the log file
 const logFilePath = 'logfile.log'
@@ -167,10 +168,10 @@ const processOrbitChainsConcurrently = async () => {
         registerCustomArbitrumNetwork(childChain)
       }
 
-      const parentChainProvider = new providers.JsonRpcProvider(
+      const parentChainProvider = createRpcProvider(
         String(childChain.parentRpcUrl)
       )
-      const childChainProvider = new providers.JsonRpcProvider(
+      const childChainProvider = createRpcProvider(
         String(childChain.orbitRpcUrl)
       )
 
@@ -236,6 +237,8 @@ const processOrbitChainsConcurrently = async () => {
       scheduleNextSweep()
     }
   }
+
+  logRpcStats()
 
   // dump every failed retryable found in this run to a JSON file which CI
   // uploads as a run artifact, so tickets can be referenced/redeemed later
