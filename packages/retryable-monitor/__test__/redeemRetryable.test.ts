@@ -26,7 +26,7 @@ const {
   getRetryableCreationReceipt,
   getTransactionReceipt,
   getBlock,
-  jsonRpcProvider,
+  createRpcProvider,
   getConfig,
 } = vi.hoisted(() => {
   const getTransactionReceipt = vi.fn()
@@ -39,7 +39,7 @@ const {
     getRetryableCreationReceipt: vi.fn(),
     getTransactionReceipt,
     getBlock,
-    jsonRpcProvider: vi.fn(() => ({ getTransactionReceipt, getBlock })),
+    createRpcProvider: vi.fn(() => ({ getTransactionReceipt, getBlock })),
     getConfig: vi.fn(),
   }
 })
@@ -55,14 +55,12 @@ vi.mock('utils', async importOriginal => ({
   getConfig,
 }))
 
+vi.mock('../core/rpcProvider', () => ({ createRpcProvider }))
+
 vi.mock('ethers', async importOriginal => {
   const actual = await importOriginal<typeof import('ethers')>()
   return {
     ...actual,
-    providers: {
-      ...actual.providers,
-      JsonRpcProvider: jsonRpcProvider,
-    },
     Wallet: vi.fn(() => ({})),
   }
 })
@@ -283,9 +281,9 @@ describe('getLiveRetryableStatus', () => {
 
     await getLiveRetryableStatus(await locate({ chainId: CHAIN.chainId }))
 
-    expect(jsonRpcProvider).toHaveBeenCalledWith(CHAIN.parentRpcUrl)
-    expect(jsonRpcProvider).toHaveBeenCalledWith(CHAIN.orbitRpcUrl)
-    expect(jsonRpcProvider).not.toHaveBeenCalledWith(OTHER_CHAIN.parentRpcUrl)
-    expect(jsonRpcProvider).not.toHaveBeenCalledWith(OTHER_CHAIN.orbitRpcUrl)
+    expect(createRpcProvider).toHaveBeenCalledWith(CHAIN.parentRpcUrl)
+    expect(createRpcProvider).toHaveBeenCalledWith(CHAIN.orbitRpcUrl)
+    expect(createRpcProvider).not.toHaveBeenCalledWith(OTHER_CHAIN.parentRpcUrl)
+    expect(createRpcProvider).not.toHaveBeenCalledWith(OTHER_CHAIN.orbitRpcUrl)
   })
 })
