@@ -1,4 +1,4 @@
-import { providers, Wallet } from 'ethers'
+import { providers, utils, Wallet } from 'ethers'
 import {
   ParentTransactionReceipt,
   ParentToChildMessageReader,
@@ -139,23 +139,29 @@ export class RedeemFailedError extends Error {
   }
 }
 
-// ethers nests the node's reply a few levels deep (error.error.body)
-const collectErrorText = (error: unknown, depth = 0): string => {
-  if (typeof error === 'string') return error
-  if (!error || typeof error !== 'object' || depth > 4) return ''
-  const {
-    message,
-    reason,
-    body,
-    error: inner,
-  } = error as Record<string, unknown>
-  return [message, reason, body, collectErrorText(inner, depth + 1)]
-    .filter((part): part is string => typeof part === 'string' && part !== '')
-    .join(' ')
+type EthersError = Error & {
+  code?: unknown
+  reason?: string
+  method?: string
+  error?: unknown
 }
 
-const CHAIN_REJECTION = /(?:transaction )?rejected by chain policy/i
-const TICKET_REVERT = /execution reverted(?::[^"\\,)]*)?/i
+// ethers v5 nests the provider's error under `error`; capped because an
+// error can reference itself
+const errorChain = (error: unknown): EthersError[] => {
+  const chain: EthersError[] = []
+  let current = error
+  while (current instanceof Error && chain.length < 5) {
+    if (chain.includes(current)) break
+    chain.push(current)
+    current = (current as EthersError).error
+  }
+  return chain
+}
+
+// Robinhood's sequencer refuses filtered txs with a generic -32000, so the
+// node's message is the only signal
+const CHAIN_POLICY_REJECTION = /rejected by chain policy/i
 
 export const classifyRedeemFailure = (
   error: unknown
@@ -163,21 +169,33 @@ export const classifyRedeemFailure = (
   if (error instanceof RedeemFailedError) {
     return { reason: error.failureReason, detail: error.detail }
   }
-  const text = collectErrorText(error)
-  const rejection = text.match(CHAIN_REJECTION)
-  if (rejection) {
-    return {
-      reason: REDEEM_FAILURE_REASON.CHAIN_REJECTED,
-      detail: rejection[0],
-    }
-  }
-  const revert = text.match(TICKET_REVERT)
+
+  const chain = errorChain(error)
+
+  // the signer re-wraps every estimate failure (RPC outages included) as
+  // UNPREDICTABLE_GAS_LIMIT; only the provider's own one, tagged with
+  // `method`, means the node reported a revert
+  const revert = chain.find(
+    e =>
+      e.code === utils.Logger.errors.UNPREDICTABLE_GAS_LIMIT &&
+      e.method === 'estimateGas'
+  )
   if (revert) {
     return {
       reason: REDEEM_FAILURE_REASON.TICKET_REVERTS,
-      detail: revert[0].trim(),
+      detail: revert.reason ?? revert.message,
     }
   }
+
+  // the JSON-RPC error (numeric code) holds the node's own message
+  const rpcError = chain.find(e => typeof e.code === 'number')
+  if (rpcError && CHAIN_POLICY_REJECTION.test(rpcError.message)) {
+    return {
+      reason: REDEEM_FAILURE_REASON.CHAIN_REJECTED,
+      detail: rpcError.message,
+    }
+  }
+
   return {
     reason: REDEEM_FAILURE_REASON.BOT_ERROR,
     detail: error instanceof Error ? error.message : String(error),

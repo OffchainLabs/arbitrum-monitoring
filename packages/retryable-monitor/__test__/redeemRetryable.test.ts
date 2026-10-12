@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { utils } from 'ethers'
 
 const TICKET_ID = `0x${'11'.repeat(32)}`
 const PARENT_TX = `0x${'aa'.repeat(32)}`
@@ -109,6 +110,35 @@ import {
   isPastTicketLifetime,
 } from '../core/reportGenerator'
 
+const logger = new utils.Logger('test')
+
+// mirrors ethers v5: fetchJson wraps the node's JSON-RPC error as SERVER_ERROR
+const rpcFailure = (code: number, message: string) =>
+  logger.makeError(
+    'processing response error',
+    utils.Logger.errors.SERVER_ERROR,
+    {
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code, message } }),
+      error: Object.assign(new Error(message), { code }),
+    }
+  )
+
+// the provider's own revert classification for eth_estimateGas
+const nodeRevert = (reason: string, message: string) =>
+  logger.makeError(
+    'cannot estimate gas; transaction may fail or may require manual gas limit',
+    utils.Logger.errors.UNPREDICTABLE_GAS_LIMIT,
+    { reason, method: 'estimateGas', error: rpcFailure(3, message) }
+  )
+
+// the signer re-wraps any estimate failure it does not forward
+const estimateFailure = (error: Error) =>
+  logger.makeError(
+    'cannot estimate gas; transaction may fail or may require manual gas limit',
+    utils.Logger.errors.UNPREDICTABLE_GAS_LIMIT,
+    { error, tx: {} }
+  )
+
 const locate = async (options = {}) => {
   const located = await locateRetryable(PARENT_TX, options)
   if (!located) throw new Error('test ticket not found')
@@ -205,12 +235,12 @@ describe('redeemRetryable', () => {
 
   test('blames the ticket when gas estimation reverts', async () => {
     precompileRedeem.mockRejectedValue(
-      Object.assign(new Error('cannot estimate gas'), {
-        code: 'UNPREDICTABLE_GAS_LIMIT',
-        error: {
-          body: '{"jsonrpc":"2.0","id":50,"error":{"code":3,"message":"execution reverted: GATE_NOT_SAFE","data":"0x08c3"}}',
-        },
-      })
+      estimateFailure(
+        nodeRevert(
+          'execution reverted: GATE_NOT_SAFE',
+          'execution reverted: GATE_NOT_SAFE'
+        )
+      )
     )
 
     await expect(
@@ -332,25 +362,15 @@ describe('getLiveRetryableStatus', () => {
 })
 
 describe('classifyRedeemFailure', () => {
-  test('flags a transaction the chain refused', () => {
+  test('blames the ticket when the node reports a revert', () => {
     expect(
       classifyRedeemFailure(
-        Object.assign(new Error('processing response error'), {
-          body: '{"jsonrpc":"2.0","id":51,"error":{"code":-32000,"message":"Transaction rejected by chain policy"}}',
-        })
-      )
-    ).toEqual({
-      reason: 'Chain Rejected',
-      detail: 'Transaction rejected by chain policy',
-    })
-  })
-
-  test('reads a revert reason from the ethers reason field', () => {
-    expect(
-      classifyRedeemFailure(
-        Object.assign(new Error('cannot estimate gas'), {
-          reason: 'execution reverted: Multicall3: call failed',
-        })
+        estimateFailure(
+          nodeRevert(
+            'execution reverted: Multicall3: call failed',
+            'execution reverted: Multicall3: call failed'
+          )
+        )
       )
     ).toEqual({
       reason: 'Ticket Reverts',
@@ -358,10 +378,46 @@ describe('classifyRedeemFailure', () => {
     })
   })
 
-  test('treats anything else as a bot-side error', () => {
-    expect(classifyRedeemFailure(new Error('nonce too low'))).toEqual({
+  test('blames the bot when gas estimation fails without a revert', () => {
+    const outage = logger.makeError(
+      'missing response',
+      utils.Logger.errors.SERVER_ERROR,
+      { requestBody: '{}', url: 'https://child.example' }
+    )
+
+    expect(classifyRedeemFailure(estimateFailure(outage))).toMatchObject({
       reason: 'Bot Error',
-      detail: 'nonce too low',
     })
+  })
+
+  test('flags a transaction the chain refused', () => {
+    expect(
+      classifyRedeemFailure(
+        rpcFailure(-32000, 'Transaction rejected by chain policy')
+      )
+    ).toEqual({
+      reason: 'Chain Rejected',
+      detail: 'Transaction rejected by chain policy',
+    })
+  })
+
+  test('blames the bot for other node errors', () => {
+    expect(
+      classifyRedeemFailure(
+        rpcFailure(-32000, 'max fee per gas less than block base fee')
+      )
+    ).toMatchObject({ reason: 'Bot Error' })
+  })
+
+  test('blames the bot for errors ethers classifies as ours', () => {
+    expect(
+      classifyRedeemFailure(
+        logger.makeError(
+          'nonce has already been used',
+          utils.Logger.errors.NONCE_EXPIRED,
+          { method: 'sendTransaction' }
+        )
+      )
+    ).toMatchObject({ reason: 'Bot Error' })
   })
 })
