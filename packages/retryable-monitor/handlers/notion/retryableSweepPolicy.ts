@@ -112,9 +112,12 @@ const redeemDecision = (
     )
   }
   if (nowMs - createdAtMs < AUTO_REDEEM_DELAY_MS) return { type: 'skip' }
+  // Notion's last_edited_time can't stand in for the attempt time: every
+  // run's scan rewrites open rows before the sweep reads them
   if (
     row.botRedemptionStatus === 'Bot Failed' &&
-    nowMs - (row.lastEditedMs ?? 0) < AUTO_REDEEM_RETRY_DELAY_MS
+    row.botLastAttemptMs !== undefined &&
+    nowMs - row.botLastAttemptMs < AUTO_REDEEM_RETRY_DELAY_MS
   ) {
     return { type: 'skip' }
   }

@@ -11,6 +11,10 @@ import {
   redeemRetryable,
   type LocatedRetryable,
 } from '../../core/redeemRetryable'
+import {
+  REDEEM_FAILURE_REASON,
+  type RedeemFailureReason,
+} from '../../core/types'
 import { formatActionRunReference } from '../slack/slackMessageFormattingUtils'
 import { postSlackMessage } from '../slack/postSlackMessage'
 import { notionClient } from './createNotionClient'
@@ -175,13 +179,34 @@ const assessRows = async (
   return assessed
 }
 
+type FailedRedemption = {
+  url: string
+  reason: RedeemFailureReason
+  detail: string
+}
+
+const NOTION_TEXT_LIMIT = 2000
+const SLACK_DETAIL_LIMIT = 200
+
+// read by shape: the redeem module is mocked wholesale in tests
+const readFailure = (error: unknown) => {
+  const { failureReason, detail } = (error ?? {}) as {
+    failureReason?: RedeemFailureReason
+    detail?: string
+  }
+  return {
+    reason: failureReason ?? REDEEM_FAILURE_REASON.BOT_ERROR,
+    detail: detail ?? (error instanceof Error ? error.message : String(error)),
+  }
+}
+
 const executeActions = async (
   assessed: AssessedRow[],
   autoRedeem: boolean,
   updatePage: UpdatePage
 ) => {
   const redeemed: string[] = []
-  const failed: string[] = []
+  const failed: FailedRedemption[] = []
   for (const { row, located, liveStatus } of assessed) {
     const action = decideRetryableAction(row, liveStatus, autoRedeem)
     if (action.type === 'skip') continue
@@ -191,6 +216,9 @@ const executeActions = async (
     }
     if (!located) continue
 
+    const attemptedAt = {
+      'Bot Last Attempt': { date: { start: new Date().toISOString() } },
+    }
     try {
       await redeemRetryable(located)
       redeemed.push(row.retryableUrl)
@@ -198,19 +226,41 @@ const executeActions = async (
         Status: { select: { name: NOTION_STATUS.EXECUTED } },
         Decision: { select: { name: NOTION_DECISION.REDEEMED } },
         'Bot Redemption Status': { select: { name: 'Bot Success' } },
+        ...attemptedAt,
+        'Bot Failure Reason': { select: null },
+        'Bot Failure Detail': { rich_text: [] },
       })
     } catch (error) {
       console.error(`[notion] auto-redeem failed for ${row.parentTx}:`, error)
-      failed.push(row.retryableUrl)
+      const { reason, detail } = readFailure(error)
+      failed.push({ url: row.retryableUrl, reason, detail })
       await updatePage(row.id, {
         'Bot Redemption Status': { select: { name: 'Bot Failed' } },
+        ...attemptedAt,
+        'Bot Failure Reason': { select: { name: reason } },
+        'Bot Failure Detail': {
+          rich_text: [
+            { text: { content: detail.slice(0, NOTION_TEXT_LIMIT) } },
+          ],
+        },
       })
     }
   }
   return { redeemed, failed }
 }
 
-const postRunSummaries = async (redeemed: string[], failed: string[]) => {
+const describeFailures = (failed: FailedRedemption[]) => {
+  const counts = new Map<RedeemFailureReason, number>()
+  for (const { reason } of failed) {
+    counts.set(reason, (counts.get(reason) ?? 0) + 1)
+  }
+  return [...counts].map(([reason, count]) => `${reason}: ${count}`).join(', ')
+}
+
+const postRunSummaries = async (
+  redeemed: string[],
+  failed: FailedRedemption[]
+) => {
   if (redeemed.length > 0) {
     await postMessage(
       formatSummary(
@@ -226,8 +276,13 @@ const postRunSummaries = async (redeemed: string[], failed: string[]) => {
       formatSummary(
         `🚨 ${failed.length} retryable auto-redemption${
           failed.length === 1 ? '' : 's'
-        } failed; the bot will retry after 24 hours`,
-        failed
+        } failed (${describeFailures(
+          failed
+        )}); the bot will retry after 24 hours`,
+        failed.map(
+          ({ url, reason, detail }) =>
+            `${url} (${reason}: ${detail.slice(0, SLACK_DETAIL_LIMIT)})`
+        )
       )
     )
   }

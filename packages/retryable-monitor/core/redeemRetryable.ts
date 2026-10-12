@@ -16,6 +16,7 @@ import {
   isPastTicketLifetime,
 } from './reportGenerator'
 import { createRpcProvider } from './rpcProvider'
+import { REDEEM_FAILURE_REASON, type RedeemFailureReason } from './types'
 
 dotenv.config()
 
@@ -128,6 +129,61 @@ export const getLiveRetryableStatus = async ({
   return status
 }
 
+export class RedeemFailedError extends Error {
+  constructor(
+    message: string,
+    readonly failureReason: RedeemFailureReason,
+    readonly detail: string
+  ) {
+    super(message)
+  }
+}
+
+// ethers nests the node's reply a few levels deep (error.error.body)
+const collectErrorText = (error: unknown, depth = 0): string => {
+  if (typeof error === 'string') return error
+  if (!error || typeof error !== 'object' || depth > 4) return ''
+  const {
+    message,
+    reason,
+    body,
+    error: inner,
+  } = error as Record<string, unknown>
+  return [message, reason, body, collectErrorText(inner, depth + 1)]
+    .filter((part): part is string => typeof part === 'string' && part !== '')
+    .join(' ')
+}
+
+const CHAIN_REJECTION = /(?:transaction )?rejected by chain policy/i
+const TICKET_REVERT = /execution reverted(?::[^"\\,)]*)?/i
+
+export const classifyRedeemFailure = (
+  error: unknown
+): { reason: RedeemFailureReason; detail: string } => {
+  if (error instanceof RedeemFailedError) {
+    return { reason: error.failureReason, detail: error.detail }
+  }
+  const text = collectErrorText(error)
+  const rejection = text.match(CHAIN_REJECTION)
+  if (rejection) {
+    return {
+      reason: REDEEM_FAILURE_REASON.CHAIN_REJECTED,
+      detail: rejection[0],
+    }
+  }
+  const revert = text.match(TICKET_REVERT)
+  if (revert) {
+    return {
+      reason: REDEEM_FAILURE_REASON.TICKET_REVERTS,
+      detail: revert[0].trim(),
+    }
+  }
+  return {
+    reason: REDEEM_FAILURE_REASON.BOT_ERROR,
+    detail: error instanceof Error ? error.message : String(error),
+  }
+}
+
 export const redeemRetryable = async ({
   message,
   childChain,
@@ -150,8 +206,11 @@ export const redeemRetryable = async ({
     )
 
     if (onChainTimeout === undefined) {
-      throw new Error(
-        `Ticket ${message.retryableCreationId} no longer exists on chain ${childChain.chainId}`
+      const detail = `Ticket ${message.retryableCreationId} no longer exists on chain ${childChain.chainId}`
+      throw new RedeemFailedError(
+        detail,
+        REDEEM_FAILURE_REASON.TICKET_GONE,
+        detail
       )
     }
 
@@ -169,13 +228,23 @@ export const redeemRetryable = async ({
       childChainProvider
     ).waitForRedeem()
 
+    if (!redeemReceipt) {
+      const detail = `Retry execution (no receipt) for ticket ${message.retryableCreationId} did not succeed`
+      throw new RedeemFailedError(
+        detail,
+        REDEEM_FAILURE_REASON.BOT_ERROR,
+        detail
+      )
+    }
+
     // waitForRedeem does not inspect the receipt, and a reverted retry
     // leaves the ticket redeemable
-    if (redeemReceipt?.status !== 1) {
-      throw new Error(
-        `Retry execution ${
-          redeemReceipt?.transactionHash ?? '(no receipt)'
-        } for ticket ${message.retryableCreationId} did not succeed`
+    if (redeemReceipt.status !== 1) {
+      const detail = `Retry execution ${redeemReceipt.transactionHash} for ticket ${message.retryableCreationId} did not succeed`
+      throw new RedeemFailedError(
+        detail,
+        REDEEM_FAILURE_REASON.TICKET_REVERTS,
+        detail
       )
     }
 
@@ -191,10 +260,13 @@ export const redeemRetryable = async ({
         }`,
       redeemErr
     )
+    const { reason, detail } = classifyRedeemFailure(redeemErr)
     const suffix =
       redeemErr instanceof Error ? ` Last error: ${redeemErr.message}` : ''
-    throw new Error(
-      `Ticket ${message.retryableCreationId} is not redeemable on chain ${childChain.chainId}.${suffix}`
+    throw new RedeemFailedError(
+      `Ticket ${message.retryableCreationId} is not redeemable on chain ${childChain.chainId}.${suffix}`,
+      reason,
+      detail
     )
   }
 }

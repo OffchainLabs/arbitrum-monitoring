@@ -122,7 +122,7 @@ describe('decideRetryableAction', () => {
         row({
           decision: NOTION_DECISION.FORCE_REDEEM,
           createdAtMs: NOW,
-          lastEditedMs: NOW,
+          botLastAttemptMs: NOW,
           botRedemptionStatus: 'Bot Failed',
         }),
         REDEEMABLE,
@@ -157,14 +157,25 @@ describe('decideRetryableAction', () => {
   test('backs failed attempts off for one day', () => {
     const failed = row({
       botRedemptionStatus: 'Bot Failed',
-      lastEditedMs: NOW - AUTO_REDEEM_RETRY_DELAY_MS + 1,
+      botLastAttemptMs: NOW - AUTO_REDEEM_RETRY_DELAY_MS + 1,
     })
     expect(decideRetryableAction(failed, REDEEMABLE, true, NOW)).toEqual({
       type: 'skip',
     })
     expect(
       decideRetryableAction(
-        { ...failed, lastEditedMs: NOW - AUTO_REDEEM_RETRY_DELAY_MS },
+        { ...failed, botLastAttemptMs: NOW - AUTO_REDEEM_RETRY_DELAY_MS },
+        REDEEMABLE,
+        true,
+        NOW
+      )
+    ).toEqual({ type: 'redeem' })
+  })
+
+  test('retries a failed row with no recorded attempt time', () => {
+    expect(
+      decideRetryableAction(
+        row({ botRedemptionStatus: 'Bot Failed' }),
         REDEEMABLE,
         true,
         NOW

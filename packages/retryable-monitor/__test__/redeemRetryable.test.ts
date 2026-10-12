@@ -97,6 +97,7 @@ vi.mock('../core/reportGenerator', () => ({
 }))
 
 import {
+  classifyRedeemFailure,
   getLiveRetryableStatus,
   locateRetryable,
   redeemRetryable,
@@ -176,6 +177,48 @@ describe('redeemRetryable', () => {
     await expect(
       redeemRetryable(await locate({ retryableCreationId: TICKET_ID }))
     ).rejects.toThrow(/did not succeed/)
+  })
+
+  test('tags a ticket that no longer exists', async () => {
+    vi.mocked(getLiveTicketTimeout).mockResolvedValue(undefined)
+
+    await expect(
+      redeemRetryable(await locate({ retryableCreationId: TICKET_ID }))
+    ).rejects.toMatchObject({ failureReason: 'Ticket Gone' })
+  })
+
+  test('blames the ticket when its retry execution reverted', async () => {
+    waitForRedeem.mockResolvedValue({ status: 0, transactionHash: RETRY_TX })
+
+    await expect(
+      redeemRetryable(await locate({ retryableCreationId: TICKET_ID }))
+    ).rejects.toMatchObject({ failureReason: 'Ticket Reverts' })
+  })
+
+  test('blames the bot when the retry receipt is missing', async () => {
+    waitForRedeem.mockResolvedValue(null)
+
+    await expect(
+      redeemRetryable(await locate({ retryableCreationId: TICKET_ID }))
+    ).rejects.toMatchObject({ failureReason: 'Bot Error' })
+  })
+
+  test('blames the ticket when gas estimation reverts', async () => {
+    precompileRedeem.mockRejectedValue(
+      Object.assign(new Error('cannot estimate gas'), {
+        code: 'UNPREDICTABLE_GAS_LIMIT',
+        error: {
+          body: '{"jsonrpc":"2.0","id":50,"error":{"code":3,"message":"execution reverted: GATE_NOT_SAFE","data":"0x08c3"}}',
+        },
+      })
+    )
+
+    await expect(
+      redeemRetryable(await locate({ retryableCreationId: TICKET_ID }))
+    ).rejects.toMatchObject({
+      failureReason: 'Ticket Reverts',
+      detail: 'execution reverted: GATE_NOT_SAFE',
+    })
   })
 
   test('never redeems a sibling ticket from the same parent tx', async () => {
@@ -285,5 +328,40 @@ describe('getLiveRetryableStatus', () => {
     expect(createRpcProvider).toHaveBeenCalledWith(CHAIN.orbitRpcUrl)
     expect(createRpcProvider).not.toHaveBeenCalledWith(OTHER_CHAIN.parentRpcUrl)
     expect(createRpcProvider).not.toHaveBeenCalledWith(OTHER_CHAIN.orbitRpcUrl)
+  })
+})
+
+describe('classifyRedeemFailure', () => {
+  test('flags a transaction the chain refused', () => {
+    expect(
+      classifyRedeemFailure(
+        Object.assign(new Error('processing response error'), {
+          body: '{"jsonrpc":"2.0","id":51,"error":{"code":-32000,"message":"Transaction rejected by chain policy"}}',
+        })
+      )
+    ).toEqual({
+      reason: 'Chain Rejected',
+      detail: 'Transaction rejected by chain policy',
+    })
+  })
+
+  test('reads a revert reason from the ethers reason field', () => {
+    expect(
+      classifyRedeemFailure(
+        Object.assign(new Error('cannot estimate gas'), {
+          reason: 'execution reverted: Multicall3: call failed',
+        })
+      )
+    ).toEqual({
+      reason: 'Ticket Reverts',
+      detail: 'execution reverted: Multicall3: call failed',
+    })
+  })
+
+  test('treats anything else as a bot-side error', () => {
+    expect(classifyRedeemFailure(new Error('nonce too low'))).toEqual({
+      reason: 'Bot Error',
+      detail: 'nonce too low',
+    })
   })
 })
