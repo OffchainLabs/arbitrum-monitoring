@@ -406,6 +406,17 @@ export const fetchChainState = async ({
     })
   }
 
+  let childFirstUnconfirmedBlock
+  if (
+    childLatestConfirmedBlock?.number != null &&
+    childLatestCreatedBlock?.number != null &&
+    childLatestCreatedBlock.number > childLatestConfirmedBlock.number
+  ) {
+    childFirstUnconfirmedBlock = await childChainClient.getBlock({
+      blockNumber: childLatestConfirmedBlock.number + 1n,
+    })
+  }
+
   let parentBlockAtConfirmableCreation
   if (recentCreationEvent && !recentConfirmationEvent) {
     const confirmableCreationEvent = await fetchConfirmableCreationEvent(
@@ -441,6 +452,7 @@ export const fetchChainState = async ({
     parentBlockAtCreation,
     parentBlockAtConfirmation,
     childFirstUnassertedBlock,
+    childFirstUnconfirmedBlock,
     parentBlockAtConfirmableCreation,
     recentCreationEvent,
     recentConfirmationEvent,
