@@ -6,7 +6,9 @@ const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
 const TICKET_LIFETIME_MS = 7 * DAY_MS
 export const AUTO_REDEEM_DELAY_MS = 4 * DAY_MS
-export const AUTO_REDEEM_RETRY_DELAY_MS = DAY_MS
+// short of a full day: the daily run's start time drifts, and a 24h wait
+// would skip every other run
+export const AUTO_REDEEM_RETRY_DELAY_MS = 20 * HOUR_MS
 
 export type SweepAction =
   | { type: 'skip' }

@@ -278,7 +278,7 @@ const postRunSummaries = async (
           failed.length === 1 ? '' : 's'
         } failed (${describeFailures(
           failed
-        )}); the bot will retry after 24 hours`,
+        )}); the bot will retry on the next daily run`,
         failed.map(
           ({ url, reason, detail }) =>
             `${url} (${reason}: ${detail.slice(0, SLACK_DETAIL_LIMIT)})`
