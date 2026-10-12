@@ -102,3 +102,14 @@ export type OnFailedRetryableFound = (
 export type OnRedeemedRetryableFound = (
   params: OnRetryableFoundParams
 ) => Promise<void>
+
+// option names of the Notion "Bot Failure Reason" select
+export const REDEEM_FAILURE_REASON = {
+  TICKET_REVERTS: 'Ticket Reverts',
+  CHAIN_REJECTED: 'Chain Rejected',
+  TICKET_GONE: 'Ticket Gone',
+  BOT_ERROR: 'Bot Error',
+} as const
+
+export type RedeemFailureReason =
+  (typeof REDEEM_FAILURE_REASON)[keyof typeof REDEEM_FAILURE_REASON]
