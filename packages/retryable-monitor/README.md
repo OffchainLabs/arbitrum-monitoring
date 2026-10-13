@@ -31,6 +31,7 @@ Examples:
   pnpm retryable-monitor --enableAlerting --writeToNotion --autoRedeem   Adds unattended redemption (enterprise chains only)
 
 Environment Variables:
+  RETRYABLE_MONITORING_SLACK_WEBHOOK_URL  Slack webhook URL for alerts (preferred over token+channel)
   RETRYABLE_MONITORING_SLACK_TOKEN    Slack API token for alerts
   RETRYABLE_MONITORING_SLACK_CHANNEL  Slack channel for alerts
   RETRYABLE_MONITORING_NOTION_TOKEN   Notion integration token

@@ -25,6 +25,7 @@ Examples:
   pnpm assertion-monitor --configPath=custom.json   Use custom config file
 
 Environment Variables:
+  ASSERTION_MONITORING_SLACK_WEBHOOK_URL  Slack webhook URL for alerts (preferred over token+channel)
   ASSERTION_MONITORING_SLACK_TOKEN    Slack API token for alerts
   ASSERTION_MONITORING_SLACK_CHANNEL  Slack channel for alerts
 ```
