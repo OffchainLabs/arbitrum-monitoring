@@ -6,6 +6,8 @@ export const NO_CONFIRMATION_EVENTS_ALERT = `No assertion confirmation events fo
 
 export const CONFIRMATION_DELAY_ALERT = `Confirmation period exceeded`
 
+export const CONFIRMATION_BACKLOG_ALERT = `Asserted blocks are past their confirm period but not confirmed`
+
 export const CREATION_EVENT_STUCK_ALERT = `Assertion event stuck in challenge period`
 
 export const NON_BOLD_NO_RECENT_CREATION_ALERT = `No recent node creation events detected for non-BOLD chain`

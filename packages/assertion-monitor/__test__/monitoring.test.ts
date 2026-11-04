@@ -7,6 +7,7 @@ import {
   CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT,
   NO_CONFIRMATION_EVENTS_ALERT,
   CONFIRMATION_DELAY_ALERT,
+  CONFIRMATION_BACKLOG_ALERT,
   CREATION_EVENT_STUCK_ALERT,
   NON_BOLD_NO_RECENT_CREATION_ALERT,
   VALIDATOR_WHITELIST_DISABLED_ALERT,
@@ -44,6 +45,9 @@ const CONFIRMATION_THRESHOLD_SECONDS = 150n * 12n
 
 const hasChainActivityAlert = (alerts: string[]) =>
   alerts.some(alert => alert.startsWith(CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT))
+
+const hasConfirmationBacklogAlert = (alerts: string[]) =>
+  alerts.some(alert => alert.startsWith(CONFIRMATION_BACKLOG_ALERT))
 
 describe('Assertion Health Monitoring', () => {
   // Mock Date.now() to return a consistent timestamp
@@ -263,6 +267,35 @@ describe('Assertion Health Monitoring', () => {
       expect(
         hasChainActivityAlert(
           await analyzeAssertionEvents(chainState, intervalInMilliseconds, true)
+        )
+      ).toBe(true)
+    })
+
+    test('should alert when confirmations fall behind the confirm period', async () => {
+      const chainState = createBaseChainState()
+      // confirm period (100 * 12s) + assertion backlog threshold (4h) + grace (4h)
+      const thresholdSeconds = 100n * 12n + 8n * 60n * 60n
+      chainState.childFirstUnconfirmedBlock = {
+        number: 851n,
+        timestamp: NOW - thresholdSeconds + 60n,
+        hash: '0xef02' as `0x${string}`,
+        parentHash: '0xef01' as `0x${string}`,
+      } as Block
+
+      expect(
+        hasConfirmationBacklogAlert(
+          await analyzeAssertionEvents(chainState, mockChainInfo, true)
+        )
+      ).toBe(false)
+
+      chainState.childFirstUnconfirmedBlock = {
+        ...chainState.childFirstUnconfirmedBlock,
+        timestamp: NOW - thresholdSeconds - 60n,
+      } as Block
+
+      expect(
+        hasConfirmationBacklogAlert(
+          await analyzeAssertionEvents(chainState, mockChainInfo, true)
         )
       ).toBe(true)
     })

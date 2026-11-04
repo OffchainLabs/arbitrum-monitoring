@@ -2,6 +2,7 @@ import { ChildNetwork as ChainInfo } from 'utils'
 import {
   BOLD_LOW_BASE_STAKE_ALERT,
   CHAIN_ACTIVITY_WITHOUT_ASSERTIONS_ALERT,
+  CONFIRMATION_BACKLOG_ALERT,
   CONFIRMATION_DELAY_ALERT,
   CREATION_EVENT_STUCK_ALERT,
   NO_CONFIRMATION_BLOCKS_WITH_CONFIRMATION_EVENTS_ALERT,
@@ -129,6 +130,9 @@ export const analyzeAssertionEvents = async (
     noConfirmationsWithCreationEvents,
     noConfirmedBlocksWithConfirmationEvents,
     confirmationDelayExceedsPeriod,
+    confirmationBacklogSeconds,
+    confirmationBacklogThresholdSeconds,
+    hasConfirmationBacklog,
     creationEventStuckInChallengePeriod,
     nonBoldMissingRecentCreation,
     isValidatorWhitelistDisabledOnClassic,
@@ -167,6 +171,14 @@ export const analyzeAssertionEvents = async (
     alerts.push(CONFIRMATION_DELAY_ALERT)
   }
 
+  if (hasConfirmationBacklog) {
+    alerts.push(
+      `${CONFIRMATION_BACKLOG_ALERT} (oldest unconfirmed block is ${formatDuration(
+        confirmationBacklogSeconds
+      )} old, threshold ${formatDuration(confirmationBacklogThresholdSeconds)})`
+    )
+  }
+
   if (creationEventStuckInChallengePeriod) {
     alerts.push(CREATION_EVENT_STUCK_ALERT)
   }
@@ -198,6 +210,7 @@ export const generateConditionsForAlerts = (
     parentCurrentBlock,
     parentBlockAtConfirmation,
     childFirstUnassertedBlock,
+    childFirstUnconfirmedBlock,
     parentBlockAtConfirmableCreation,
     recentConfirmationEvent,
   } = chainState
@@ -288,6 +301,20 @@ export const generateConditionsForAlerts = (
     secondsSinceLastConfirmation > confirmationThresholdSeconds
 
   /**
+   * Catches a validator that still confirms, but too slowly to keep up with
+   * assertion creation, which delays withdrawals past their confirm period.
+   */
+  const confirmationBacklogSeconds = childFirstUnconfirmedBlock
+    ? currentTimeSeconds - Number(childFirstUnconfirmedBlock.timestamp)
+    : 0
+  const confirmationBacklogThresholdSeconds =
+    confirmPeriodSeconds +
+    assertionBacklogThresholdSeconds +
+    UNCONFIRMED_ASSERTION_GRACE_SECONDS
+  const hasConfirmationBacklog =
+    confirmationBacklogSeconds > confirmationBacklogThresholdSeconds
+
+  /**
    * Identifies assertions exceeding challenge period (6.4 days) without confirmation
    * Indicates active challenges or confirmation problems
    */
@@ -330,6 +357,9 @@ export const generateConditionsForAlerts = (
     noConfirmationsWithCreationEvents,
     noConfirmedBlocksWithConfirmationEvents,
     confirmationDelayExceedsPeriod,
+    confirmationBacklogSeconds,
+    confirmationBacklogThresholdSeconds,
+    hasConfirmationBacklog,
     creationEventStuckInChallengePeriod,
     nonBoldMissingRecentCreation,
     isValidatorWhitelistDisabledOnClassic,
