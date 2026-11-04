@@ -6,15 +6,13 @@ import type {
 } from '@notionhq/client/build/src/api-endpoints'
 import { DEFAULT_CONFIG_PATH, type ChildNetwork } from 'utils'
 import {
+  classifyRedeemFailure,
   getLiveRetryableStatus,
   locateRetryable,
   redeemRetryable,
   type LocatedRetryable,
 } from '../../core/redeemRetryable'
-import {
-  REDEEM_FAILURE_REASON,
-  type RedeemFailureReason,
-} from '../../core/types'
+import type { RedeemFailureReason } from '../../core/types'
 import { formatActionRunReference } from '../slack/slackMessageFormattingUtils'
 import { postSlackMessage } from '../slack/postSlackMessage'
 import { notionClient } from './createNotionClient'
@@ -188,18 +186,6 @@ type FailedRedemption = {
 const NOTION_TEXT_LIMIT = 2000
 const SLACK_DETAIL_LIMIT = 200
 
-// read by shape: the redeem module is mocked wholesale in tests
-const readFailure = (error: unknown) => {
-  const { failureReason, detail } = (error ?? {}) as {
-    failureReason?: RedeemFailureReason
-    detail?: string
-  }
-  return {
-    reason: failureReason ?? REDEEM_FAILURE_REASON.BOT_ERROR,
-    detail: detail ?? (error instanceof Error ? error.message : String(error)),
-  }
-}
-
 const executeActions = async (
   assessed: AssessedRow[],
   autoRedeem: boolean,
@@ -232,7 +218,7 @@ const executeActions = async (
       })
     } catch (error) {
       console.error(`[notion] auto-redeem failed for ${row.parentTx}:`, error)
-      const { reason, detail } = readFailure(error)
+      const { reason, detail } = classifyRedeemFailure(error)
       failed.push({ url: row.retryableUrl, reason, detail })
       await updatePage(row.id, {
         'Bot Redemption Status': { select: { name: 'Bot Failed' } },

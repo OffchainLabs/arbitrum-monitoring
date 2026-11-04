@@ -11,7 +11,8 @@ vi.mock('../handlers/notion/createNotionClient', () => ({
   databaseId: 'test-db',
 }))
 
-vi.mock('../core/redeemRetryable', () => ({
+vi.mock('../core/redeemRetryable', async orig => ({
+  ...(await orig<typeof import('../core/redeemRetryable')>()),
   redeemRetryable: vi.fn(),
   getLiveRetryableStatus: vi.fn(),
   locateRetryable: vi.fn(),
@@ -26,6 +27,7 @@ import {
   extractTxHash,
 } from '../handlers/notion/alertUntriagedRetraybles'
 import {
+  RedeemFailedError,
   redeemRetryable,
   getLiveRetryableStatus,
   locateRetryable,
@@ -385,10 +387,11 @@ describe('alertUntriagedNotionRetryables', () => {
 
   test('records why the ticket could not be redeemed', async () => {
     vi.mocked(redeemRetryable).mockRejectedValueOnce(
-      Object.assign(new Error('Ticket is not redeemable'), {
-        failureReason: 'Ticket Reverts',
-        detail: 'execution reverted: GATE_NOT_SAFE',
-      })
+      new RedeemFailedError(
+        'Ticket is not redeemable',
+        'Ticket Reverts',
+        'execution reverted: GATE_NOT_SAFE'
+      )
     )
 
     await alertUntriagedNotionRetryables(CHAINS, true)
