@@ -382,12 +382,12 @@ describe('classifyRedeemFailure', () => {
     const outage = logger.makeError(
       'missing response',
       utils.Logger.errors.SERVER_ERROR,
-      { requestBody: '{}', url: 'https://child.example' }
+      { requestBody: '{}', url: 'https://child.example/v2/secret-key' }
     )
 
-    expect(classifyRedeemFailure(estimateFailure(outage))).toMatchObject({
-      reason: 'Bot Error',
-    })
+    const { reason, detail } = classifyRedeemFailure(estimateFailure(outage))
+    expect(reason).toBe('Bot Error')
+    expect(detail).not.toContain('secret-key')
   })
 
   test('blames the bot when its wallet cannot pay for gas', () => {

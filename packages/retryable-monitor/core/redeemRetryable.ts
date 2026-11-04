@@ -198,9 +198,14 @@ export const classifyRedeemFailure = (
     }
   }
 
+  // never the full ethers message: it dumps every param, including the RPC url
+  // and any API key in it
   return {
     reason: REDEEM_FAILURE_REASON.BOT_ERROR,
-    detail: error instanceof Error ? error.message : String(error),
+    detail:
+      rpcError?.message ??
+      (error as EthersError | undefined)?.reason ??
+      (error instanceof Error ? error.message : String(error)),
   }
 }
 
