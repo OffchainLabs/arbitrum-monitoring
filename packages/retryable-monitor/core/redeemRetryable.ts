@@ -173,12 +173,14 @@ export const classifyRedeemFailure = (
   const chain = errorChain(error)
 
   // the signer re-wraps every estimate failure (RPC outages included) as
-  // UNPREDICTABLE_GAS_LIMIT; only the provider's own one, tagged with
-  // `method`, means the node reported a revert
+  // UNPREDICTABLE_GAS_LIMIT, and the provider raises one too when the bot
+  // cannot pay for gas; only a revert carries the node's "reverted" message
+  // as `reason` (ethers defaults `reason` to the generic message otherwise)
   const revert = chain.find(
     e =>
       e.code === utils.Logger.errors.UNPREDICTABLE_GAS_LIMIT &&
-      e.method === 'estimateGas'
+      e.method === 'estimateGas' &&
+      e.reason?.includes('reverted')
   )
   if (revert) {
     return {

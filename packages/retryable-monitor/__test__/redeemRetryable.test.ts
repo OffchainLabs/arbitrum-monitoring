@@ -390,6 +390,22 @@ describe('classifyRedeemFailure', () => {
     })
   })
 
+  test('blames the bot when its wallet cannot pay for gas', () => {
+    const underfunded = logger.makeError(
+      'cannot estimate gas; transaction may fail or may require manual gas limit',
+      utils.Logger.errors.UNPREDICTABLE_GAS_LIMIT,
+      {
+        method: 'estimateGas',
+        error: rpcFailure(-32000, 'gas required exceeds allowance (0)'),
+      }
+    )
+
+    expect(classifyRedeemFailure(estimateFailure(underfunded))).toEqual({
+      reason: 'Bot Error',
+      detail: expect.any(String),
+    })
+  })
+
   test('flags a transaction the chain refused', () => {
     expect(
       classifyRedeemFailure(
