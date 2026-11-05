@@ -17,6 +17,7 @@ type RetryableProperties = {
   L2CallValue?: { rich_text?: TextItem[] }
   TokensDeposited?: { rich_text?: TextItem[] }
   'Bot Redemption Status'?: { select?: { name?: string } | null }
+  'Bot Last Attempt'?: { date?: { start?: string } | null }
 }
 
 export type NotionRetryableRow = {
@@ -28,9 +29,9 @@ export type NotionRetryableRow = {
   retryableUrl: string
   createdAtMs?: number
   timeoutMs?: number
-  lastEditedMs?: number
   deposit: string
   botRedemptionStatus?: string
+  botLastAttemptMs?: number
 }
 
 const text = (items: TextItem[] | undefined) =>
@@ -97,8 +98,8 @@ export const parseRetryableRow = (
     retryableUrl: text(props.ChildTx?.title) ?? '(unknown)',
     createdAtMs: timestamp(props.CreatedAt?.date?.start),
     timeoutMs: timestamp(props.timeoutTimestamp?.date?.start),
-    lastEditedMs: timestamp(page.last_edited_time),
     deposit: deposit || '(unknown)',
     botRedemptionStatus: props['Bot Redemption Status']?.select?.name,
+    botLastAttemptMs: timestamp(props['Bot Last Attempt']?.date?.start),
   }
 }

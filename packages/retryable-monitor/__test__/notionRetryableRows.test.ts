@@ -17,6 +17,7 @@ const page = (decision = 'Should Redeem') =>
       L2CallValue: { rich_text: [{ plain_text: '1 ETH' }] },
       TokensDeposited: { rich_text: [{ plain_text: '2 USDC' }] },
       'Bot Redemption Status': { select: { name: 'Bot Failed' } },
+      'Bot Last Attempt': { date: { start: '2026-09-21T08:30:00.000Z' } },
     },
   } as unknown as PageObjectResponse)
 
@@ -31,9 +32,9 @@ describe('parseRetryableRow', () => {
       retryableUrl: 'ticket',
       createdAtMs: undefined,
       timeoutMs: undefined,
-      lastEditedMs: Date.parse('2026-09-22T00:00:00.000Z'),
       deposit: '1 ETH and 2 USDC',
       botRedemptionStatus: 'Bot Failed',
+      botLastAttemptMs: Date.parse('2026-09-21T08:30:00.000Z'),
     })
   })
 

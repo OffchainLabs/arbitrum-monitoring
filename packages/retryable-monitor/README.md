@@ -28,7 +28,7 @@ Examples:
   pnpm retryable-monitor --continuous                    Run continuous monitoring
   pnpm retryable-monitor --fromBlock=1000 --toBlock=2000 Check specific block range
   pnpm retryable-monitor --enableAlerting --writeToNotion           Enables Slack alerts and syncs retryable data to Notion
-  pnpm retryable-monitor --enableAlerting --writeToNotion --autoRedeem   Adds unattended redemption (enterprise chains only)
+  pnpm retryable-monitor --enableAlerting --writeToNotion --autoRedeem   Adds unattended redemption for every chain in the config
 
 Environment Variables:
   RETRYABLE_MONITORING_SLACK_TOKEN    Slack API token for alerts

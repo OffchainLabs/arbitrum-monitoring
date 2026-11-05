@@ -11,7 +11,8 @@ vi.mock('../handlers/notion/createNotionClient', () => ({
   databaseId: 'test-db',
 }))
 
-vi.mock('../core/redeemRetryable', () => ({
+vi.mock('../core/redeemRetryable', async orig => ({
+  ...(await orig<typeof import('../core/redeemRetryable')>()),
   redeemRetryable: vi.fn(),
   getLiveRetryableStatus: vi.fn(),
   locateRetryable: vi.fn(),
@@ -26,6 +27,7 @@ import {
   extractTxHash,
 } from '../handlers/notion/alertUntriagedRetraybles'
 import {
+  RedeemFailedError,
   redeemRetryable,
   getLiveRetryableStatus,
   locateRetryable,
@@ -143,6 +145,9 @@ describe('alertUntriagedNotionRetryables', () => {
           Status: { select: { name: 'Executed' } },
           Decision: { select: { name: 'Redeemed' } },
           'Bot Redemption Status': { select: { name: 'Bot Success' } },
+          'Bot Last Attempt': { date: { start: expect.any(String) } },
+          'Bot Failure Reason': { select: null },
+          'Bot Failure Detail': { rich_text: [] },
         },
       })
     )
@@ -367,11 +372,46 @@ describe('alertUntriagedNotionRetryables', () => {
       expect.objectContaining({
         properties: {
           'Bot Redemption Status': { select: { name: 'Bot Failed' } },
+          'Bot Last Attempt': { date: { start: expect.any(String) } },
+          'Bot Failure Reason': { select: { name: 'Bot Error' } },
+          'Bot Failure Detail': { rich_text: [{ text: { content: 'boom' } }] },
         },
       })
     )
     expect(postSlackMessage).toHaveBeenCalledWith({
-      message: expect.stringContaining('failed; the bot will retry'),
+      message: expect.stringContaining(
+        'failed (Bot Error: 1); the bot will retry'
+      ),
+    })
+  })
+
+  test('records why the ticket could not be redeemed', async () => {
+    vi.mocked(redeemRetryable).mockRejectedValueOnce(
+      new RedeemFailedError(
+        'Ticket is not redeemable',
+        'Ticket Reverts',
+        'execution reverted: GATE_NOT_SAFE'
+      )
+    )
+
+    await alertUntriagedNotionRetryables(CHAINS, true)
+
+    expect(pagesUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        properties: expect.objectContaining({
+          'Bot Failure Reason': { select: { name: 'Ticket Reverts' } },
+          'Bot Failure Detail': {
+            rich_text: [
+              { text: { content: 'execution reverted: GATE_NOT_SAFE' } },
+            ],
+          },
+        }),
+      })
+    )
+    expect(postSlackMessage).toHaveBeenCalledWith({
+      message: expect.stringContaining(
+        '(Ticket Reverts: execution reverted: GATE_NOT_SAFE)'
+      ),
     })
   })
 
@@ -390,7 +430,9 @@ describe('alertUntriagedNotionRetryables', () => {
     expect(redeemRetryable).toHaveBeenCalledTimes(2)
     expect(postSlackMessage).toHaveBeenCalledTimes(1)
     expect(postSlackMessage).toHaveBeenCalledWith({
-      message: expect.stringContaining('2 retryable auto-redemptions failed'),
+      message: expect.stringContaining(
+        '2 retryable auto-redemptions failed (Bot Error: 2)'
+      ),
     })
   })
 
@@ -410,9 +452,9 @@ describe('alertUntriagedNotionRetryables', () => {
     expect(redeemRetryable).toHaveBeenCalled()
     expect(pagesUpdate).not.toHaveBeenCalledWith(
       expect.objectContaining({
-        properties: {
+        properties: expect.objectContaining({
           'Bot Redemption Status': { select: { name: 'Bot Failed' } },
-        },
+        }),
       })
     )
     expect(postSlackMessage).not.toHaveBeenCalledWith({
